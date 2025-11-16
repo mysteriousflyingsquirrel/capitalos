@@ -103,7 +103,7 @@ interface SectionCardProps {
 
 function SectionCard({ title, children }: SectionCardProps) {
   return (
-    <div className="bg-bg-surface-1 border border-border-subtle rounded-card shadow-card p-6">
+    <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
       <h2 className="text-text-primary text-2xl font-semibold mb-6">{title}</h2>
       {children}
     </div>

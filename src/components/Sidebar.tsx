@@ -70,7 +70,7 @@ function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed left-0 top-0 h-full w-[250px] bg-[#050A1A] border-r border-border-subtle
+          fixed left-0 top-0 h-full w-[250px] bg-[#050A1A]
           flex flex-col z-30
           transform transition-transform duration-300 ease-in-out
           lg:translate-x-0

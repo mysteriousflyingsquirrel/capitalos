@@ -92,7 +92,7 @@ function NetWorthCategorySection({
   const subtotal = items.reduce((sum, item) => sum + item.balanceChf, 0)
 
   return (
-    <div className="bg-bg-surface-1 border border-border-subtle rounded-card shadow-card p-6">
+    <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
       <button
         onClick={onToggle}
         className="w-full flex items-center justify-between mb-4 text-left"
@@ -210,7 +210,7 @@ function NetWorth() {
         </div>
 
         {/* Total Net Worth */}
-        <div className="bg-bg-surface-1 border border-border-subtle rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
           <p className="text-text-secondary text-sm font-medium mb-2">Total Net Worth</p>
           <p className="text-success text-4xl font-bold">{formatChf(totalNetWorth)}</p>
         </div>
