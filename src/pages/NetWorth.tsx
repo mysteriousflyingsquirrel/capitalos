@@ -1,4 +1,3 @@
-import { useState } from 'react'
 
 // TypeScript types
 type NetWorthCategory =
@@ -79,49 +78,26 @@ const formatChf = (value: number): string => {
 interface NetWorthCategorySectionProps {
   category: NetWorthCategory
   items: NetWorthItem[]
-  isCollapsed: boolean
-  onToggle: () => void
 }
 
 function NetWorthCategorySection({
   category,
   items,
-  isCollapsed,
-  onToggle,
 }: NetWorthCategorySectionProps) {
   const subtotal = items.reduce((sum, item) => sum + item.balanceChf, 0)
 
   return (
     <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between mb-4 text-left"
-      >
-        <div className="flex items-center gap-3">
+      <div className="mb-6 pb-4 border-b border-border-strong">
+        <div className="flex items-center justify-between">
           <h2 className="text-text-primary text-xl font-semibold">{category}</h2>
-          <span className="text-text-muted text-sm">
+          <span className="text-success text-2xl font-bold">
             {formatChf(subtotal)}
           </span>
         </div>
-        <svg
-          className={`w-5 h-5 text-text-secondary transition-transform ${
-            isCollapsed ? '' : 'rotate-180'
-          }`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
-      </button>
+      </div>
 
-      {!isCollapsed && (
-        <div className="space-y-3">
+      <div className="space-y-3">
           {/* Desktop: Grid layout */}
           <div className="hidden md:grid md:grid-cols-3 gap-4 pb-2 border-b border-border-subtle">
             <div className="text-text-secondary text-sm font-medium">Item</div>
@@ -150,16 +126,11 @@ function NetWorthCategorySection({
             </div>
           ))}
         </div>
-      )}
     </div>
   )
 }
 
 function NetWorth() {
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<NetWorthCategory>>(
-    new Set()
-  )
-
   // Group items by category
   const groupedItems = mockNetWorthItems.reduce(
     (acc, item) => {
@@ -178,37 +149,9 @@ function NetWorth() {
     0
   )
 
-  // Toggle category collapse
-  const toggleCategory = (category: NetWorthCategory) => {
-    setCollapsedCategories((prev) => {
-      const next = new Set(prev)
-      if (next.has(category)) {
-        next.delete(category)
-      } else {
-        next.add(category)
-      }
-      return next
-    })
-  }
-
-  const handleAddTransaction = () => {
-    // Stub for future implementation
-    console.log('Add transaction clicked')
-  }
-
   return (
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex justify-end">
-          <button
-            onClick={handleAddTransaction}
-            className="bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold px-6 py-2 rounded-full hover:brightness-110 transition-all duration-200 shadow-card"
-          >
-            Add Transaction
-          </button>
-        </div>
-
         {/* Total Net Worth */}
         <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
           <p className="text-text-secondary text-sm font-medium mb-2">Total Net Worth</p>
@@ -226,8 +169,6 @@ function NetWorth() {
                 key={category}
                 category={category}
                 items={items}
-                isCollapsed={collapsedCategories.has(category)}
-                onToggle={() => toggleCategory(category)}
               />
             )
           })}

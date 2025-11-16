@@ -99,12 +99,26 @@ const formatChf = (value: number): string => {
 interface SectionCardProps {
   title: string
   children: React.ReactNode
+  total?: number
+  totalColor?: 'success' | 'danger'
 }
 
-function SectionCard({ title, children }: SectionCardProps) {
+function SectionCard({ title, children, total, totalColor = 'success' }: SectionCardProps) {
   return (
     <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
-      <h2 className="text-text-primary text-2xl font-semibold mb-6">{title}</h2>
+      <div className="mb-6 pb-4 border-b border-border-strong">
+        <div className="flex items-center justify-between">
+          <h2 className="text-text-primary text-2xl font-semibold">{title}</h2>
+          {total !== undefined && (
+            <span className={`${totalColor === 'success' ? 'text-success' : 'text-danger'} text-2xl font-bold`}>
+              {new Intl.NumberFormat('de-CH', {
+                style: 'currency',
+                currency: 'CHF',
+              }).format(total)}
+            </span>
+          )}
+        </div>
+      </div>
       {children}
     </div>
   )
@@ -167,14 +181,7 @@ function InflowSection() {
   const totalInflow = mockInflowItems.reduce((sum, item) => sum + item.amountChf, 0)
 
   return (
-    <SectionCard title="Inflow">
-      {/* Grand Total */}
-      <div className="mb-6 pb-4 border-b border-border-strong">
-        <div className="flex items-center justify-between">
-          <span className="text-text-secondary text-sm font-medium">Total Inflow</span>
-          <span className="text-success text-2xl font-bold">{formatChf(totalInflow)}</span>
-        </div>
-      </div>
+    <SectionCard title="Inflow" total={totalInflow} totalColor="success">
       <GroupedList
         items={mockInflowItems}
         groupKey="group"
@@ -216,14 +223,7 @@ function OutflowSection() {
   const totalOutflow = mockOutflowItems.reduce((sum, item) => sum + item.amountChf, 0)
 
   return (
-    <SectionCard title="Outflow">
-      {/* Grand Total */}
-      <div className="mb-6 pb-4 border-b border-border-strong">
-        <div className="flex items-center justify-between">
-          <span className="text-text-secondary text-sm font-medium">Total Outflow</span>
-          <span className="text-danger text-2xl font-bold">{formatChf(totalOutflow)}</span>
-        </div>
-      </div>
+    <SectionCard title="Outflow" total={totalOutflow} totalColor="danger">
       <GroupedList
         items={mockOutflowItems}
         groupKey="group"
