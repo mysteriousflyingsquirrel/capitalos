@@ -384,7 +384,7 @@ function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Total Net Worth KPI */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
-            <Heading level={3} className="mb-2">
+            <Heading level={2} className="mb-2">
               Total Net Worth
             </Heading>
             <TotalText variant="neutral">{formatCHF(totalNetWorth)}</TotalText>
@@ -392,7 +392,7 @@ function Dashboard() {
 
           {/* Monthly Inflow KPI */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
-            <Heading level={3} className="mb-2">
+            <Heading level={2} className="mb-2">
               Monthly Inflow
             </Heading>
             <TotalText variant="inflow">{formatCHF(monthlyInflow)}</TotalText>
@@ -400,7 +400,7 @@ function Dashboard() {
 
           {/* Monthly Outflow KPI */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
-            <Heading level={3} className="mb-2">
+            <Heading level={2} className="mb-2">
               Monthly Outflow
             </Heading>
             <TotalText variant="outflow">{formatCHF(monthlyOutflow)}</TotalText>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import Heading from '../components/Heading'
 
 const platforms = [
   { name: 'Kraken', value: 25000, color: '#DAA520' },
@@ -32,7 +33,7 @@ function Investing() {
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
-        <h1 className="text-text-primary text-2xl md:text-3xl font-semibold">Investing</h1>
+        <Heading level={1}>Investing</Heading>
         
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -97,8 +98,8 @@ function Investing() {
                 return (
                   <div key={index} className="border-b border-border-subtle pb-3 last:border-0">
                     <div className="flex justify-between items-center mb-1">
-                      <p className="text-text-primary font-medium">{holding.asset}</p>
-                      <p className="text-[#F8C445] font-semibold">{percentage}%</p>
+                      <p className="text-text-primary text-[0.525rem] md:text-xs">{holding.asset}</p>
+                      <p className="text-[#F8C445] text-[0.525rem] md:text-xs">{percentage}%</p>
                     </div>
                     <div className="w-full bg-bg-surface-2 rounded-full h-2">
                       <div 
@@ -132,29 +133,29 @@ function Investing() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border-subtle">
-                  <th className="text-left py-3 px-4 text-text-secondary text-sm font-medium">Asset</th>
-                  <th className="text-left py-3 px-4 text-text-secondary text-sm font-medium">Platform</th>
-                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">Quantity</th>
-                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">Price</th>
-                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">Value</th>
-                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">P/L</th>
-                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">P/L %</th>
+                  <th className="text-left py-3 px-4 text-text-secondary text-[0.525rem] md:text-xs">Asset</th>
+                  <th className="text-left py-3 px-4 text-text-secondary text-[0.525rem] md:text-xs">Platform</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-[0.525rem] md:text-xs">Quantity</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-[0.525rem] md:text-xs">Price</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-[0.525rem] md:text-xs">Value</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-[0.525rem] md:text-xs">P/L</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-[0.525rem] md:text-xs">P/L %</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredHoldings.map((holding, index) => (
                   <tr key={index} className="border-b border-border-subtle hover:bg-bg-surface-2 transition-colors">
-                    <td className="py-3 px-4 text-text-primary font-medium">{holding.asset}</td>
-                    <td className="py-3 px-4 text-text-secondary">{holding.platform}</td>
-                    <td className="py-3 px-4 text-right text-text-primary">{holding.quantity}</td>
-                    <td className="py-3 px-4 text-right text-text-primary">CHF {holding.price.toLocaleString()}</td>
-                    <td className="py-3 px-4 text-right text-text-primary">CHF {holding.value.toLocaleString()}</td>
-                    <td className={`py-3 px-4 text-right font-medium ${
+                    <td className="py-3 px-4 text-text-primary text-[0.525rem] md:text-xs">{holding.asset}</td>
+                    <td className="py-3 px-4 text-text-secondary text-[0.525rem] md:text-xs">{holding.platform}</td>
+                    <td className="py-3 px-4 text-right text-text-primary text-[0.525rem] md:text-xs">{holding.quantity}</td>
+                    <td className="py-3 px-4 text-right text-text-primary text-[0.525rem] md:text-xs">CHF {holding.price.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right text-text-primary text-[0.525rem] md:text-xs">CHF {holding.value.toLocaleString()}</td>
+                    <td className={`py-3 px-4 text-right text-[0.525rem] md:text-xs ${
                       holding.profitLoss >= 0 ? 'text-success' : 'text-danger'
                     }`}>
                       {holding.profitLoss >= 0 ? '+' : ''}CHF {holding.profitLoss.toLocaleString()}
                     </td>
-                    <td className={`py-3 px-4 text-right font-medium ${
+                    <td className={`py-3 px-4 text-right text-[0.525rem] md:text-xs ${
                       holding.profitLoss >= 0 ? 'text-success' : 'text-danger'
                     }`}>
                       {holding.profitLoss >= 0 ? '+' : ''}{holding.profitLossPercent}%

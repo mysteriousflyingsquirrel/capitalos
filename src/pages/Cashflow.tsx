@@ -377,7 +377,7 @@ function Cashflow() {
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
-        <h1 className="text-text-primary text-3xl font-semibold">Cashflow</h1>
+        <Heading level={1}>Cashflow</Heading>
         
         {/* Inflow Section */}
         <InflowSection />

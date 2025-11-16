@@ -1,9 +1,11 @@
+import Heading from '../components/Heading'
+
 function Settings() {
   return (
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
-        <h1 className="text-text-primary text-2xl md:text-3xl font-semibold">Settings</h1>
+        <Heading level={1}>Settings</Heading>
         
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
           <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">Account Settings</h2>
@@ -33,22 +35,22 @@ function Settings() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-text-primary font-medium mb-1">Google Drive Sync</p>
-                <p className="text-text-secondary text-sm">Sync your data with Google Drive</p>
+                <p className="text-text-primary text-[0.525rem] md:text-xs mb-1">Google Drive Sync</p>
+                <p className="text-text-secondary text-[0.525rem] md:text-xs">Sync your data with Google Drive</p>
               </div>
               <button className="bg-bg-surface-2 border border-border-subtle text-text-primary rounded-full px-6 py-2 hover:bg-bg-surface-3 transition-colors">Connect</button>
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-text-primary font-medium mb-1">Export Data</p>
-                <p className="text-text-secondary text-sm">Download your data as JSON</p>
+                <p className="text-text-primary text-[0.525rem] md:text-xs mb-1">Export Data</p>
+                <p className="text-text-secondary text-[0.525rem] md:text-xs">Download your data as JSON</p>
               </div>
               <button className="bg-bg-surface-2 border border-border-subtle text-text-primary rounded-full px-6 py-2 hover:bg-bg-surface-3 transition-colors">Export</button>
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-text-primary font-medium mb-1">Import Data</p>
-                <p className="text-text-secondary text-sm">Import data from JSON file</p>
+                <p className="text-text-primary text-[0.525rem] md:text-xs mb-1">Import Data</p>
+                <p className="text-text-secondary text-[0.525rem] md:text-xs">Import data from JSON file</p>
               </div>
               <button className="bg-bg-surface-2 border border-border-subtle text-text-primary rounded-full px-6 py-2 hover:bg-bg-surface-3 transition-colors">Import</button>
             </div>
@@ -60,8 +62,8 @@ function Settings() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-text-primary font-medium mb-1">Auto Price Updates</p>
-                <p className="text-text-secondary text-sm">Automatically update prices via APIs</p>
+                <p className="text-text-primary text-[0.525rem] md:text-xs mb-1">Auto Price Updates</p>
+                <p className="text-text-secondary text-[0.525rem] md:text-xs">Automatically update prices via APIs</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" className="sr-only peer" defaultChecked />
@@ -92,8 +94,8 @@ function Settings() {
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-text-primary font-medium mb-1">Generate Swiss Tax Report</p>
-                <p className="text-text-secondary text-sm">Generate tax-compliant report for selected year</p>
+                <p className="text-text-primary text-[0.525rem] md:text-xs mb-1">Generate Swiss Tax Report</p>
+                <p className="text-text-secondary text-[0.525rem] md:text-xs">Generate tax-compliant report for selected year</p>
               </div>
               <button className="bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold rounded-full px-6 py-2 hover:brightness-110 transition-all duration-200 shadow-card">Generate Report</button>
             </div>
@@ -105,8 +107,8 @@ function Settings() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-text-primary font-medium mb-1">Delete All Data</p>
-                <p className="text-text-secondary text-sm">Permanently delete all your data. This action cannot be undone.</p>
+                <p className="text-text-primary text-[0.525rem] md:text-xs mb-1">Delete All Data</p>
+                <p className="text-text-secondary text-[0.525rem] md:text-xs">Permanently delete all your data. This action cannot be undone.</p>
               </div>
               <button className="bg-bg-surface-2 border border-danger text-danger rounded-full px-6 py-2 hover:bg-danger/10 transition-colors">Delete All Data</button>
             </div>
