@@ -29,35 +29,34 @@ function Investing() {
     : holdings.filter(h => h.platform === selectedPlatform)
 
   return (
-    <div className="space-y-6">
-      <h1 className="section-title text-2xl">Investing</h1>
+    <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+            <p className="text-text-secondary text-sm font-medium mb-2">Total Holdings Value</p>
+            <p className="text-3xl font-semibold text-[#F8C445]">
+              CHF {totalValue.toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+            <p className="text-text-secondary text-sm font-medium mb-2">Total Profit/Loss</p>
+            <p className={`text-3xl font-semibold ${totalProfitLoss >= 0 ? 'text-success' : 'text-danger'}`}>
+              {totalProfitLoss >= 0 ? '+' : ''}CHF {totalProfitLoss.toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+            <p className="text-text-secondary text-sm font-medium mb-2">Return %</p>
+            <p className={`text-3xl font-semibold ${totalProfitLoss >= 0 ? 'text-success' : 'text-danger'}`}>
+              {totalProfitLoss >= 0 ? '+' : ''}{totalProfitLossPercent}%
+            </p>
+          </div>
+        </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card">
-          <p className="label-normal mb-2">Total Holdings Value</p>
-          <p className="text-3xl font-semibold text-goldenrod">
-            CHF {totalValue.toLocaleString()}
-          </p>
-        </div>
-        <div className="card">
-          <p className="label-normal mb-2">Total Profit/Loss</p>
-          <p className={`text-3xl font-semibold ${totalProfitLoss >= 0 ? 'text-success' : 'text-error'}`}>
-            {totalProfitLoss >= 0 ? '+' : ''}CHF {totalProfitLoss.toLocaleString()}
-          </p>
-        </div>
-        <div className="card">
-          <p className="label-normal mb-2">Return %</p>
-          <p className={`text-3xl font-semibold ${totalProfitLoss >= 0 ? 'text-success' : 'text-error'}`}>
-            {totalProfitLoss >= 0 ? '+' : ''}{totalProfitLossPercent}%
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Platform Allocation */}
-        <div className="card">
-          <h2 className="section-title mb-4">Platform Allocation</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Platform Allocation */}
+          <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+            <h2 className="text-text-primary text-xl font-semibold mb-4">Platform Allocation</h2>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -76,91 +75,92 @@ function Investing() {
               </Pie>
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: '#0A1A40', 
-                  border: '1px solid #B87333',
+                  backgroundColor: '#FFFFFF', 
+                  border: '1px solid #E5E7EB',
                   borderRadius: '8px',
-                  color: '#EAEAEA'
+                  color: '#111827'
                 }}
               />
             </PieChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Asset Allocation */}
-        <div className="card">
-          <h2 className="section-title mb-4">Asset Allocation</h2>
-          <div className="space-y-3">
-            {holdings.map((holding, index) => {
-              const percentage = (holding.value / totalValue * 100).toFixed(1)
-              return (
-                <div key={index} className="border-b border-bronze-gold pb-3 last:border-0">
-                  <div className="flex justify-between items-center mb-1">
-                    <p className="text-text-primary font-medium">{holding.asset}</p>
-                    <p className="text-goldenrod font-semibold">{percentage}%</p>
+          {/* Asset Allocation */}
+          <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+            <h2 className="text-text-primary text-xl font-semibold mb-4">Asset Allocation</h2>
+            <div className="space-y-3">
+              {holdings.map((holding, index) => {
+                const percentage = (holding.value / totalValue * 100).toFixed(1)
+                return (
+                  <div key={index} className="border-b border-border-subtle pb-3 last:border-0">
+                    <div className="flex justify-between items-center mb-1">
+                      <p className="text-text-primary font-medium">{holding.asset}</p>
+                      <p className="text-[#F8C445] font-semibold">{percentage}%</p>
+                    </div>
+                    <div className="w-full bg-bg-surface-2 rounded-full h-2">
+                      <div 
+                        className="bg-gradient-to-r from-[#F8C445] to-[#DAA520] h-2 rounded-full"
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className="w-full bg-galaxy-dark rounded-full h-2">
-                    <div 
-                      className="bg-gradient-to-r from-bronze-gold to-goldenrod h-2 rounded-full"
-                      style={{ width: `${percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Holdings Table */}
-      <div className="card">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="section-title">Holdings by Platform and Asset</h2>
-          <select 
-            value={selectedPlatform} 
-            onChange={(e) => setSelectedPlatform(e.target.value)}
-            className="input-field"
-          >
-            <option value="all">All Platforms</option>
-            {platforms.map(platform => (
-              <option key={platform.name} value={platform.name}>{platform.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-bronze-gold">
-                <th className="text-left py-3 px-4 label-normal">Asset</th>
-                <th className="text-left py-3 px-4 label-normal">Platform</th>
-                <th className="text-right py-3 px-4 label-normal">Quantity</th>
-                <th className="text-right py-3 px-4 label-normal">Price</th>
-                <th className="text-right py-3 px-4 label-normal">Value</th>
-                <th className="text-right py-3 px-4 label-normal">P/L</th>
-                <th className="text-right py-3 px-4 label-normal">P/L %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredHoldings.map((holding, index) => (
-                <tr key={index} className="border-b border-space-blue hover:bg-galaxy-dark transition-colors">
-                  <td className="py-3 px-4 text-text-primary font-medium">{holding.asset}</td>
-                  <td className="py-3 px-4 text-text-secondary">{holding.platform}</td>
-                  <td className="py-3 px-4 text-right text-text-primary">{holding.quantity}</td>
-                  <td className="py-3 px-4 text-right text-text-primary">CHF {holding.price.toLocaleString()}</td>
-                  <td className="py-3 px-4 text-right text-text-primary">CHF {holding.value.toLocaleString()}</td>
-                  <td className={`py-3 px-4 text-right font-medium ${
-                    holding.profitLoss >= 0 ? 'text-success' : 'text-error'
-                  }`}>
-                    {holding.profitLoss >= 0 ? '+' : ''}CHF {holding.profitLoss.toLocaleString()}
-                  </td>
-                  <td className={`py-3 px-4 text-right font-medium ${
-                    holding.profitLoss >= 0 ? 'text-success' : 'text-error'
-                  }`}>
-                    {holding.profitLoss >= 0 ? '+' : ''}{holding.profitLossPercent}%
-                  </td>
-                </tr>
+        {/* Holdings Table */}
+        <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-text-primary text-xl font-semibold">Holdings by Platform and Asset</h2>
+            <select 
+              value={selectedPlatform} 
+              onChange={(e) => setSelectedPlatform(e.target.value)}
+              className="bg-bg-surface-2 border border-border-subtle rounded-input px-4 py-2 text-text-primary focus:outline-none focus:border-accent-blue"
+            >
+              <option value="all">All Platforms</option>
+              {platforms.map(platform => (
+                <option key={platform.name} value={platform.name}>{platform.name}</option>
               ))}
-            </tbody>
-          </table>
+            </select>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border-subtle">
+                  <th className="text-left py-3 px-4 text-text-secondary text-sm font-medium">Asset</th>
+                  <th className="text-left py-3 px-4 text-text-secondary text-sm font-medium">Platform</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">Quantity</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">Price</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">Value</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">P/L</th>
+                  <th className="text-right py-3 px-4 text-text-secondary text-sm font-medium">P/L %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHoldings.map((holding, index) => (
+                  <tr key={index} className="border-b border-border-subtle hover:bg-bg-surface-2 transition-colors">
+                    <td className="py-3 px-4 text-text-primary font-medium">{holding.asset}</td>
+                    <td className="py-3 px-4 text-text-secondary">{holding.platform}</td>
+                    <td className="py-3 px-4 text-right text-text-primary">{holding.quantity}</td>
+                    <td className="py-3 px-4 text-right text-text-primary">CHF {holding.price.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right text-text-primary">CHF {holding.value.toLocaleString()}</td>
+                    <td className={`py-3 px-4 text-right font-medium ${
+                      holding.profitLoss >= 0 ? 'text-success' : 'text-danger'
+                    }`}>
+                      {holding.profitLoss >= 0 ? '+' : ''}CHF {holding.profitLoss.toLocaleString()}
+                    </td>
+                    <td className={`py-3 px-4 text-right font-medium ${
+                      holding.profitLoss >= 0 ? 'text-success' : 'text-danger'
+                    }`}>
+                      {holding.profitLoss >= 0 ? '+' : ''}{holding.profitLossPercent}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

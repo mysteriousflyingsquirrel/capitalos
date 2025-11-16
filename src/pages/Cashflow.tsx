@@ -132,6 +132,7 @@ interface GroupedListProps<T> {
   renderGroupHeader: (groupName: string, groupItems: T[]) => React.ReactNode
   renderItem: (item: T) => React.ReactNode
   renderHeader?: () => React.ReactNode
+  renderAddButton?: (groupName: string) => React.ReactNode
 }
 
 function GroupedList<T extends Record<string, any>>({
@@ -141,6 +142,7 @@ function GroupedList<T extends Record<string, any>>({
   renderGroupHeader,
   renderItem,
   renderHeader,
+  renderAddButton,
 }: GroupedListProps<T>) {
   // Group items
   const grouped = items.reduce(
@@ -168,6 +170,7 @@ function GroupedList<T extends Record<string, any>>({
             <div className="space-y-2">
               {groupItems.map((item) => renderItem(item))}
             </div>
+            {renderAddButton && renderAddButton(groupName)}
           </div>
         )
       })}
@@ -212,6 +215,29 @@ function InflowSection() {
             <div className="text-text-secondary text-sm md:mt-0 mt-1">{item.provider}</div>
           </div>
         )}
+        renderAddButton={(groupName) => (
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={() => console.log(`Add item to ${groupName} (Inflow)`)}
+              className="py-3 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] font-semibold rounded-full transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group"
+            >
+            <svg
+              className="w-5 h-5 transition-transform group-hover:rotate-90"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            <span>Add Item</span>
+          </button>
+          </div>
+        )}
       />
     </SectionCard>
   )
@@ -252,6 +278,29 @@ function OutflowSection() {
             <div className="text-text-primary font-medium">{item.item}</div>
             <div className="text-danger text-lg font-semibold">{formatChf(item.amountChf)}</div>
             <div className="text-text-secondary text-sm md:mt-0 mt-1">{item.receiver}</div>
+          </div>
+        )}
+        renderAddButton={(groupName) => (
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={() => console.log(`Add item to ${groupName} (Outflow)`)}
+              className="py-3 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] font-semibold rounded-full transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group"
+            >
+            <svg
+              className="w-5 h-5 transition-transform group-hover:rotate-90"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            <span>Add Item</span>
+          </button>
           </div>
         )}
       />
@@ -301,6 +350,29 @@ function AccountflowSection() {
             <div className="text-success text-lg font-semibold">{formatChf(item.inflowChf)}</div>
             <div className="text-danger text-lg font-semibold">{formatChf(item.outflowChf)}</div>
             <div className="text-text-primary text-lg font-semibold">{formatChf(item.spareChf)}</div>
+          </div>
+        )}
+        renderAddButton={(platformName) => (
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={() => console.log(`Add item to ${platformName} (Accountflow)`)}
+              className="py-3 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] font-semibold rounded-full transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group"
+            >
+            <svg
+              className="w-5 h-5 transition-transform group-hover:rotate-90"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            <span>Add Item</span>
+          </button>
           </div>
         )}
       />

@@ -125,6 +125,29 @@ function NetWorthCategorySection({
               </div>
             </div>
           ))}
+          
+          {/* Add Item Button */}
+          <div className="flex justify-end mt-4">
+            <button
+              onClick={() => console.log(`Add item to ${category}`)}
+              className="py-3 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] font-semibold rounded-full transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group"
+            >
+            <svg
+              className="w-5 h-5 transition-transform group-hover:rotate-90"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            <span>Add Item</span>
+          </button>
+          </div>
         </div>
     </div>
   )
