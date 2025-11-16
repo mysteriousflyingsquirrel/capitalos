@@ -5,7 +5,7 @@ function Settings() {
         {/* Page Title */}
         <h1 className="text-text-primary text-2xl md:text-3xl font-semibold">Settings</h1>
         
-        <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
           <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">Account Settings</h2>
           <div className="space-y-4">
             <div>
@@ -28,7 +28,7 @@ function Settings() {
           </div>
         </div>
 
-        <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
           <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">Data Management</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -55,7 +55,7 @@ function Settings() {
           </div>
         </div>
 
-        <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
           <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">Price Updates</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -79,7 +79,7 @@ function Settings() {
           </div>
         </div>
 
-        <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
           <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">Tax Reports</h2>
           <div className="space-y-4">
             <div>

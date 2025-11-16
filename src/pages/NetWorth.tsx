@@ -1,3 +1,4 @@
+import { useState, useMemo, FormEvent } from 'react'
 
 // TypeScript types
 type NetWorthCategory =
@@ -10,48 +11,51 @@ type NetWorthCategory =
   | 'Real Estate'
   | 'Inventory'
 
-interface NetWorthItem {
+export interface NetWorthItem {
   id: string
-  item: string
-  balanceChf: number
-  platform: string
+  userId?: string
   category: NetWorthCategory
+  name: string
+  balanceChf: number
+  currency: string
+  platform: string
+  asOf?: string // ISO date string (only for some categories)
 }
 
 // Mock data
 const mockNetWorthItems: NetWorthItem[] = [
   // Cash
-  { id: '1', item: 'Wallet', balanceChf: 250, platform: 'Physical', category: 'Cash' },
-  { id: '2', item: 'Emergency Cash', balanceChf: 500, platform: 'Physical', category: 'Cash' },
+  { id: '1', name: 'Wallet', balanceChf: 250, currency: 'CHF', platform: 'Physical', category: 'Cash' },
+  { id: '2', name: 'Emergency Cash', balanceChf: 500, currency: 'CHF', platform: 'Physical', category: 'Cash' },
   
   // Bank Accounts
-  { id: '3', item: 'Main Account', balanceChf: 12000, platform: 'Raiffeisen', category: 'Bank Accounts' },
-  { id: '4', item: 'Savings Account', balanceChf: 5000, platform: 'Raiffeisen', category: 'Bank Accounts' },
-  { id: '5', item: 'Business Account', balanceChf: 8000, platform: 'UBS', category: 'Bank Accounts' },
+  { id: '3', name: 'Main Account', balanceChf: 12000, currency: 'CHF', platform: 'Raiffeisen', category: 'Bank Accounts' },
+  { id: '4', name: 'Savings Account', balanceChf: 5000, currency: 'CHF', platform: 'Raiffeisen', category: 'Bank Accounts' },
+  { id: '5', name: 'Business Account', balanceChf: 8000, currency: 'CHF', platform: 'UBS', category: 'Bank Accounts' },
   
   // Funds
-  { id: '6', item: 'Swiss Equity Fund', balanceChf: 25000, platform: 'Saxo', category: 'Funds' },
-  { id: '7', item: 'Global Index Fund', balanceChf: 15000, platform: 'IBKR', category: 'Funds' },
+  { id: '6', name: 'Swiss Equity Fund', balanceChf: 25000, currency: 'CHF', platform: 'Saxo', category: 'Funds', asOf: '2025-01-01' },
+  { id: '7', name: 'Global Index Fund', balanceChf: 15000, currency: 'CHF', platform: 'IBKR', category: 'Funds', asOf: '2025-01-01' },
   
   // Stocks
-  { id: '8', item: 'Apple Inc.', balanceChf: 12000, platform: 'IBKR', category: 'Stocks' },
-  { id: '9', item: 'Nestlé SA', balanceChf: 8000, platform: 'Saxo', category: 'Stocks' },
+  { id: '8', name: 'Apple Inc.', balanceChf: 12000, currency: 'CHF', platform: 'IBKR', category: 'Stocks', asOf: '2025-01-01' },
+  { id: '9', name: 'Nestlé SA', balanceChf: 8000, currency: 'CHF', platform: 'Saxo', category: 'Stocks', asOf: '2025-01-01' },
   
   // Commodities
-  { id: '10', item: 'Gold', balanceChf: 5000, platform: 'Physical', category: 'Commodities' },
-  { id: '11', item: 'Silver', balanceChf: 2000, platform: 'Physical', category: 'Commodities' },
+  { id: '10', name: 'Gold', balanceChf: 5000, currency: 'CHF', platform: 'Physical', category: 'Commodities', asOf: '2025-01-01' },
+  { id: '11', name: 'Silver', balanceChf: 2000, currency: 'CHF', platform: 'Physical', category: 'Commodities', asOf: '2025-01-01' },
   
   // Crypto
-  { id: '12', item: 'BTC', balanceChf: 40000, platform: 'Trezor', category: 'Crypto' },
-  { id: '13', item: 'ETH', balanceChf: 15000, platform: 'Trezor', category: 'Crypto' },
-  { id: '14', item: 'USDC', balanceChf: 5000, platform: 'Ledger', category: 'Crypto' },
+  { id: '12', name: 'BTC', balanceChf: 40000, currency: 'CHF', platform: 'Trezor', category: 'Crypto', asOf: '2025-01-01' },
+  { id: '13', name: 'ETH', balanceChf: 15000, currency: 'CHF', platform: 'Trezor', category: 'Crypto', asOf: '2025-01-01' },
+  { id: '14', name: 'USDC', balanceChf: 5000, currency: 'CHF', platform: 'Ledger', category: 'Crypto', asOf: '2025-01-01' },
   
   // Real Estate
-  { id: '15', item: 'Apartment Zurich', balanceChf: 450000, platform: 'Property', category: 'Real Estate' },
+  { id: '15', name: 'Apartment Zurich', balanceChf: 450000, currency: 'CHF', platform: 'Property', category: 'Real Estate' },
   
   // Inventory
-  { id: '16', item: 'Electronics', balanceChf: 3000, platform: 'Physical', category: 'Inventory' },
-  { id: '17', item: 'Furniture', balanceChf: 5000, platform: 'Physical', category: 'Inventory' },
+  { id: '16', name: 'Electronics', balanceChf: 3000, currency: 'CHF', platform: 'Physical', category: 'Inventory' },
+  { id: '17', name: 'Furniture', balanceChf: 5000, currency: 'CHF', platform: 'Physical', category: 'Inventory' },
 ]
 
 // Category order
@@ -78,62 +82,32 @@ const formatChf = (value: number): string => {
 interface NetWorthCategorySectionProps {
   category: NetWorthCategory
   items: NetWorthItem[]
+  onAddClick: () => void
 }
 
 function NetWorthCategorySection({
   category,
   items,
+  onAddClick,
 }: NetWorthCategorySectionProps) {
   const subtotal = items.reduce((sum, item) => sum + item.balanceChf, 0)
 
   return (
-    <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+    <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
-        <div className="flex items-center justify-between">
-          <h2 className="text-text-primary text-xl font-semibold">{category}</h2>
-          <span className="text-success text-2xl font-bold">
-            {formatChf(subtotal)}
-          </span>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-          {/* Desktop: Grid layout */}
-          <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Balance</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Platform</div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-text-primary text-lg md:text-xl font-semibold">{category}</h2>
+            <span className="text-success text-sm md:text-lg font-bold block mt-1">
+              {formatChf(subtotal)}
+            </span>
           </div>
-
-          {/* Mobile & Desktop: Items */}
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
-            >
-              {/* Item */}
-              <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.item}</div>
-              
-              {/* Balance */}
-              <div className="text-text-primary text-sm md:text-lg font-semibold truncate">
-                {formatChf(item.balanceChf)}
-              </div>
-              
-              {/* Platform */}
-              <div className="text-text-secondary text-xs md:text-sm truncate">
-                {item.platform}
-              </div>
-            </div>
-          ))}
-          
-          {/* Add Item Button */}
-          <div className="flex justify-end mt-4">
-            <button
-              onClick={() => console.log(`Add item to ${category}`)}
-              className="py-3 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] font-semibold rounded-full transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group"
-            >
+          <button
+            onClick={onAddClick}
+            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-xs md:text-sm font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
+          >
             <svg
-              className="w-5 h-5 transition-transform group-hover:rotate-90"
+              className="w-4 h-4 transition-transform group-hover:rotate-90"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -147,30 +121,88 @@ function NetWorthCategorySection({
             </svg>
             <span>Add Item</span>
           </button>
-          </div>
         </div>
+      </div>
+
+      <div className="space-y-3">
+          {/* Desktop: Grid layout */}
+          <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Balance</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Platform</div>
+          </div>
+
+        {/* Mobile & Desktop: Items */}
+        {items.map((item) => (
+          <div
+            key={item.id}
+            className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
+          >
+            {/* Item */}
+            <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.name}</div>
+            
+            {/* Balance */}
+            <div className="text-text-primary text-sm md:text-lg font-semibold truncate">
+              {formatChf(item.balanceChf)}
+            </div>
+            
+            {/* Platform */}
+            <div className="text-text-secondary text-xs md:text-sm truncate">
+              {item.platform}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
 function NetWorth() {
-  // Group items by category
-  const groupedItems = mockNetWorthItems.reduce(
-    (acc, item) => {
-      if (!acc[item.category]) {
-        acc[item.category] = []
-      }
-      acc[item.category].push(item)
-      return acc
-    },
-    {} as Record<NetWorthCategory, NetWorthItem[]>
+  const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>(mockNetWorthItems)
+  const [activeCategory, setActiveCategory] = useState<NetWorthCategory | null>(null)
+
+  const groupedItems = useMemo(
+    () =>
+      netWorthItems.reduce(
+        (acc, item) => {
+          if (!acc[item.category]) {
+            acc[item.category] = []
+          }
+          acc[item.category].push(item)
+          return acc
+        },
+        {} as Record<NetWorthCategory, NetWorthItem[]>
+      ),
+    [netWorthItems]
   )
 
-  // Calculate total net worth
-  const totalNetWorth = mockNetWorthItems.reduce(
-    (sum, item) => sum + item.balanceChf,
-    0
+  const totalNetWorth = useMemo(
+    () => netWorthItems.reduce((sum, item) => sum + item.balanceChf, 0),
+    [netWorthItems]
   )
+
+  const handleAddItem = (
+    category: NetWorthCategory,
+    data: { name: string; amount: number; currency: string; platform: string; asOf?: string }
+  ) => {
+    const id =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : String(Date.now())
+
+    const newItem: NetWorthItem = {
+      id,
+      category,
+      name: data.name,
+      balanceChf: data.amount,
+      currency: data.currency,
+      platform: data.platform,
+      asOf: data.asOf,
+    }
+
+    setNetWorthItems((prev) => [...prev, newItem])
+    setActiveCategory(null)
+  }
 
   return (
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
@@ -179,7 +211,7 @@ function NetWorth() {
         <h1 className="text-text-primary text-xl md:text-2xl font-semibold">Net Worth</h1>
         
         {/* Total Net Worth */}
-        <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
           <p className="text-text-secondary text-xs md:text-sm font-medium mb-1 md:mb-2">Total Net Worth</p>
           <p className="text-success text-xl md:text-3xl font-bold">{formatChf(totalNetWorth)}</p>
         </div>
@@ -195,10 +227,212 @@ function NetWorth() {
                 key={category}
                 category={category}
                 items={items}
+                onAddClick={() => setActiveCategory(category)}
               />
             )
           })}
         </div>
+
+        {activeCategory && (
+          <AddNetWorthItemModal
+            category={activeCategory}
+            onClose={() => setActiveCategory(null)}
+            onSubmit={handleAddItem}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+interface AddNetWorthItemModalProps {
+  category: NetWorthCategory
+  onClose: () => void
+  onSubmit: (
+    category: NetWorthCategory,
+    data: { name: string; amount: number; currency: string; platform: string; asOf?: string }
+  ) => void
+}
+
+const CATEGORIES_WITH_DATE: NetWorthCategory[] = ['Funds', 'Stocks', 'Commodities', 'Crypto']
+
+function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemModalProps) {
+  const [name, setName] = useState('')
+  const [amount, setAmount] = useState('')
+  const [currency, setCurrency] = useState('CHF')
+  const [platform, setPlatform] = useState('Physical')
+  const [asOf, setAsOf] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const requiresDate = CATEGORIES_WITH_DATE.includes(category)
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    const parsedAmount = Number(amount)
+    if (!name.trim()) {
+      setError('Please enter an item name.')
+      return
+    }
+    if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setError('Please enter a valid amount greater than 0.')
+      return
+    }
+    if (requiresDate && !asOf) {
+      setError('Please select a date.')
+      return
+    }
+
+    onSubmit(category, {
+      name: name.trim(),
+      amount: parsedAmount,
+      currency,
+      platform,
+      asOf: requiresDate ? asOf : undefined,
+    })
+
+    setName('')
+    setAmount('')
+    setCurrency('CHF')
+    setPlatform('Physical')
+    setAsOf('')
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative">
+        <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">
+          Add Item – {category}
+        </h2>
+
+        {error && (
+          <div className="mb-3 text-xs md:text-sm text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-text-secondary text-xs md:text-sm font-medium mb-1">
+              Category
+            </label>
+            <div className="text-text-primary text-sm md:text-base">{category}</div>
+          </div>
+
+          <div>
+            <label
+              className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+              htmlFor="nw-item-name"
+            >
+              Item
+            </label>
+            <input
+              id="nw-item-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+              autoFocus
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+                htmlFor="nw-amount"
+              >
+                Amount
+              </label>
+              <input
+                id="nw-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+              />
+            </div>
+            <div>
+              <label
+                className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+                htmlFor="nw-currency"
+              >
+                Currency
+              </label>
+              <select
+                id="nw-currency"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+              >
+                <option value="CHF">CHF</option>
+                <option value="EUR">EUR</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label
+              className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+              htmlFor="nw-platform"
+            >
+              Platform
+            </label>
+            <select
+              id="nw-platform"
+              value={platform}
+              onChange={(e) => setPlatform(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+            >
+              <option value="Physical">Physical</option>
+              <option value="Wallet">Wallet</option>
+              <option value="Raiffeisen">Raiffeisen</option>
+              <option value="Revolut">Revolut</option>
+              <option value="yuh!">yuh!</option>
+              <option value="SAXO">SAXO</option>
+              <option value="Kraken">Kraken</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          {requiresDate && (
+            <div>
+              <label
+                className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+                htmlFor="nw-asof"
+              >
+                Date
+              </label>
+              <input
+                id="nw-asof"
+                type="date"
+                value={asOf}
+                onChange={(e) => setAsOf(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+              />
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-full text-xs md:text-sm bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-full text-xs md:text-sm bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+            >
+              Add Item
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
