@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.svg', 'capitalos_logo.png'],
+      includeAssets: ['capitalos_logo.png'],
       manifest: {
         name: 'Capitalos',
         short_name: 'Capitalos',
@@ -25,11 +25,6 @@ export default defineConfig({
             src: 'capitalos_logo.png',
             sizes: '512x512',
             type: 'image/png'
-          },
-          {
-            src: 'logo.svg',
-            sizes: 'any',
-            type: 'image/svg+xml'
           }
         ]
       }

@@ -5,7 +5,7 @@ function Layout({ children }) {
     <div className="min-h-screen bg-[#050A1A]">
       <Sidebar />
       <div className="flex flex-col lg:ml-[250px]">
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto pt-[calc(3.5rem+1rem)] lg:pt-0">
           {children}
         </main>
       </div>

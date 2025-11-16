@@ -29,35 +29,37 @@ function Sidebar() {
 
   return (
     <>
-      {/* Mobile menu button */}
-      <button
-        onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="lg:hidden fixed top-4 left-4 z-[60] p-2 bg-bg-surface-1 border border-border-subtle rounded-card text-text-primary"
-        aria-label="Toggle menu"
-      >
-        <svg
-          className="w-6 h-6"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+      {/* Mobile Top Bar */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-[60] bg-bg-surface-1 border-b border-border-subtle px-4 py-3 flex items-center">
+        <button
+          onClick={() => setIsMobileOpen(!isMobileOpen)}
+          className="p-2 text-text-primary hover:bg-bg-surface-2 rounded-input transition-colors"
+          aria-label="Toggle menu"
         >
-          {isMobileOpen ? (
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          ) : (
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 6h16M4 12h16M4 18h16"
-            />
-          )}
-        </svg>
-      </button>
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            {isMobileOpen ? (
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            ) : (
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            )}
+          </svg>
+        </button>
+      </div>
 
       {/* Mobile overlay */}
       {isMobileOpen && (
@@ -70,7 +72,7 @@ function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed left-0 top-0 h-full w-[250px] bg-[#050A1A]
+          fixed left-0 top-14 lg:top-0 h-[calc(100vh-3.5rem)] lg:h-full w-[250px] bg-[#050A1A]
           flex flex-col z-50
           transform transition-transform duration-300 ease-in-out
           lg:translate-x-0
