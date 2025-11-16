@@ -99,28 +99,28 @@ function NetWorthCategorySection({
 
       <div className="space-y-3">
           {/* Desktop: Grid layout */}
-          <div className="hidden md:grid md:grid-cols-3 gap-4 pb-2 border-b border-border-subtle">
-            <div className="text-text-secondary text-sm font-medium">Item</div>
-            <div className="text-text-secondary text-sm font-medium">Balance</div>
-            <div className="text-text-secondary text-sm font-medium">Platform</div>
+          <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Balance</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Platform</div>
           </div>
 
           {/* Mobile & Desktop: Items */}
           {items.map((item) => (
             <div
               key={item.id}
-              className="grid grid-cols-1 md:grid-cols-3 md:gap-4 gap-2 py-2 border-b border-border-subtle last:border-b-0"
+              className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
             >
               {/* Item */}
-              <div className="text-text-primary font-medium">{item.item}</div>
+              <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.item}</div>
               
               {/* Balance */}
-              <div className="text-text-primary text-lg font-semibold">
+              <div className="text-text-primary text-sm md:text-lg font-semibold truncate">
                 {formatChf(item.balanceChf)}
               </div>
               
               {/* Platform */}
-              <div className="text-text-secondary text-sm md:mt-0 mt-1">
+              <div className="text-text-secondary text-xs md:text-sm truncate">
                 {item.platform}
               </div>
             </div>

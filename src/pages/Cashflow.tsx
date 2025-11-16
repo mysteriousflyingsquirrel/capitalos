@@ -199,20 +199,20 @@ function InflowSection() {
           )
         }}
         renderHeader={() => (
-          <div className="hidden md:grid md:grid-cols-3 gap-4 pb-2 border-b border-border-subtle">
-            <div className="text-text-secondary text-sm font-medium">Item</div>
-            <div className="text-text-secondary text-sm font-medium">Inflow</div>
-            <div className="text-text-secondary text-sm font-medium">Provider</div>
+          <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Inflow</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Provider</div>
           </div>
         )}
         renderItem={(item) => (
           <div
             key={item.id}
-            className="grid grid-cols-1 md:grid-cols-3 md:gap-4 gap-2 py-2 border-b border-border-subtle last:border-b-0"
+            className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
-            <div className="text-text-primary font-medium">{item.item}</div>
-            <div className="text-success text-lg font-semibold">{formatChf(item.amountChf)}</div>
-            <div className="text-text-secondary text-sm md:mt-0 mt-1">{item.provider}</div>
+            <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.item}</div>
+            <div className="text-success text-sm md:text-lg font-semibold truncate">{formatChf(item.amountChf)}</div>
+            <div className="text-text-secondary text-xs md:text-sm truncate">{item.provider}</div>
           </div>
         )}
         renderAddButton={(groupName) => (
@@ -264,20 +264,20 @@ function OutflowSection() {
           )
         }}
         renderHeader={() => (
-          <div className="hidden md:grid md:grid-cols-3 gap-4 pb-2 border-b border-border-subtle">
-            <div className="text-text-secondary text-sm font-medium">Item</div>
-            <div className="text-text-secondary text-sm font-medium">Outflow</div>
-            <div className="text-text-secondary text-sm font-medium">Receiver</div>
+          <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Outflow</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Receiver</div>
           </div>
         )}
         renderItem={(item) => (
           <div
             key={item.id}
-            className="grid grid-cols-1 md:grid-cols-3 md:gap-4 gap-2 py-2 border-b border-border-subtle last:border-b-0"
+            className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
-            <div className="text-text-primary font-medium">{item.item}</div>
-            <div className="text-danger text-lg font-semibold">{formatChf(item.amountChf)}</div>
-            <div className="text-text-secondary text-sm md:mt-0 mt-1">{item.receiver}</div>
+            <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.item}</div>
+            <div className="text-danger text-sm md:text-lg font-semibold truncate">{formatChf(item.amountChf)}</div>
+            <div className="text-text-secondary text-xs md:text-sm truncate">{item.receiver}</div>
           </div>
         )}
         renderAddButton={(groupName) => (
@@ -334,22 +334,22 @@ function AccountflowSection() {
           )
         }}
         renderHeader={() => (
-          <div className="hidden md:grid md:grid-cols-4 gap-4 pb-2 border-b border-border-subtle">
-            <div className="text-text-secondary text-sm font-medium">Item</div>
-            <div className="text-text-secondary text-sm font-medium">Inflow</div>
-            <div className="text-text-secondary text-sm font-medium">Outflow</div>
-            <div className="text-text-secondary text-sm font-medium">Spare</div>
+          <div className="grid grid-cols-4 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Inflow</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Outflow</div>
+            <div className="text-text-secondary text-xs md:text-sm font-medium">Spare</div>
           </div>
         )}
         renderItem={(item) => (
           <div
             key={item.id}
-            className="grid grid-cols-1 md:grid-cols-4 md:gap-4 gap-2 py-2 border-b border-border-subtle last:border-b-0"
+            className="grid grid-cols-4 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
-            <div className="text-text-primary font-medium">{item.item}</div>
-            <div className="text-success text-lg font-semibold">{formatChf(item.inflowChf)}</div>
-            <div className="text-danger text-lg font-semibold">{formatChf(item.outflowChf)}</div>
-            <div className="text-text-primary text-lg font-semibold">{formatChf(item.spareChf)}</div>
+            <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.item}</div>
+            <div className="text-success text-sm md:text-lg font-semibold truncate">{formatChf(item.inflowChf)}</div>
+            <div className="text-danger text-sm md:text-lg font-semibold truncate">{formatChf(item.outflowChf)}</div>
+            <div className="text-text-primary text-sm md:text-lg font-semibold truncate">{formatChf(item.spareChf)}</div>
           </div>
         )}
         renderAddButton={(platformName) => (
