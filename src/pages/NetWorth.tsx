@@ -1,4 +1,6 @@
 import { useState, useMemo, FormEvent } from 'react'
+import Heading from '../components/Heading'
+import TotalText from '../components/TotalText'
 
 // TypeScript types
 type NetWorthCategory =
@@ -97,14 +99,14 @@ function NetWorthCategorySection({
       <div className="mb-6 pb-4 border-b border-border-strong">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-text-primary text-lg md:text-xl font-semibold">{category}</h2>
-            <span className="text-success text-sm md:text-lg font-bold block mt-1">
+            <Heading level={2}>{category}</Heading>
+            <TotalText variant="neutral" className="block mt-1 text-xs md:text-sm">
               {formatChf(subtotal)}
-            </span>
+            </TotalText>
           </div>
           <button
             onClick={onAddClick}
-            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-xs md:text-sm font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
+            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
           >
             <svg
               className="w-4 h-4 transition-transform group-hover:rotate-90"
@@ -127,9 +129,9 @@ function NetWorthCategorySection({
       <div className="space-y-3">
           {/* Desktop: Grid layout */}
           <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Balance</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Platform</div>
+            <Heading level={4} className="font-medium">Item</Heading>
+            <Heading level={4} className="font-medium">Balance</Heading>
+            <Heading level={4} className="font-medium">Platform</Heading>
           </div>
 
         {/* Mobile & Desktop: Items */}
@@ -139,15 +141,15 @@ function NetWorthCategorySection({
             className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
             {/* Item */}
-            <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.name}</div>
+            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">{item.name}</div>
             
             {/* Balance */}
-            <div className="text-text-primary text-sm md:text-lg font-semibold truncate">
+            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">
               {formatChf(item.balanceChf)}
             </div>
             
             {/* Platform */}
-            <div className="text-text-secondary text-xs md:text-sm truncate">
+            <div className="text-text-secondary text-[0.525rem] md:text-xs truncate">
               {item.platform}
             </div>
           </div>
@@ -208,12 +210,14 @@ function NetWorth() {
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
-        <h1 className="text-text-primary text-xl md:text-2xl font-semibold">Net Worth</h1>
+        <Heading level={1}>Net Worth</Heading>
         
         {/* Total Net Worth */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
-          <p className="text-text-secondary text-xs md:text-sm font-medium mb-1 md:mb-2">Total Net Worth</p>
-          <p className="text-success text-xl md:text-3xl font-bold">{formatChf(totalNetWorth)}</p>
+          <Heading level={2} className="mb-2">
+            Total Net Worth
+          </Heading>
+          <TotalText variant="neutral">{formatChf(totalNetWorth)}</TotalText>
         </div>
 
         {/* Grouped Categories */}
@@ -302,27 +306,27 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4">
       <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative">
-        <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">
+        <Heading level={2} className="mb-4">
           Add Item – {category}
-        </h2>
+        </Heading>
 
         {error && (
-          <div className="mb-3 text-xs md:text-sm text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+          <div className="mb-3 text-[0.525rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-text-secondary text-xs md:text-sm font-medium mb-1">
+            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1">
               Category
             </label>
-            <div className="text-text-primary text-sm md:text-base">{category}</div>
+            <div className="text-text-primary text-xs md:text-sm">{category}</div>
           </div>
 
           <div>
             <label
-              className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+              className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
               htmlFor="nw-item-name"
             >
               Item
@@ -332,7 +336,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
               autoFocus
             />
           </div>
@@ -340,7 +344,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label
-                className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+                className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
                 htmlFor="nw-amount"
               >
                 Amount
@@ -352,12 +356,12 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
                 step="0.01"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
               />
             </div>
             <div>
               <label
-                className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+                className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
                 htmlFor="nw-currency"
               >
                 Currency
@@ -366,7 +370,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
                 id="nw-currency"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
               >
                 <option value="CHF">CHF</option>
                 <option value="EUR">EUR</option>
@@ -377,7 +381,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
 
           <div>
             <label
-              className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+              className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
               htmlFor="nw-platform"
             >
               Platform
@@ -386,7 +390,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
               id="nw-platform"
               value={platform}
               onChange={(e) => setPlatform(e.target.value)}
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
             >
               <option value="Physical">Physical</option>
               <option value="Wallet">Wallet</option>
@@ -402,7 +406,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
           {requiresDate && (
             <div>
               <label
-                className="block text-text-secondary text-xs md:text-sm font-medium mb-1"
+                className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
                 htmlFor="nw-asof"
               >
                 Date
@@ -412,7 +416,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
                 type="date"
                 value={asOf}
                 onChange={(e) => setAsOf(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-sm md:text-base focus:outline-none focus:border-accent-blue"
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
               />
             </div>
           )}
@@ -421,13 +425,13 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-xs md:text-sm bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-full text-xs md:text-sm bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
               Add Item
             </button>

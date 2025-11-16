@@ -13,6 +13,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
+import Heading from '../components/Heading'
+import TotalText from '../components/TotalText'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -145,8 +147,12 @@ const PIE_CHART_COLORS = [
 function KpiCard({ title, value, subtitle }: KpiCardProps) {
   return (
     <div className="bg-bg-surface-1 border border-border-subtle rounded-card shadow-card p-6">
-      <p className="text-text-secondary text-xs md:text-sm font-medium mb-2">{title}</p>
-      <p className="text-text-primary text-xl md:text-2xl font-bold mb-1">{value}</p>
+      <Heading level={3} className="mb-2">
+        {title}
+      </Heading>
+      <TotalText variant={title.toLowerCase().includes('outflow') ? 'outflow' : 'inflow'} className="block mb-1">
+        {value}
+      </TotalText>
       {subtitle && (
         <p className="text-text-muted text-xs">{subtitle}</p>
       )}
@@ -372,46 +378,40 @@ function Dashboard() {
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
-        <h1 className="text-text-primary text-xl md:text-2xl font-semibold">Dashboard</h1>
+        <Heading level={1}>Dashboard</Heading>
         
         {/* First Row: Total Net Worth + Monthly Inflow + Monthly Outflow */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Total Net Worth KPI */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
-            <p className="text-text-secondary text-xs md:text-sm font-semibold mb-1 md:mb-2">
+            <Heading level={3} className="mb-2">
               Total Net Worth
-            </p>
-            <p className="text-success text-xl md:text-3xl font-bold">
-              {formatCHF(totalNetWorth)}
-            </p>
+            </Heading>
+            <TotalText variant="neutral">{formatCHF(totalNetWorth)}</TotalText>
           </div>
 
           {/* Monthly Inflow KPI */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
-            <p className="text-text-secondary text-xs md:text-sm font-semibold mb-1 md:mb-2">
+            <Heading level={3} className="mb-2">
               Monthly Inflow
-            </p>
-            <p className="text-success text-xl md:text-3xl font-bold">
-              {formatCHF(monthlyInflow)}
-            </p>
+            </Heading>
+            <TotalText variant="inflow">{formatCHF(monthlyInflow)}</TotalText>
           </div>
 
           {/* Monthly Outflow KPI */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
-            <p className="text-text-secondary text-xs md:text-sm font-semibold mb-1 md:mb-2">
+            <Heading level={3} className="mb-2">
               Monthly Outflow
-            </p>
-            <p className="text-danger text-xl md:text-3xl font-bold">
-              {formatCHF(monthlyOutflow)}
-            </p>
+            </Heading>
+            <TotalText variant="outflow">{formatCHF(monthlyOutflow)}</TotalText>
           </div>
         </div>
 
         {/* Second Row: Net Worth Evolution (Full Width) */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-base md:text-lg font-semibold mb-3 md:mb-4">
+          <Heading level={2} className="mb-4">
             Net Worth Evolution
-          </h2>
+          </Heading>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={netWorthData}>
               <CartesianGrid
@@ -454,9 +454,9 @@ function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Asset Allocation Pie Chart */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-base md:text-lg font-semibold mb-3 md:mb-4">
+            <Heading level={2} className="mb-4">
               Asset Allocation
-            </h2>
+            </Heading>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -499,9 +499,9 @@ function Dashboard() {
 
           {/* Inflow Breakdown Pie Chart */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-base md:text-lg font-semibold mb-3 md:mb-4">
+            <Heading level={2} className="mb-4">
               Inflow Breakdown
-            </h2>
+            </Heading>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -544,9 +544,9 @@ function Dashboard() {
 
           {/* Outflow Breakdown Pie Chart */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-base md:text-lg font-semibold mb-3 md:mb-4">
+            <Heading level={2} className="mb-4">
               Outflow Breakdown
-            </h2>
+            </Heading>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -590,9 +590,9 @@ function Dashboard() {
 
         {/* Fourth Row: Monthly Cashflow (Full Width) */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-base md:text-lg font-semibold mb-3 md:mb-4">
+          <Heading level={2} className="mb-4">
             Monthly Cashflow
-          </h2>
+          </Heading>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={cashflowData}>
               <CartesianGrid
@@ -647,9 +647,9 @@ function Dashboard() {
 
         {/* Fifth Row: Cashflow Sankey Diagram (Full Width) */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-base md:text-lg font-semibold mb-3 md:mb-4">
+          <Heading level={2} className="mb-4">
             Cashflow Sankey
-          </h2>
+          </Heading>
           {sankeyNodes && sankeyLinks && (
             <SankeyDiagram nodes={sankeyNodes} links={sankeyLinks} />
           )}

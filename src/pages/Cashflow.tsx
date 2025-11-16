@@ -1,4 +1,7 @@
 // TypeScript types
+import Heading from '../components/Heading'
+import TotalText from '../components/TotalText'
+
 type InflowGroupName = 'Time' | 'Service' | 'Worker Bees'
 
 interface InflowItem {
@@ -108,14 +111,14 @@ function SectionCard({ title, children, total, totalColor = 'success' }: Section
     <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
         <div className="flex items-center justify-between">
-          <h2 className="text-text-primary text-xl md:text-2xl font-semibold">{title}</h2>
+          <Heading level={2}>{title}</Heading>
           {total !== undefined && (
-            <span className={`${totalColor === 'success' ? 'text-success' : 'text-danger'} text-xl md:text-2xl font-bold`}>
+            <TotalText variant={totalColor === 'success' ? 'inflow' : 'outflow'}>
               {new Intl.NumberFormat('de-CH', {
                 style: 'currency',
                 currency: 'CHF',
               }).format(total)}
-            </span>
+            </TotalText>
           )}
         </div>
       </div>
@@ -194,14 +197,14 @@ function InflowSection() {
           return (
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
               <div>
-                <h3 className="text-text-primary text-sm md:text-lg font-semibold">{groupName}</h3>
-                <span className="text-success text-xs md:text-sm font-semibold block mt-1">
+                <Heading level={3}>{groupName}</Heading>
+                <TotalText variant="inflow" className="block mt-1">
                   {formatChf(total)}
-                </span>
+                </TotalText>
               </div>
               <button
                 onClick={() => console.log(`Add item to ${groupName} (Inflow)`)}
-                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-xs md:text-sm font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
               >
                 <svg
                   className="w-4 h-4 transition-transform group-hover:rotate-90"
@@ -223,9 +226,9 @@ function InflowSection() {
         }}
         renderHeader={() => (
           <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Inflow</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Provider</div>
+            <Heading level={4} className="font-medium">Item</Heading>
+            <Heading level={4} className="font-medium">Inflow</Heading>
+            <Heading level={4} className="font-medium">Provider</Heading>
           </div>
         )}
         renderItem={(item) => (
@@ -233,9 +236,9 @@ function InflowSection() {
             key={item.id}
             className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
-            <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.item}</div>
-            <div className="text-success text-sm md:text-lg font-semibold truncate">{formatChf(item.amountChf)}</div>
-            <div className="text-text-secondary text-xs md:text-sm truncate">{item.provider}</div>
+            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">{item.item}</div>
+            <div className="text-success text-[0.525rem] md:text-xs truncate">{formatChf(item.amountChf)}</div>
+            <div className="text-text-secondary text-[0.525rem] md:text-xs truncate">{item.provider}</div>
           </div>
         )}
       />
@@ -259,14 +262,14 @@ function OutflowSection() {
           return (
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
               <div>
-                <h3 className="text-text-primary text-sm md:text-lg font-semibold">{groupName}</h3>
-                <span className="text-danger text-xs md:text-sm font-semibold block mt-1">
+                <Heading level={3}>{groupName}</Heading>
+                <TotalText variant="outflow" className="block mt-1">
                   {formatChf(total)}
-                </span>
+                </TotalText>
               </div>
               <button
                 onClick={() => console.log(`Add item to ${groupName} (Outflow)`)}
-                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-xs md:text-sm font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
               >
                 <svg
                   className="w-4 h-4 transition-transform group-hover:rotate-90"
@@ -288,9 +291,9 @@ function OutflowSection() {
         }}
         renderHeader={() => (
           <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Outflow</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Receiver</div>
+            <Heading level={4} className="font-medium">Item</Heading>
+            <Heading level={4} className="font-medium">Outflow</Heading>
+            <Heading level={4} className="font-medium">Receiver</Heading>
           </div>
         )}
         renderItem={(item) => (
@@ -298,9 +301,9 @@ function OutflowSection() {
             key={item.id}
             className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
-            <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.item}</div>
-            <div className="text-danger text-sm md:text-lg font-semibold truncate">{formatChf(item.amountChf)}</div>
-            <div className="text-text-secondary text-xs md:text-sm truncate">{item.receiver}</div>
+            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">{item.item}</div>
+            <div className="text-danger text-[0.525rem] md:text-xs truncate">{formatChf(item.amountChf)}</div>
+            <div className="text-text-secondary text-[0.525rem] md:text-xs truncate">{item.receiver}</div>
           </div>
         )}
       />
@@ -319,21 +322,13 @@ function AccountflowSection() {
         groupKey="platform"
         groupOrder={accountPlatforms}
         renderGroupHeader={(platformName, groupItems) => {
-          const totalInflow = groupItems.reduce((sum, item) => sum + item.inflowChf, 0)
-          const totalOutflow = groupItems.reduce((sum, item) => sum + item.outflowChf, 0)
-          const totalSpare = groupItems.reduce((sum, item) => sum + item.spareChf, 0)
           return (
             <div className="flex items-start justify-between pb-2 border-b border-border-subtle">
-              <h3 className="text-text-primary text-sm md:text-lg font-semibold">{platformName}</h3>
+              <Heading level={3}>{platformName}</Heading>
               <div className="flex items-center gap-4">
-                <div className="flex flex-col items-end gap-1">
-                  <div className="text-success text-xs md:text-sm font-semibold">{formatChf(totalInflow)}</div>
-                  <div className="text-danger text-xs md:text-sm font-semibold">{formatChf(totalOutflow)}</div>
-                  <div className="text-text-primary text-xs md:text-sm font-semibold">{formatChf(totalSpare)}</div>
-                </div>
                 <button
                   onClick={() => console.log(`Add item to ${platformName} (Accountflow)`)}
-                  className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-xs md:text-sm font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+                  className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
                 >
                   <svg
                     className="w-4 h-4 transition-transform group-hover:rotate-90"
@@ -355,22 +350,20 @@ function AccountflowSection() {
           )
         }}
         renderHeader={() => (
-          <div className="grid grid-cols-4 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Item</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Inflow</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Outflow</div>
-            <div className="text-text-secondary text-xs md:text-sm font-medium">Spare</div>
+          <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
+            <Heading level={4} className="font-medium">Item</Heading>
+            <Heading level={4} className="font-medium">Inflow</Heading>
+            <Heading level={4} className="font-medium">Outflow</Heading>
           </div>
         )}
         renderItem={(item) => (
           <div
             key={item.id}
-            className="grid grid-cols-4 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
+            className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
-            <div className="text-text-primary font-medium text-sm md:text-base truncate">{item.item}</div>
-            <div className="text-success text-sm md:text-lg font-semibold truncate">{formatChf(item.inflowChf)}</div>
-            <div className="text-danger text-sm md:text-lg font-semibold truncate">{formatChf(item.outflowChf)}</div>
-            <div className="text-text-primary text-sm md:text-lg font-semibold truncate">{formatChf(item.spareChf)}</div>
+            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">{item.item}</div>
+            <div className="text-success text-[0.525rem] md:text-xs truncate">{formatChf(item.inflowChf)}</div>
+            <div className="text-danger text-[0.525rem] md:text-xs truncate">{formatChf(item.outflowChf)}</div>
           </div>
         )}
       />
