@@ -31,6 +31,9 @@ function Investing() {
   return (
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* Page Title */}
+        <h1 className="text-text-primary text-3xl font-semibold">Investing</h1>
+        
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">

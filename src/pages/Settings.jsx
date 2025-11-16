@@ -2,6 +2,9 @@ function Settings() {
   return (
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* Page Title */}
+        <h1 className="text-text-primary text-3xl font-semibold">Settings</h1>
+        
         <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
           <h2 className="text-text-primary text-xl font-semibold mb-4">Account Settings</h2>
           <div className="space-y-4">

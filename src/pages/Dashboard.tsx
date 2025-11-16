@@ -371,6 +371,9 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* Page Title */}
+        <h1 className="text-text-primary text-3xl font-semibold">Dashboard</h1>
+        
         {/* First Row: Total Net Worth + Monthly Inflow + Monthly Outflow */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Total Net Worth KPI */}
