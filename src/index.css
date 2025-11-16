@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-bg-page text-text-primary font-sans;
+    letter-spacing: 0.2px;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-accent-gradient text-bg-surface-1 font-medium px-6 py-2 rounded-card border-none;
+    transition: filter 0.2s;
+  }
+  
+  .btn-primary:hover {
+    filter: brightness(1.15);
+  }
+  
+  .btn-secondary {
+    @apply bg-transparent border-2 border-border-strong text-highlight-yellow font-medium px-6 py-2 rounded-input;
+    transition: all 0.2s;
+  }
+  
+  .btn-secondary:hover {
+    @apply border-highlight-yellow;
+  }
+  
+  .input-field {
+    @apply bg-bg-surface-2 border border-border-strong text-text-primary placeholder-text-secondary rounded-input px-4 py-2;
+    transition: box-shadow 0.2s;
+  }
+  
+  .input-field:focus {
+    @apply outline-none;
+    box-shadow: 0 0 6px #DAA520;
+  }
+  
+  .card {
+    @apply bg-bg-surface-2 rounded-card p-6;
+    box-shadow: 0 4px 6px rgba(184,115,51,0.2);
+  }
+  
+  .section-title {
+    @apply text-highlight-yellow font-semibold text-xl;
+  }
+  
+  .label-normal {
+    @apply text-text-secondary text-sm;
+  }
+  
+  .label-inactive {
+    @apply text-text-disabled text-sm;
+  }
+  
+  .nav-link {
+    @apply text-text-secondary transition-colors duration-200;
+  }
+  
+  .nav-link:hover {
+    @apply text-accent-blue;
+  }
+  
+  .nav-link.active {
+    @apply text-highlight-yellow underline;
+  }
+}
+

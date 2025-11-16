@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#000" stroke-width="32" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Document with folded corner -->
+    <path d="M224 64h160l80 80v288H224z" />
+    <path d="M384 64v80h80" />
+    <!-- Text lines -->
+    <line x1="264" y1="192" x2="392" y2="192" />
+    <line x1="264" y1="256" x2="392" y2="256" />
+    <line x1="264" y1="320" x2="392" y2="320" />
+    <line x1="264" y1="384" x2="360" y2="384" />
+    <!-- Percentage circle -->
+    <circle cx="136" cy="328" r="88" />
+    <line x1="96" y1="368" x2="176" y2="288" />
+    <circle cx="112" cy="304" r="10" fill="#000" />
+    <circle cx="160" cy="352" r="10" fill="#000" />
+  </g>
+</svg>

@@ -1,0 +1,13 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#000" stroke-width="32" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Baseline -->
+    <line x1="64" y1="416" x2="448" y2="416" />
+    <!-- Bars -->
+    <rect x="88"  y="272" width="72" height="144" />
+    <rect x="220" y="208" width="72" height="208" />
+    <rect x="352" y="128" width="72" height="288" />
+    <!-- Upward trend arrow -->
+    <polyline points="80,352 232,224 360,128 432,96" />
+    <polyline points="384,88 432,96 424,144" />
+  </g>
+</svg>

@@ -1,0 +1,10 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#000" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Up arrow -->
+    <line x1="144" y1="424" x2="144" y2="128" />
+    <polyline points="88,192 144,128 200,192" />
+    <!-- Down arrow -->
+    <line x1="368" y1="88" x2="368" y2="384" />
+    <polyline points="312,320 368,384 424,320" />
+  </g>
+</svg>

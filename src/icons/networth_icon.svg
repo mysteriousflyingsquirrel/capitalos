@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#000" stroke-width="32" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Bag body -->
+    <path d="M128 432c0-120 64-224 128-224s128 104 128 224H128z" />
+    <!-- Bag neck -->
+    <path d="M192 224h128" />
+    <!-- Bag top / folds -->
+    <path d="M192 224l-48-64h96l-32-64h96l-32 64h96l-48 64" />
+    <!-- Dollar sign -->
+    <path d="M256 272v160" />
+    <path d="M232 296h40c22 0 40 14 40 32s-18 32-40 32h-40" />
+    <path d="M232 360h40c22 0 40 14 40 32s-18 32-40 32h-40" />
+  </g>
+</svg>

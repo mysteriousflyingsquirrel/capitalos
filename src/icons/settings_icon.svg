@@ -1,0 +1,10 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#000" stroke-width="32" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Outer ring -->
+    <circle cx="256" cy="256" r="192" />
+    <!-- Spokes / teeth -->
+    <line x1="432.0" y1="256.0" x2="472.0" y2="256.0" /><line x1="380.5" y1="380.5" x2="408.7" y2="408.7" /><line x1="256.0" y1="432.0" x2="256.0" y2="472.0" /><line x1="131.5" y1="380.5" x2="103.3" y2="408.7" /><line x1="80.0" y1="256.0" x2="40.0" y2="256.0" /><line x1="131.5" y1="131.5" x2="103.3" y2="103.3" /><line x1="256.0" y1="80.0" x2="256.0" y2="40.0" /><line x1="380.5" y1="131.5" x2="408.7" y2="103.3" />
+    <!-- Inner circle -->
+    <circle cx="256" cy="256" r="88" />
+  </g>
+</svg>
