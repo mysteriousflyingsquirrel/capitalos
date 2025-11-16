@@ -108,9 +108,9 @@ function SectionCard({ title, children, total, totalColor = 'success' }: Section
     <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
         <div className="flex items-center justify-between">
-          <h2 className="text-text-primary text-2xl font-semibold">{title}</h2>
+          <h2 className="text-text-primary text-xl md:text-2xl font-semibold">{title}</h2>
           {total !== undefined && (
-            <span className={`${totalColor === 'success' ? 'text-success' : 'text-danger'} text-2xl font-bold`}>
+            <span className={`${totalColor === 'success' ? 'text-success' : 'text-danger'} text-xl md:text-2xl font-bold`}>
               {new Intl.NumberFormat('de-CH', {
                 style: 'currency',
                 currency: 'CHF',
@@ -193,8 +193,8 @@ function InflowSection() {
           const total = groupItems.reduce((sum, item) => sum + item.amountChf, 0)
           return (
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
-              <h3 className="text-text-primary text-lg font-semibold">{groupName}</h3>
-              <span className="text-success text-lg font-semibold">{formatChf(total)}</span>
+              <h3 className="text-text-primary text-sm md:text-lg font-semibold">{groupName}</h3>
+              <span className="text-success text-sm md:text-lg font-semibold">{formatChf(total)}</span>
             </div>
           )
         }}
@@ -258,8 +258,8 @@ function OutflowSection() {
           const total = groupItems.reduce((sum, item) => sum + item.amountChf, 0)
           return (
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
-              <h3 className="text-text-primary text-lg font-semibold">{groupName}</h3>
-              <span className="text-danger text-lg font-semibold">{formatChf(total)}</span>
+              <h3 className="text-text-primary text-sm md:text-lg font-semibold">{groupName}</h3>
+              <span className="text-danger text-sm md:text-lg font-semibold">{formatChf(total)}</span>
             </div>
           )
         }}
@@ -324,11 +324,11 @@ function AccountflowSection() {
           const totalSpare = groupItems.reduce((sum, item) => sum + item.spareChf, 0)
           return (
             <div className="flex items-start justify-between pb-2 border-b border-border-subtle">
-              <h3 className="text-text-primary text-lg font-semibold">{platformName}</h3>
+              <h3 className="text-text-primary text-sm md:text-lg font-semibold">{platformName}</h3>
               <div className="flex flex-col items-end gap-1">
-                <div className="text-success text-lg font-semibold">{formatChf(totalInflow)}</div>
-                <div className="text-danger text-lg font-semibold">{formatChf(totalOutflow)}</div>
-                <div className="text-text-primary text-lg font-semibold">{formatChf(totalSpare)}</div>
+                <div className="text-success text-sm md:text-lg font-semibold">{formatChf(totalInflow)}</div>
+                <div className="text-danger text-sm md:text-lg font-semibold">{formatChf(totalOutflow)}</div>
+                <div className="text-text-primary text-sm md:text-lg font-semibold">{formatChf(totalSpare)}</div>
               </div>
             </div>
           )

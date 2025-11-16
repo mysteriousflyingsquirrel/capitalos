@@ -176,12 +176,12 @@ function NetWorth() {
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
-        <h1 className="text-text-primary text-3xl font-semibold">Net Worth</h1>
+        <h1 className="text-text-primary text-xl md:text-2xl font-semibold">Net Worth</h1>
         
         {/* Total Net Worth */}
         <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
-          <p className="text-text-secondary text-sm font-medium mb-2">Total Net Worth</p>
-          <p className="text-success text-4xl font-bold">{formatChf(totalNetWorth)}</p>
+          <p className="text-text-secondary text-xs md:text-sm font-medium mb-1 md:mb-2">Total Net Worth</p>
+          <p className="text-success text-xl md:text-3xl font-bold">{formatChf(totalNetWorth)}</p>
         </div>
 
         {/* Grouped Categories */}

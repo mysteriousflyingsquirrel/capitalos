@@ -3,10 +3,10 @@ function Settings() {
     <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
-        <h1 className="text-text-primary text-3xl font-semibold">Settings</h1>
+        <h1 className="text-text-primary text-2xl md:text-3xl font-semibold">Settings</h1>
         
         <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-xl font-semibold mb-4">Account Settings</h2>
+          <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">Account Settings</h2>
           <div className="space-y-4">
             <div>
               <label className="text-text-secondary text-sm font-medium block mb-2">Email</label>
@@ -29,7 +29,7 @@ function Settings() {
         </div>
 
         <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-xl font-semibold mb-4">Data Management</h2>
+          <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">Data Management</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -56,7 +56,7 @@ function Settings() {
         </div>
 
         <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-xl font-semibold mb-4">Price Updates</h2>
+          <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">Price Updates</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -80,7 +80,7 @@ function Settings() {
         </div>
 
         <div className="bg-bg-surface-1 border border-accent-blue rounded-card shadow-card p-6">
-          <h2 className="text-text-primary text-xl font-semibold mb-4">Tax Reports</h2>
+          <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-4">Tax Reports</h2>
           <div className="space-y-4">
             <div>
               <label className="text-text-secondary text-sm font-medium block mb-2">Tax Year</label>
@@ -101,7 +101,7 @@ function Settings() {
         </div>
 
         <div className="bg-bg-surface-1 border border-danger rounded-card shadow-card p-6">
-          <h2 className="text-danger text-xl font-semibold mb-4">Danger Zone</h2>
+          <h2 className="text-danger text-lg md:text-xl font-semibold mb-4">Danger Zone</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
