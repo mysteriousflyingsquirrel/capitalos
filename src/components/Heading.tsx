@@ -7,10 +7,10 @@ export interface HeadingProps extends React.HTMLAttributes<HTMLHeadingElement> {
 }
 
 const baseClasses: Record<HeadingLevel, string> = {
-  1: 'text-2xl md:text-3xl font-semibold text-text-primary',
-  2: 'text-lg md:text-xl font-bold text-text-secondary',
-  3: 'text-sm md:text-lg font-bold text-text-secondary',
-  4: 'text-sm md:text-lg font-bold text-text-primary',
+  1: 'header1',
+  2: 'header2',
+  3: 'header3',
+  4: 'header4',
 }
 
 const Heading: React.FC<HeadingProps> = ({ level, children, className = '', ...rest }) => {

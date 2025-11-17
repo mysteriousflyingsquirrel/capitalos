@@ -13,7 +13,7 @@ const colorMap: Record<TotalVariant, string> = {
 }
 
 const TotalText: React.FC<TotalTextProps> = ({ variant, className = '', children, ...rest }) => {
-  const classes = `${colorMap[variant]} text-sm md:text-lg font-normal ${className}`.trim()
+  const classes = `${colorMap[variant]} text1 ${className}`.trim()
 
   return (
     <span className={classes} {...rest}>

@@ -30,26 +30,26 @@ function Investing() {
     : holdings.filter(h => h.platform === selectedPlatform)
 
   return (
-    <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
+    <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Investing</Heading>
         
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <p className="text-text-secondary text-xs md:text-sm font-medium mb-1 md:mb-2">Total Holdings Value</p>
             <p className="text-2xl md:text-3xl font-semibold text-[#F8C445]">
               CHF {totalValue.toLocaleString()}
             </p>
           </div>
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <p className="text-text-secondary text-xs md:text-sm font-medium mb-1 md:mb-2">Total Profit/Loss</p>
             <p className={`text-2xl md:text-3xl font-semibold ${totalProfitLoss >= 0 ? 'text-success' : 'text-danger'}`}>
               {totalProfitLoss >= 0 ? '+' : ''}CHF {totalProfitLoss.toLocaleString()}
             </p>
           </div>
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <p className="text-text-secondary text-xs md:text-sm font-medium mb-1 md:mb-2">Return %</p>
             <p className={`text-2xl md:text-3xl font-semibold ${totalProfitLoss >= 0 ? 'text-success' : 'text-danger'}`}>
               {totalProfitLoss >= 0 ? '+' : ''}{totalProfitLossPercent}%
@@ -59,7 +59,7 @@ function Investing() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Platform Allocation */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-3 md:mb-4">Platform Allocation</h2>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
@@ -82,7 +82,9 @@ function Investing() {
                   backgroundColor: '#FFFFFF', 
                   border: '1px solid #E5E7EB',
                   borderRadius: '8px',
-                  color: '#111827'
+                  color: '#111827',
+                  fontSize: '0.60rem',
+                  fontWeight: '400',
                 }}
               />
             </PieChart>
@@ -90,7 +92,7 @@ function Investing() {
         </div>
 
           {/* Asset Allocation */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <h2 className="text-text-primary text-lg md:text-xl font-semibold mb-3 md:mb-4">Asset Allocation</h2>
             <div className="space-y-3">
               {holdings.map((holding, index) => {
@@ -115,7 +117,7 @@ function Investing() {
         </div>
 
         {/* Holdings Table */}
-        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-text-primary text-lg md:text-xl font-semibold">Holdings by Platform and Asset</h2>
             <select 

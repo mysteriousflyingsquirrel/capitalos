@@ -146,7 +146,7 @@ const PIE_CHART_COLORS = [
 // Helper component: KPI Card
 function KpiCard({ title, value, subtitle }: KpiCardProps) {
   return (
-    <div className="bg-bg-surface-1 border border-border-subtle rounded-card shadow-card p-6">
+    <div className="bg-bg-surface-1 border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
       <Heading level={3} className="mb-2">
         {title}
       </Heading>
@@ -375,7 +375,7 @@ function formatCHFTick(value: number): string {
 
 function Dashboard() {
   return (
-    <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
+    <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Dashboard</Heading>
@@ -383,7 +383,7 @@ function Dashboard() {
         {/* First Row: Total Net Worth + Monthly Inflow + Monthly Outflow */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Total Net Worth KPI */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-2">
               Total Net Worth
             </Heading>
@@ -391,7 +391,7 @@ function Dashboard() {
           </div>
 
           {/* Monthly Inflow KPI */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-2">
               Monthly Inflow
             </Heading>
@@ -399,7 +399,7 @@ function Dashboard() {
           </div>
 
           {/* Monthly Outflow KPI */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-5 md:p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-2">
               Monthly Outflow
             </Heading>
@@ -408,7 +408,7 @@ function Dashboard() {
         </div>
 
         {/* Second Row: Net Worth Evolution (Full Width) */}
-        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">
             Net Worth Evolution
           </Heading>
@@ -435,6 +435,8 @@ function Dashboard() {
                   border: '1px solid #E5E7EB',
                   borderRadius: '12px',
                   color: '#111827',
+                  fontSize: '0.60rem',
+                  fontWeight: '400',
                 }}
                 formatter={(value: number) => formatCHF(value)}
               />
@@ -453,7 +455,7 @@ function Dashboard() {
         {/* Third Row: Asset Allocation + Inflow Breakdown + Outflow Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Asset Allocation Pie Chart */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-4">
               Asset Allocation
             </Heading>
@@ -480,12 +482,15 @@ function Dashboard() {
                     border: '1px solid #E5E7EB',
                     borderRadius: '12px',
                     color: '#111827',
+                    fontSize: '0.60rem',
+                    fontWeight: '400',
                   }}
                   formatter={(value: number) => `${value}%`}
                 />
                 <Legend
-                  wrapperStyle={{ color: '#C5CAD3' }}
+                  wrapperStyle={{ color: '#8B8F99', fontSize: '0.60rem', fontWeight: '400' }}
                   iconType="circle"
+                  className="text2"
                   formatter={(value, entry) => {
                     const total = assetAllocationData.reduce((sum, item) => sum + item.value, 0)
                     const item = assetAllocationData.find(item => item.name === value)
@@ -498,7 +503,7 @@ function Dashboard() {
           </div>
 
           {/* Inflow Breakdown Pie Chart */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-4">
               Inflow Breakdown
             </Heading>
@@ -525,12 +530,15 @@ function Dashboard() {
                     border: '1px solid #E5E7EB',
                     borderRadius: '12px',
                     color: '#111827',
+                    fontSize: '0.60rem',
+                    fontWeight: '400',
                   }}
                   formatter={(value: number) => `${value}%`}
                 />
                 <Legend
-                  wrapperStyle={{ color: '#C5CAD3' }}
+                  wrapperStyle={{ color: '#8B8F99', fontSize: '0.60rem', fontWeight: '400' }}
                   iconType="circle"
+                  className="text2"
                   formatter={(value, entry) => {
                     const total = inflowBreakdownData.reduce((sum, item) => sum + item.value, 0)
                     const item = inflowBreakdownData.find(item => item.name === value)
@@ -543,7 +551,7 @@ function Dashboard() {
           </div>
 
           {/* Outflow Breakdown Pie Chart */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-4">
               Outflow Breakdown
             </Heading>
@@ -570,12 +578,15 @@ function Dashboard() {
                     border: '1px solid #E5E7EB',
                     borderRadius: '12px',
                     color: '#111827',
+                    fontSize: '0.60rem',
+                    fontWeight: '400',
                   }}
                   formatter={(value: number) => `${value}%`}
                 />
                 <Legend
-                  wrapperStyle={{ color: '#C5CAD3' }}
+                  wrapperStyle={{ color: '#8B8F99', fontSize: '0.60rem', fontWeight: '400' }}
                   iconType="circle"
+                  className="text2"
                   formatter={(value, entry) => {
                     const total = outflowBreakdownData.reduce((sum, item) => sum + item.value, 0)
                     const item = outflowBreakdownData.find(item => item.name === value)
@@ -589,7 +600,7 @@ function Dashboard() {
         </div>
 
         {/* Fourth Row: Monthly Cashflow (Full Width) */}
-        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">
             Monthly Cashflow
           </Heading>
@@ -616,12 +627,15 @@ function Dashboard() {
                   border: '1px solid #E5E7EB',
                   borderRadius: '12px',
                   color: '#111827',
+                  fontSize: '0.60rem',
+                  fontWeight: '400',
                 }}
                 formatter={(value: number) => formatCHF(value)}
               />
               <Legend
-                wrapperStyle={{ color: '#C5CAD3' }}
+                wrapperStyle={{ color: '#8B8F99', fontSize: '0.60rem', fontWeight: '400' }}
                 iconType="square"
+                className="text2"
               />
               <Bar
                 dataKey="inflow"
@@ -646,7 +660,7 @@ function Dashboard() {
         </div>
 
         {/* Fifth Row: Cashflow Sankey Diagram (Full Width) */}
-        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">
             Cashflow Sankey
           </Heading>

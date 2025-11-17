@@ -66,5 +66,20 @@
   .nav-link.active {
     @apply text-highlight-yellow underline;
   }
+
+  /* Chart legend responsive font size */
+  @media (min-width: 1024px) {
+    .text2.recharts-legend-wrapper,
+    .recharts-legend-wrapper.text2,
+    .text2.recharts-legend-wrapper * {
+      font-size: 0.72rem !important;
+    }
+    
+    /* Chart tooltip responsive font size */
+    .recharts-tooltip-wrapper,
+    .recharts-tooltip-wrapper * {
+      font-size: 0.72rem !important;
+    }
+  }
 }
 

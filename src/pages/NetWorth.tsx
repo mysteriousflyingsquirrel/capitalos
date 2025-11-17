@@ -95,12 +95,12 @@ function NetWorthCategorySection({
   const subtotal = items.reduce((sum, item) => sum + item.balanceChf, 0)
 
   return (
-    <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+    <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
         <div className="flex items-center justify-between gap-4">
           <div>
             <Heading level={2}>{category}</Heading>
-            <TotalText variant="neutral" className="block mt-1 text-xs md:text-sm">
+            <TotalText variant="neutral" className="block mt-1">
               {formatChf(subtotal)}
             </TotalText>
           </div>
@@ -129,9 +129,9 @@ function NetWorthCategorySection({
       <div className="space-y-3">
           {/* Desktop: Grid layout */}
           <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
-            <Heading level={4} className="font-medium">Item</Heading>
-            <Heading level={4} className="font-medium">Balance</Heading>
-            <Heading level={4} className="font-medium">Platform</Heading>
+            <Heading level={4}>Item</Heading>
+            <Heading level={4}>Balance</Heading>
+            <Heading level={4}>Platform</Heading>
           </div>
 
         {/* Mobile & Desktop: Items */}
@@ -141,15 +141,15 @@ function NetWorthCategorySection({
             className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
             {/* Item */}
-            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">{item.name}</div>
+            <div className="text2 truncate">{item.name}</div>
             
             {/* Balance */}
-            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">
+            <div className="text2 truncate">
               {formatChf(item.balanceChf)}
             </div>
             
             {/* Platform */}
-            <div className="text-text-secondary text-[0.525rem] md:text-xs truncate">
+            <div className="text2 truncate">
               {item.platform}
             </div>
           </div>
@@ -207,13 +207,13 @@ function NetWorth() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
+    <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Net Worth</Heading>
         
         {/* Total Net Worth */}
-        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-2">
             Total Net Worth
           </Heading>

@@ -58,7 +58,87 @@ module.exports = {
       boxShadow: {
         card: "0 4px 20px rgba(0,0,0,0.35)",
       },
+
+      fontSize: {
+        header1: "1.00rem",
+        header2: "0.90rem",
+        header3: "0.80rem",
+        header4: "0.60rem",
+
+        text1: "0.80rem",
+        text2: "0.60rem",
+      },
+
+      fontWeight: {
+        bold: "700",
+        normal: "400",
+      },
     },
   },
-  plugins: [],
+  plugins: [
+    function({ addUtilities, theme, addComponents }) {
+      const utilities = {
+        ".header1": {
+          fontSize: theme("fontSize.header1"),
+          fontWeight: theme("fontWeight.bold"),
+          color: theme("colors.text-secondary"),
+          letterSpacing: "-0.01em",
+        },
+        ".header2": {
+          fontSize: theme("fontSize.header2"),
+          fontWeight: theme("fontWeight.bold"),
+          color: theme("colors.text-secondary"),
+          letterSpacing: "-0.01em",
+        },
+        ".header3": {
+          fontSize: theme("fontSize.header3"),
+          fontWeight: theme("fontWeight.bold"),
+          color: theme("colors.text-secondary"),
+          letterSpacing: "-0.01em",
+        },
+        ".header4": {
+          fontSize: theme("fontSize.header4"),
+          fontWeight: theme("fontWeight.bold"),
+          color: theme("colors.text-secondary"),
+          letterSpacing: "-0.01em",
+        },
+        ".text1": {
+          fontSize: theme("fontSize.text1"),
+          fontWeight: theme("fontWeight.normal"),
+          color: theme("colors.text-secondary"),
+        },
+        ".text2": {
+          fontSize: theme("fontSize.text2"),
+          fontWeight: theme("fontWeight.normal"),
+          color: theme("colors.text-muted"),
+        },
+      };
+      
+      addUtilities(utilities);
+      
+      // Add responsive variants for desktop (lg breakpoint)
+      addUtilities({
+        "@media (min-width: 1024px)": {
+          ".header1": {
+            fontSize: "1.20rem",
+          },
+          ".header2": {
+            fontSize: "1.08rem",
+          },
+          ".header3": {
+            fontSize: "0.96rem",
+          },
+          ".header4": {
+            fontSize: "0.72rem",
+          },
+          ".text1": {
+            fontSize: "0.96rem",
+          },
+          ".text2": {
+            fontSize: "0.72rem",
+          },
+        },
+      });
+    }
+  ],
 };

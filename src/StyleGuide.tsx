@@ -93,13 +93,13 @@ const StyleGuide: React.FC = () => {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold">Typography</h2>
         <div className="space-y-3 bg-bg-surface-2 border border-border-subtle rounded-card p-6">
-          <p className="text-3xl font-semibold">Page Title — Inter 600</p>
-          <p className="text-2xl">Section Title — Inter 500</p>
-          <p className="text-base text-text-secondary">
-            Body — Inter 400. CapitalOS blends financial clarity with a modern galactic aesthetic.
-          </p>
-          <p className="text-xs text-text-muted uppercase tracking-wide">Caption — Inter 400</p>
-          <p className="font-mono text-sm text-text-primary">0123456789 — JetBrains Mono</p>
+          <h1 className="header1">Header 1 — Page title</h1>
+          <h2 className="header2 mt-4">Header 2 — Category Title</h2>
+          <h3 className="header3 mt-4">Header 3 — Subgroup Title</h3>
+          <h4 className="header4 mt-4">Header 4 — Column Title</h4>
+
+          <p className="text1 mt-8">Text1 — Large Value Text (CHF 180'000)</p>
+          <p className="text2 mt-2">Text2 — Small List Item (Emergency Cash)</p>
         </div>
       </section>
 

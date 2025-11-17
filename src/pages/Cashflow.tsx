@@ -108,12 +108,12 @@ interface SectionCardProps {
 
 function SectionCard({ title, children, total, totalColor = 'success' }: SectionCardProps) {
   return (
-    <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-6">
+    <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col">
           <Heading level={2}>{title}</Heading>
           {total !== undefined && (
-            <TotalText variant={totalColor === 'success' ? 'inflow' : 'outflow'}>
+            <TotalText variant={totalColor === 'success' ? 'inflow' : 'outflow'} className="mt-1">
               {new Intl.NumberFormat('de-CH', {
                 style: 'currency',
                 currency: 'CHF',
@@ -226,9 +226,9 @@ function InflowSection() {
         }}
         renderHeader={() => (
           <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
-            <Heading level={4} className="font-medium">Item</Heading>
-            <Heading level={4} className="font-medium">Inflow</Heading>
-            <Heading level={4} className="font-medium">Provider</Heading>
+            <Heading level={4}>Item</Heading>
+            <Heading level={4}>Inflow</Heading>
+            <Heading level={4}>Provider</Heading>
           </div>
         )}
         renderItem={(item) => (
@@ -236,9 +236,9 @@ function InflowSection() {
             key={item.id}
             className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
-            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">{item.item}</div>
-            <div className="text-success text-[0.525rem] md:text-xs truncate">{formatChf(item.amountChf)}</div>
-            <div className="text-text-secondary text-[0.525rem] md:text-xs truncate">{item.provider}</div>
+            <div className="text2 truncate">{item.item}</div>
+            <div className="text-success text2 truncate">{formatChf(item.amountChf)}</div>
+            <div className="text2 truncate">{item.provider}</div>
           </div>
         )}
       />
@@ -291,9 +291,9 @@ function OutflowSection() {
         }}
         renderHeader={() => (
           <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
-            <Heading level={4} className="font-medium">Item</Heading>
-            <Heading level={4} className="font-medium">Outflow</Heading>
-            <Heading level={4} className="font-medium">Receiver</Heading>
+            <Heading level={4}>Item</Heading>
+            <Heading level={4}>Outflow</Heading>
+            <Heading level={4}>Receiver</Heading>
           </div>
         )}
         renderItem={(item) => (
@@ -301,9 +301,9 @@ function OutflowSection() {
             key={item.id}
             className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
-            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">{item.item}</div>
-            <div className="text-danger text-[0.525rem] md:text-xs truncate">{formatChf(item.amountChf)}</div>
-            <div className="text-text-secondary text-[0.525rem] md:text-xs truncate">{item.receiver}</div>
+            <div className="text2 truncate">{item.item}</div>
+            <div className="text-danger text2 truncate">{formatChf(item.amountChf)}</div>
+            <div className="text2 truncate">{item.receiver}</div>
           </div>
         )}
       />
@@ -351,9 +351,9 @@ function AccountflowSection() {
         }}
         renderHeader={() => (
           <div className="grid grid-cols-3 gap-2 md:gap-4 pb-2 border-b border-border-subtle">
-            <Heading level={4} className="font-medium">Item</Heading>
-            <Heading level={4} className="font-medium">Inflow</Heading>
-            <Heading level={4} className="font-medium">Outflow</Heading>
+            <Heading level={4}>Item</Heading>
+            <Heading level={4}>Inflow</Heading>
+            <Heading level={4}>Outflow</Heading>
           </div>
         )}
         renderItem={(item) => (
@@ -361,9 +361,9 @@ function AccountflowSection() {
             key={item.id}
             className="grid grid-cols-3 gap-2 md:gap-4 py-2 border-b border-border-subtle last:border-b-0"
           >
-            <div className="text-text-primary text-[0.525rem] md:text-xs truncate">{item.item}</div>
-            <div className="text-success text-[0.525rem] md:text-xs truncate">{formatChf(item.inflowChf)}</div>
-            <div className="text-danger text-[0.525rem] md:text-xs truncate">{formatChf(item.outflowChf)}</div>
+            <div className="text2 truncate">{item.item}</div>
+            <div className="text-success text2 truncate">{formatChf(item.inflowChf)}</div>
+            <div className="text-danger text2 truncate">{formatChf(item.outflowChf)}</div>
           </div>
         )}
       />
@@ -374,7 +374,7 @@ function AccountflowSection() {
 // Main Cashflow Component
 function Cashflow() {
   return (
-    <div className="min-h-screen bg-[#050A1A] p-4 lg:p-6">
+    <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Cashflow</Heading>
