@@ -370,7 +370,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
                 id="nw-currency"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
               >
                 <option value="CHF">CHF</option>
                 <option value="EUR">EUR</option>
@@ -390,7 +390,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
               id="nw-platform"
               value={platform}
               onChange={(e) => setPlatform(e.target.value)}
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
             >
               <option value="Physical">Physical</option>
               <option value="Wallet">Wallet</option>

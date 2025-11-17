@@ -21,7 +21,7 @@ function Settings() {
             </div>
             <div>
               <label className="text-text-secondary text-sm font-medium block mb-2">Currency</label>
-              <select className="bg-bg-surface-2 border border-border-subtle rounded-input px-4 py-2 text-text-primary w-full max-w-md focus:outline-none focus:border-accent-blue">
+              <select className="bg-bg-surface-2 border border-border-subtle rounded-input pl-4 pr-8 py-2 text-text-primary w-full max-w-md focus:outline-none focus:border-accent-blue">
                 <option value="CHF">CHF (Swiss Franc)</option>
                 <option value="USD">USD (US Dollar)</option>
                 <option value="EUR">EUR (Euro)</option>
@@ -72,7 +72,7 @@ function Settings() {
             </div>
             <div>
               <label className="text-text-secondary text-sm font-medium block mb-2">Update Frequency</label>
-              <select className="bg-bg-surface-2 border border-border-subtle rounded-input px-4 py-2 text-text-primary w-full max-w-md focus:outline-none focus:border-accent-blue">
+              <select className="bg-bg-surface-2 border border-border-subtle rounded-input pl-4 pr-8 py-2 text-text-primary w-full max-w-md focus:outline-none focus:border-accent-blue">
                 <option value="hourly">Hourly</option>
                 <option value="daily" selected>Daily</option>
                 <option value="weekly">Weekly</option>
@@ -86,7 +86,7 @@ function Settings() {
           <div className="space-y-4">
             <div>
               <label className="text-text-secondary text-sm font-medium block mb-2">Tax Year</label>
-              <select className="bg-bg-surface-2 border border-border-subtle rounded-input px-4 py-2 text-text-primary w-full max-w-md focus:outline-none focus:border-accent-blue">
+              <select className="bg-bg-surface-2 border border-border-subtle rounded-input pl-4 pr-8 py-2 text-text-primary w-full max-w-md focus:outline-none focus:border-accent-blue">
                 <option value="2024" selected>2024</option>
                 <option value="2023">2023</option>
                 <option value="2022">2022</option>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   LineChart,
   Line,
@@ -19,7 +20,15 @@ import TotalText from '../components/TotalText'
 // TypeScript interfaces
 interface NetWorthDataPoint {
   month: string
-  value: number
+  'Total Net Worth': number
+  'Cash': number
+  'Bank Accounts': number
+  'Funds': number
+  'Stocks': number
+  'Commodities': number
+  'Crypto': number
+  'Real Estate': number
+  'Inventory': number
 }
 
 interface AssetAllocationItem {
@@ -51,14 +60,127 @@ interface SankeyLink {
   value: number
 }
 
-// Mock data configuration
-const netWorthData: NetWorthDataPoint[] = [
-  { month: 'Jan', value: 140000 },
-  { month: 'Feb', value: 145000 },
-  { month: 'Mar', value: 150000 },
-  { month: 'Apr', value: 160000 },
-  { month: 'May', value: 170000 },
-  { month: 'Jun', value: 180000 },
+// Mock data configuration - YTD (Year to Date)
+const netWorthDataYTD: NetWorthDataPoint[] = [
+  { 
+    month: 'Jan', 
+    'Total Net Worth': 140000,
+    'Cash': 750,
+    'Bank Accounts': 25000,
+    'Funds': 40000,
+    'Stocks': 20000,
+    'Commodities': 7000,
+    'Crypto': 60000,
+    'Real Estate': 450000,
+    'Inventory': 8000
+  },
+  { 
+    month: 'Feb', 
+    'Total Net Worth': 145000,
+    'Cash': 800,
+    'Bank Accounts': 26000,
+    'Funds': 42000,
+    'Stocks': 21000,
+    'Commodities': 7200,
+    'Crypto': 65000,
+    'Real Estate': 450000,
+    'Inventory': 8000
+  },
+  { 
+    month: 'Mar', 
+    'Total Net Worth': 150000,
+    'Cash': 850,
+    'Bank Accounts': 27000,
+    'Funds': 44000,
+    'Stocks': 22000,
+    'Commodities': 7400,
+    'Crypto': 70000,
+    'Real Estate': 450000,
+    'Inventory': 8000
+  },
+  { 
+    month: 'Apr', 
+    'Total Net Worth': 160000,
+    'Cash': 900,
+    'Bank Accounts': 28000,
+    'Funds': 46000,
+    'Stocks': 23000,
+    'Commodities': 7600,
+    'Crypto': 75000,
+    'Real Estate': 450000,
+    'Inventory': 8000
+  },
+  { 
+    month: 'May', 
+    'Total Net Worth': 170000,
+    'Cash': 950,
+    'Bank Accounts': 29000,
+    'Funds': 48000,
+    'Stocks': 24000,
+    'Commodities': 7800,
+    'Crypto': 80000,
+    'Real Estate': 450000,
+    'Inventory': 8000
+  },
+  { 
+    month: 'Jun', 
+    'Total Net Worth': 180000,
+    'Cash': 1000,
+    'Bank Accounts': 30000,
+    'Funds': 50000,
+    'Stocks': 25000,
+    'Commodities': 8000,
+    'Crypto': 85000,
+    'Real Estate': 450000,
+    'Inventory': 8000
+  },
+]
+
+// 1 Year data (monthly for 12 months)
+const netWorthData1Year: NetWorthDataPoint[] = [
+  { month: 'Jul 2023', 'Total Net Worth': 120000, 'Cash': 600, 'Bank Accounts': 20000, 'Funds': 30000, 'Stocks': 15000, 'Commodities': 5000, 'Crypto': 50000, 'Real Estate': 450000, 'Inventory': 7000 },
+  { month: 'Aug 2023', 'Total Net Worth': 125000, 'Cash': 650, 'Bank Accounts': 21000, 'Funds': 32000, 'Stocks': 16000, 'Commodities': 5500, 'Crypto': 52000, 'Real Estate': 450000, 'Inventory': 7200 },
+  { month: 'Sep 2023', 'Total Net Worth': 128000, 'Cash': 680, 'Bank Accounts': 22000, 'Funds': 34000, 'Stocks': 17000, 'Commodities': 5800, 'Crypto': 54000, 'Real Estate': 450000, 'Inventory': 7400 },
+  { month: 'Oct 2023', 'Total Net Worth': 132000, 'Cash': 700, 'Bank Accounts': 23000, 'Funds': 36000, 'Stocks': 18000, 'Commodities': 6200, 'Crypto': 56000, 'Real Estate': 450000, 'Inventory': 7600 },
+  { month: 'Nov 2023', 'Total Net Worth': 135000, 'Cash': 720, 'Bank Accounts': 24000, 'Funds': 38000, 'Stocks': 19000, 'Commodities': 6500, 'Crypto': 58000, 'Real Estate': 450000, 'Inventory': 7800 },
+  { month: 'Dec 2023', 'Total Net Worth': 138000, 'Cash': 740, 'Bank Accounts': 24500, 'Funds': 39000, 'Stocks': 19500, 'Commodities': 6800, 'Crypto': 59000, 'Real Estate': 450000, 'Inventory': 7900 },
+  ...netWorthDataYTD,
+]
+
+// 5 Year data (quarterly for 20 quarters)
+const netWorthData5Year: NetWorthDataPoint[] = [
+  { month: 'Q1 2020', 'Total Net Worth': 80000, 'Cash': 400, 'Bank Accounts': 12000, 'Funds': 18000, 'Stocks': 8000, 'Commodities': 3000, 'Crypto': 30000, 'Real Estate': 400000, 'Inventory': 5000 },
+  { month: 'Q2 2020', 'Total Net Worth': 85000, 'Cash': 450, 'Bank Accounts': 13000, 'Funds': 20000, 'Stocks': 9000, 'Commodities': 3200, 'Crypto': 32000, 'Real Estate': 410000, 'Inventory': 5200 },
+  { month: 'Q3 2020', 'Total Net Worth': 90000, 'Cash': 500, 'Bank Accounts': 14000, 'Funds': 22000, 'Stocks': 10000, 'Commodities': 3500, 'Crypto': 35000, 'Real Estate': 420000, 'Inventory': 5500 },
+  { month: 'Q4 2020', 'Total Net Worth': 95000, 'Cash': 520, 'Bank Accounts': 15000, 'Funds': 24000, 'Stocks': 11000, 'Commodities': 3800, 'Crypto': 38000, 'Real Estate': 430000, 'Inventory': 5800 },
+  { month: 'Q1 2021', 'Total Net Worth': 100000, 'Cash': 550, 'Bank Accounts': 16000, 'Funds': 26000, 'Stocks': 12000, 'Commodities': 4000, 'Crypto': 40000, 'Real Estate': 435000, 'Inventory': 6000 },
+  { month: 'Q2 2021', 'Total Net Worth': 105000, 'Cash': 580, 'Bank Accounts': 17000, 'Funds': 28000, 'Stocks': 13000, 'Commodities': 4200, 'Crypto': 42000, 'Real Estate': 440000, 'Inventory': 6200 },
+  { month: 'Q3 2021', 'Total Net Worth': 110000, 'Cash': 600, 'Bank Accounts': 18000, 'Funds': 30000, 'Stocks': 14000, 'Commodities': 4500, 'Crypto': 45000, 'Real Estate': 442000, 'Inventory': 6500 },
+  { month: 'Q4 2021', 'Total Net Worth': 115000, 'Cash': 620, 'Bank Accounts': 19000, 'Funds': 32000, 'Stocks': 15000, 'Commodities': 4800, 'Crypto': 48000, 'Real Estate': 444000, 'Inventory': 6800 },
+  { month: 'Q1 2022', 'Total Net Worth': 118000, 'Cash': 640, 'Bank Accounts': 20000, 'Funds': 34000, 'Stocks': 16000, 'Commodities': 5000, 'Crypto': 50000, 'Real Estate': 446000, 'Inventory': 7000 },
+  { month: 'Q2 2022', 'Total Net Worth': 122000, 'Cash': 660, 'Bank Accounts': 21000, 'Funds': 35000, 'Stocks': 17000, 'Commodities': 5200, 'Crypto': 52000, 'Real Estate': 447000, 'Inventory': 7200 },
+  { month: 'Q3 2022', 'Total Net Worth': 125000, 'Cash': 680, 'Bank Accounts': 22000, 'Funds': 36000, 'Stocks': 18000, 'Commodities': 5500, 'Crypto': 54000, 'Real Estate': 448000, 'Inventory': 7400 },
+  { month: 'Q4 2022', 'Total Net Worth': 130000, 'Cash': 700, 'Bank Accounts': 23000, 'Funds': 37000, 'Stocks': 19000, 'Commodities': 5800, 'Crypto': 56000, 'Real Estate': 449000, 'Inventory': 7600 },
+  { month: 'Q1 2023', 'Total Net Worth': 133000, 'Cash': 720, 'Bank Accounts': 23500, 'Funds': 38000, 'Stocks': 19500, 'Commodities': 6000, 'Crypto': 57000, 'Real Estate': 449500, 'Inventory': 7700 },
+  { month: 'Q2 2023', 'Total Net Worth': 136000, 'Cash': 740, 'Bank Accounts': 24000, 'Funds': 38500, 'Stocks': 19700, 'Commodities': 6500, 'Crypto': 58000, 'Real Estate': 449800, 'Inventory': 7800 },
+  { month: 'Q3 2023', 'Total Net Worth': 138000, 'Cash': 760, 'Bank Accounts': 24500, 'Funds': 39000, 'Stocks': 19800, 'Commodities': 6800, 'Crypto': 59000, 'Real Estate': 450000, 'Inventory': 7900 },
+  { month: 'Q4 2023', 'Total Net Worth': 140000, 'Cash': 780, 'Bank Accounts': 25000, 'Funds': 39500, 'Stocks': 19900, 'Commodities': 6900, 'Crypto': 60000, 'Real Estate': 450000, 'Inventory': 8000 },
+  { month: 'Q1 2024', 'Total Net Worth': 145000, 'Cash': 850, 'Bank Accounts': 27000, 'Funds': 44000, 'Stocks': 22000, 'Commodities': 7400, 'Crypto': 70000, 'Real Estate': 450000, 'Inventory': 8000 },
+  { month: 'Q2 2024', 'Total Net Worth': 160000, 'Cash': 900, 'Bank Accounts': 28000, 'Funds': 46000, 'Stocks': 23000, 'Commodities': 7600, 'Crypto': 75000, 'Real Estate': 450000, 'Inventory': 8000 },
+]
+
+// Max data (yearly for 10 years)
+const netWorthDataMax: NetWorthDataPoint[] = [
+  { month: '2015', 'Total Net Worth': 50000, 'Cash': 300, 'Bank Accounts': 8000, 'Funds': 10000, 'Stocks': 5000, 'Commodities': 2000, 'Crypto': 20000, 'Real Estate': 350000, 'Inventory': 3000 },
+  { month: '2016', 'Total Net Worth': 60000, 'Cash': 350, 'Bank Accounts': 10000, 'Funds': 12000, 'Stocks': 6000, 'Commodities': 2500, 'Crypto': 25000, 'Real Estate': 370000, 'Inventory': 3500 },
+  { month: '2017', 'Total Net Worth': 70000, 'Cash': 400, 'Bank Accounts': 12000, 'Funds': 15000, 'Stocks': 7000, 'Commodities': 3000, 'Crypto': 30000, 'Real Estate': 390000, 'Inventory': 4000 },
+  { month: '2018', 'Total Net Worth': 75000, 'Cash': 450, 'Bank Accounts': 14000, 'Funds': 18000, 'Stocks': 8000, 'Commodities': 3500, 'Crypto': 32000, 'Real Estate': 400000, 'Inventory': 4500 },
+  { month: '2019', 'Total Net Worth': 78000, 'Cash': 480, 'Bank Accounts': 15000, 'Funds': 20000, 'Stocks': 9000, 'Commodities': 4000, 'Crypto': 35000, 'Real Estate': 410000, 'Inventory': 5000 },
+  { month: '2020', 'Total Net Worth': 85000, 'Cash': 500, 'Bank Accounts': 16000, 'Funds': 24000, 'Stocks': 11000, 'Commodities': 3800, 'Crypto': 38000, 'Real Estate': 430000, 'Inventory': 5800 },
+  { month: '2021', 'Total Net Worth': 105000, 'Cash': 600, 'Bank Accounts': 18000, 'Funds': 30000, 'Stocks': 14000, 'Commodities': 4500, 'Crypto': 45000, 'Real Estate': 442000, 'Inventory': 6500 },
+  { month: '2022', 'Total Net Worth': 125000, 'Cash': 680, 'Bank Accounts': 22000, 'Funds': 36000, 'Stocks': 18000, 'Commodities': 5500, 'Crypto': 54000, 'Real Estate': 448000, 'Inventory': 7400 },
+  { month: '2023', 'Total Net Worth': 138000, 'Cash': 740, 'Bank Accounts': 24500, 'Funds': 39000, 'Stocks': 19800, 'Commodities': 6800, 'Crypto': 59000, 'Real Estate': 450000, 'Inventory': 7900 },
+  { month: '2024', 'Total Net Worth': 180000, 'Cash': 1000, 'Bank Accounts': 30000, 'Funds': 50000, 'Stocks': 25000, 'Commodities': 8000, 'Crypto': 85000, 'Real Estate': 450000, 'Inventory': 8000 },
 ]
 
 const assetAllocationData: AssetAllocationItem[] = [
@@ -374,6 +496,23 @@ function formatCHFTick(value: number): string {
 }
 
 function Dashboard() {
+  const [timeFrame, setTimeFrame] = useState<'YTD' | '1Year' | '5Year' | 'Max'>('Max')
+
+  const getNetWorthData = () => {
+    switch (timeFrame) {
+      case 'YTD':
+        return netWorthDataYTD
+      case '1Year':
+        return netWorthData1Year
+      case '5Year':
+        return netWorthData5Year
+      case 'Max':
+        return netWorthDataMax
+      default:
+        return netWorthDataYTD
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -409,11 +548,23 @@ function Dashboard() {
 
         {/* Second Row: Net Worth Evolution (Full Width) */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-          <Heading level={2} className="mb-4">
-            Net Worth Evolution
-          </Heading>
+          <div className="flex items-center justify-between mb-4">
+            <Heading level={2}>
+              Net Worth Evolution
+            </Heading>
+            <select
+              value={timeFrame}
+              onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '1Year' | '5Year' | 'Max')}
+              className="bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text2 focus:outline-none focus:border-accent-blue"
+            >
+              <option value="YTD">YTD</option>
+              <option value="1Year">1Year</option>
+              <option value="5Year">5Year</option>
+              <option value="Max">Max</option>
+            </select>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={netWorthData}>
+            <LineChart data={getNetWorthData()}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke={CHART_COLORS.muted1}
@@ -440,13 +591,82 @@ function Dashboard() {
                 }}
                 formatter={(value: number) => formatCHF(value)}
               />
+              <Legend
+                wrapperStyle={{ color: '#8B8F99', fontSize: '0.60rem', fontWeight: '400' }}
+                iconType="line"
+                className="text2"
+              />
               <Line
                 type="monotone"
-                dataKey="value"
+                dataKey="Total Net Worth"
                 stroke={CHART_COLORS.gold}
                 strokeWidth={3}
                 dot={{ fill: CHART_COLORS.gold, r: 4 }}
                 activeDot={{ r: 6 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Cash"
+                stroke={CHART_COLORS.accent1}
+                strokeWidth={2}
+                dot={{ fill: CHART_COLORS.accent1, r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Bank Accounts"
+                stroke={CHART_COLORS.accent2}
+                strokeWidth={2}
+                dot={{ fill: CHART_COLORS.accent2, r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Funds"
+                stroke={CHART_COLORS.accent3}
+                strokeWidth={2}
+                dot={{ fill: CHART_COLORS.accent3, r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Stocks"
+                stroke={CHART_COLORS.success}
+                strokeWidth={2}
+                dot={{ fill: CHART_COLORS.success, r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Commodities"
+                stroke={CHART_COLORS.bronze}
+                strokeWidth={2}
+                dot={{ fill: CHART_COLORS.bronze, r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Crypto"
+                stroke="#F8C445"
+                strokeWidth={2}
+                dot={{ fill: '#F8C445', r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Real Estate"
+                stroke="#4A56FF"
+                strokeWidth={2}
+                dot={{ fill: '#4A56FF', r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Inventory"
+                stroke={CHART_COLORS.muted1}
+                strokeWidth={2}
+                dot={{ fill: CHART_COLORS.muted1, r: 3 }}
+                activeDot={{ r: 5 }}
               />
             </LineChart>
           </ResponsiveContainer>

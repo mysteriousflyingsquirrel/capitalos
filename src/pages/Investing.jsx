@@ -123,7 +123,7 @@ function Investing() {
             <select 
               value={selectedPlatform} 
               onChange={(e) => setSelectedPlatform(e.target.value)}
-              className="bg-bg-surface-2 border border-border-subtle rounded-input px-4 py-2 text-text-primary focus:outline-none focus:border-accent-blue"
+              className="bg-bg-surface-2 border border-border-subtle rounded-input pl-4 pr-8 py-2 text-text-primary focus:outline-none focus:border-accent-blue"
             >
               <option value="all">All Platforms</option>
               {platforms.map(platform => (
