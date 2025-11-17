@@ -25,6 +25,8 @@ interface OutflowItem {
 
 type AccountPlatform = 'Raiffeisen' | 'Revolut' | 'yuh!' | 'SAXO' | 'Kraken'
 
+const accountPlatforms: AccountPlatform[] = ['Raiffeisen', 'Revolut', 'yuh!', 'SAXO', 'Kraken']
+
 interface AccountflowItem {
   id: string
   item: string
@@ -33,6 +35,42 @@ interface AccountflowItem {
   outflowChf: number
   spareChf: number
 }
+
+type MappingKind = 'inflowToAccount' | 'accountToOutflow' | 'accountToAccount'
+
+type InflowEndpointMode = 'group' | 'item'
+type OutflowEndpointMode = 'group' | 'item'
+
+interface InflowToAccountMapping {
+  id: string
+  kind: 'inflowToAccount'
+  mode: InflowEndpointMode
+  group?: InflowGroupName
+  inflowItemId?: string
+  account: AccountPlatform
+}
+
+interface AccountToOutflowMapping {
+  id: string
+  kind: 'accountToOutflow'
+  mode: OutflowEndpointMode
+  group?: OutflowGroupName
+  outflowItemId?: string
+  account: AccountPlatform
+}
+
+interface AccountToAccountMapping {
+  id: string
+  kind: 'accountToAccount'
+  fromAccount: AccountPlatform
+  toAccount: AccountPlatform
+  amountChf: number
+}
+
+type AccountflowMapping =
+  | InflowToAccountMapping
+  | AccountToOutflowMapping
+  | AccountToAccountMapping
 
 // Mock data - Inflow
 const mockInflowItems: InflowItem[] = [
@@ -97,6 +135,44 @@ const formatChf = (value: number): string => {
     style: 'currency',
     currency: 'CHF',
   }).format(value)
+}
+
+// Helper functions for mapping amounts
+function getInflowGroupSum(group: InflowGroupName, items: InflowItem[]): number {
+  return items
+    .filter(i => i.group === group)
+    .reduce((sum, i) => sum + i.amountChf, 0)
+}
+
+function getOutflowGroupSum(group: OutflowGroupName, items: OutflowItem[]): number {
+  return items
+    .filter(i => i.group === group)
+    .reduce((sum, i) => sum + i.amountChf, 0)
+}
+
+function computeMappingAmount(
+  mapping: AccountflowMapping,
+  inflowItems: InflowItem[],
+  outflowItems: OutflowItem[]
+): number {
+  if (mapping.kind === 'inflowToAccount') {
+    if (mapping.mode === 'group' && mapping.group) {
+      return getInflowGroupSum(mapping.group, inflowItems)
+    } else if (mapping.mode === 'item' && mapping.inflowItemId) {
+      const item = inflowItems.find(i => i.id === mapping.inflowItemId)
+      return item ? item.amountChf : 0
+    }
+  } else if (mapping.kind === 'accountToOutflow') {
+    if (mapping.mode === 'group' && mapping.group) {
+      return getOutflowGroupSum(mapping.group, outflowItems)
+    } else if (mapping.mode === 'item' && mapping.outflowItemId) {
+      const item = outflowItems.find(i => i.id === mapping.outflowItemId)
+      return item ? item.amountChf : 0
+    }
+  } else if (mapping.kind === 'accountToAccount') {
+    return mapping.amountChf
+  }
+  return 0
 }
 
 // Helper component: SectionCard
@@ -430,118 +506,194 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
   )
 }
 
-// Accountflow Section Component
-interface AccountflowSectionProps {
-  items: AccountflowItem[]
-  onAddItem: (platform: AccountPlatform, data: { item: string; inflowChf: number; outflowChf: number; currency: string }) => void
-  onEditItem: (id: string) => void
-  onRemoveItem: (id: string) => void
+// Helper functions for mapping labels
+function getMappingLabel(
+  mapping: AccountflowMapping,
+  inflowItems: InflowItem[],
+  outflowItems: OutflowItem[]
+): string {
+  if (mapping.kind === 'inflowToAccount') {
+    if (mapping.mode === 'group' && mapping.group) {
+      return mapping.group
+    } else if (mapping.mode === 'item' && mapping.inflowItemId) {
+      const item = inflowItems.find(i => i.id === mapping.inflowItemId)
+      return item ? `${item.item} (${item.group})` : 'Unknown item'
+    }
+  } else if (mapping.kind === 'accountToOutflow') {
+    if (mapping.mode === 'group' && mapping.group) {
+      return mapping.group
+    } else if (mapping.mode === 'item' && mapping.outflowItemId) {
+      const item = outflowItems.find(i => i.id === mapping.outflowItemId)
+      return item ? `${item.item} (${item.group})` : 'Unknown item'
+    }
+  } else if (mapping.kind === 'accountToAccount') {
+    return `From ${mapping.fromAccount}`
+  }
+  return 'Unknown'
 }
 
-function AccountflowSection({ items, onAddItem, onEditItem, onRemoveItem }: AccountflowSectionProps) {
-  const accountPlatforms: AccountPlatform[] = ['Raiffeisen', 'Revolut', 'yuh!', 'SAXO', 'Kraken']
-  const [addItemPlatform, setAddItemPlatform] = useState<AccountPlatform | null>(null)
+// Accountflow Section Component
+interface AccountflowSectionProps {
+  mappings: AccountflowMapping[]
+  onAddMapping: (mapping: AccountflowMapping) => void
+  onRemoveMapping: (id: string) => void
+  inflowItems: InflowItem[]
+  outflowItems: OutflowItem[]
+}
+
+function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowItems, outflowItems }: AccountflowSectionProps) {
+  const [showAddMappingModal, setShowAddMappingModal] = useState(false)
+
+  // Helper to get inflow mappings for an account
+  const getInflowMappings = (account: AccountPlatform): AccountflowMapping[] => {
+    return mappings.filter(m => {
+      if (m.kind === 'inflowToAccount' && m.account === account) return true
+      if (m.kind === 'accountToAccount' && m.toAccount === account) return true
+      return false
+    })
+  }
+
+  // Helper to get outflow mappings for an account
+  const getOutflowMappings = (account: AccountPlatform): AccountflowMapping[] => {
+    return mappings.filter(m => {
+      if (m.kind === 'accountToOutflow' && m.account === account) return true
+      if (m.kind === 'accountToAccount' && m.fromAccount === account) return true
+      return false
+    })
+  }
+
+  // Helper to get label for account-to-account on outflow side
+  const getAccountToAccountOutflowLabel = (mapping: AccountToAccountMapping): string => {
+    return `To ${mapping.toAccount}`
+  }
 
   return (
     <>
-    <SectionCard title="Accountflow">
-      <GroupedList
-          items={items}
-        groupKey="platform"
-        groupOrder={accountPlatforms}
-        renderGroupHeader={(platformName, groupItems) => {
-          return (
-            <div className="flex items-start justify-between pb-2 border-b border-border-subtle">
-              <Heading level={3}>{platformName}</Heading>
-              <div className="flex items-center gap-4">
-                <button
-                    onClick={() => setAddItemPlatform(platformName as AccountPlatform)}
-                  className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
-                >
-                  <svg
-                    className="w-4 h-4 transition-transform group-hover:rotate-90"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2.5}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                  <span>Add Item</span>
-                </button>
+      <SectionCard title="Accountflow">
+        {/* Add Mapping Button */}
+        <div className="mb-6 pb-4 border-b border-border-strong">
+          <button
+            onClick={() => setShowAddMappingModal(true)}
+            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+          >
+            <svg
+              className="w-4 h-4 transition-transform group-hover:rotate-90"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            <span>Add Mapping</span>
+          </button>
+        </div>
+
+        {/* Account Visualizations */}
+        <div className="space-y-8">
+          {accountPlatforms.map((account) => {
+            const inflowMappings = getInflowMappings(account)
+            const outflowMappings = getOutflowMappings(account)
+
+            // Calculate totals
+            const totalInflow = inflowMappings.reduce((sum, m) => {
+              return sum + computeMappingAmount(m, inflowItems, outflowItems)
+            }, 0)
+
+            const totalOutflow = outflowMappings.reduce((sum, m) => {
+              return sum + computeMappingAmount(m, inflowItems, outflowItems)
+            }, 0)
+
+            const spare = totalInflow - totalOutflow
+
+            return (
+              <div key={account} className="space-y-4 pb-4 border-b border-border-strong last:border-b-0">
+                {/* Account Header with Totals */}
+                <div>
+                  <Heading level={2}>{account}</Heading>
+                  <div className="mt-1 space-y-1">
+                    <TotalText variant="inflow" className="block">
+                      {formatChf(totalInflow)}
+                    </TotalText>
+                    <TotalText variant="outflow" className="block">
+                      {formatChf(totalOutflow)}
+                    </TotalText>
+                    <TotalText variant="neutral" className="block text-white">
+                      {formatChf(spare)}
+                    </TotalText>
+                  </div>
+                </div>
+
+                {/* Two Column Layout: Inflow and Outflow */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Inflow Column */}
+                  <div className="space-y-3">
+                    <Heading level={3} className="mb-2">Inflow</Heading>
+                    {inflowMappings.length === 0 ? (
+                      <div className="text-text-muted text-[0.525rem] md:text-xs">No inflow mappings</div>
+                    ) : (
+                      <>
+                        {inflowMappings.map((mapping) => {
+                          const label = getMappingLabel(mapping, inflowItems, outflowItems)
+                          const amount = computeMappingAmount(mapping, inflowItems, outflowItems)
+                          return (
+                            <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
+                              <div className="text-text-primary text-[0.525rem] md:text-xs truncate flex-1">{label}</div>
+                              <div className="text-success text-[0.525rem] md:text-xs ml-4">{formatChf(amount)}</div>
+                            </div>
+                          )
+                        })}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Outflow Column */}
+                  <div className="space-y-3">
+                    <Heading level={3} className="mb-2">Outflow</Heading>
+                    {outflowMappings.length === 0 ? (
+                      <div className="text-text-muted text-[0.525rem] md:text-xs">No outflow mappings</div>
+                    ) : (
+                      <>
+                        {outflowMappings.map((mapping) => {
+                          let label = ''
+                          if (mapping.kind === 'accountToAccount') {
+                            label = getAccountToAccountOutflowLabel(mapping)
+                          } else {
+                            label = getMappingLabel(mapping, inflowItems, outflowItems)
+                          }
+                          const amount = computeMappingAmount(mapping, inflowItems, outflowItems)
+                          return (
+                            <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
+                              <div className="text-text-primary text-[0.525rem] md:text-xs truncate flex-1">{label}</div>
+                              <div className="text-danger text-[0.525rem] md:text-xs ml-4">{formatChf(amount)}</div>
+                            </div>
+                          )
+                        })}
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          )
-        }}
-        renderTable={(groupItems) => (
-          <div className="overflow-x-auto">
-            <table className="w-full" style={{ tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                <col style={{ width: '80px' }} />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  <th className="text-left pb-2">
-                    <Heading level={4}>Item</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Inflow</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Outflow</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Actions</Heading>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {groupItems.map((item) => (
-                  <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
-                    <td className="py-2">
-                      <div className="text2 truncate">{item.item}</div>
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="text-success text2 whitespace-nowrap">{formatChf(item.inflowChf)}</div>
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="text-danger text2 whitespace-nowrap">{formatChf(item.outflowChf)}</div>
-                    </td>
-                    <td className="py-2">
-                      <div className="flex items-center justify-end">
-                        <CashflowItemMenu
-                          itemId={item.id}
-                          itemType="accountflow"
-                          onEdit={() => onEditItem(item.id)}
-                          onRemove={() => onRemoveItem(item.id)}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      />
-    </SectionCard>
-    {addItemPlatform && (
-      <AddAccountflowItemModal
-        platform={addItemPlatform}
-        onClose={() => setAddItemPlatform(null)}
-        onSubmit={(data) => {
-          onAddItem(addItemPlatform, data)
-          setAddItemPlatform(null)
-        }}
-      />
-    )}
+            )
+          })}
+        </div>
+      </SectionCard>
+
+      {showAddMappingModal && (
+        <AddMappingModal
+          inflowItems={inflowItems}
+          outflowItems={outflowItems}
+          onClose={() => setShowAddMappingModal(false)}
+          onSubmit={(mapping) => {
+            onAddMapping(mapping)
+            setShowAddMappingModal(false)
+          }}
+        />
+      )}
     </>
   )
 }
@@ -932,6 +1084,482 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
   )
 }
 
+// Add Mapping Modal
+interface AddMappingModalProps {
+  inflowItems: InflowItem[]
+  outflowItems: OutflowItem[]
+  onClose: () => void
+  onSubmit: (mapping: AccountflowMapping) => void
+}
+
+function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMappingModalProps) {
+  const [mappingType, setMappingType] = useState<MappingKind>('inflowToAccount')
+  const [error, setError] = useState<string | null>(null)
+
+  // InflowToAccount state
+  const [inflowToAccountMode, setInflowToAccountMode] = useState<InflowEndpointMode>('group')
+  const [inflowToAccountGroup, setInflowToAccountGroup] = useState<InflowGroupName | ''>('')
+  const [inflowToAccountItem, setInflowToAccountItem] = useState<string>('')
+  const [inflowToAccountTarget, setInflowToAccountTarget] = useState<AccountPlatform | ''>('')
+
+  // AccountToOutflow state
+  const [accountToOutflowSource, setAccountToOutflowSource] = useState<AccountPlatform | ''>('')
+  const [accountToOutflowMode, setAccountToOutflowMode] = useState<OutflowEndpointMode>('group')
+  const [accountToOutflowGroup, setAccountToOutflowGroup] = useState<OutflowGroupName | ''>('')
+  const [accountToOutflowItem, setAccountToOutflowItem] = useState<string>('')
+
+  // AccountToAccount state
+  const [accountToAccountFrom, setAccountToAccountFrom] = useState<AccountPlatform | ''>('')
+  const [accountToAccountTo, setAccountToAccountTo] = useState<AccountPlatform | ''>('')
+  const [accountToAccountAmount, setAccountToAccountAmount] = useState<string>('')
+
+  const inflowGroups: InflowGroupName[] = ['Time', 'Service', 'Worker Bees']
+  const outflowGroups: OutflowGroupName[] = ['Fix', 'Variable', 'Shared Variable', 'Investments']
+
+  // Calculate computed amounts for display
+  const getInflowToAccountAmount = (): number => {
+    if (inflowToAccountMode === 'group' && inflowToAccountGroup) {
+      return getInflowGroupSum(inflowToAccountGroup, inflowItems)
+    } else if (inflowToAccountMode === 'item' && inflowToAccountItem) {
+      const item = inflowItems.find(i => i.id === inflowToAccountItem)
+      return item ? item.amountChf : 0
+    }
+    return 0
+  }
+
+  const getAccountToOutflowAmount = (): number => {
+    if (accountToOutflowMode === 'group' && accountToOutflowGroup) {
+      return getOutflowGroupSum(accountToOutflowGroup, outflowItems)
+    } else if (accountToOutflowMode === 'item' && accountToOutflowItem) {
+      const item = outflowItems.find(i => i.id === accountToOutflowItem)
+      return item ? item.amountChf : 0
+    }
+    return 0
+  }
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    let mapping: AccountflowMapping
+
+    if (mappingType === 'inflowToAccount') {
+      if (inflowToAccountMode === 'group' && !inflowToAccountGroup) {
+        setError('Please select an inflow group.')
+        return
+      }
+      if (inflowToAccountMode === 'item' && !inflowToAccountItem) {
+        setError('Please select an inflow item.')
+        return
+      }
+      if (!inflowToAccountTarget) {
+        setError('Please select a target account.')
+        return
+      }
+
+      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mapping-${Date.now()}`
+      mapping = {
+        id,
+        kind: 'inflowToAccount',
+        mode: inflowToAccountMode,
+        ...(inflowToAccountMode === 'group' ? { group: inflowToAccountGroup } : { inflowItemId: inflowToAccountItem }),
+        account: inflowToAccountTarget,
+      }
+    } else if (mappingType === 'accountToOutflow') {
+      if (!accountToOutflowSource) {
+        setError('Please select a source account.')
+        return
+      }
+      if (accountToOutflowMode === 'group' && !accountToOutflowGroup) {
+        setError('Please select an outflow group.')
+        return
+      }
+      if (accountToOutflowMode === 'item' && !accountToOutflowItem) {
+        setError('Please select an outflow item.')
+        return
+      }
+
+      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mapping-${Date.now()}`
+      mapping = {
+        id,
+        kind: 'accountToOutflow',
+        mode: accountToOutflowMode,
+        ...(accountToOutflowMode === 'group' ? { group: accountToOutflowGroup } : { outflowItemId: accountToOutflowItem }),
+        account: accountToOutflowSource,
+      }
+    } else {
+      // accountToAccount
+      if (!accountToAccountFrom) {
+        setError('Please select a source account.')
+        return
+      }
+      if (!accountToAccountTo) {
+        setError('Please select a target account.')
+        return
+      }
+      if (accountToAccountFrom === accountToAccountTo) {
+        setError('Source and target accounts must be different.')
+        return
+      }
+      const parsedAmount = Number(accountToAccountAmount)
+      if (!accountToAccountAmount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+        setError('Please enter a valid amount greater than 0.')
+        return
+      }
+
+      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mapping-${Date.now()}`
+      mapping = {
+        id,
+        kind: 'accountToAccount',
+        fromAccount: accountToAccountFrom,
+        toAccount: accountToAccountTo,
+        amountChf: parsedAmount,
+      }
+    }
+
+    onSubmit(mapping)
+
+    // Reset form
+    setMappingType('inflowToAccount')
+    setInflowToAccountMode('group')
+    setInflowToAccountGroup('')
+    setInflowToAccountItem('')
+    setInflowToAccountTarget('')
+    setAccountToOutflowSource('')
+    setAccountToOutflowMode('group')
+    setAccountToOutflowGroup('')
+    setAccountToOutflowItem('')
+    setAccountToAccountFrom('')
+    setAccountToAccountTo('')
+    setAccountToAccountAmount('')
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
+      <div className="w-full max-w-2xl bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative" onClick={(e) => e.stopPropagation()}>
+        <Heading level={2} className="mb-4">
+          Add Mapping
+        </Heading>
+
+        {error && (
+          <div className="mb-3 text-[0.525rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Mapping Type Selection */}
+          <div>
+            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-2">
+              Mapping Type
+            </label>
+            <select
+              value={mappingType}
+              onChange={(e) => setMappingType(e.target.value as MappingKind)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+            >
+              <option value="inflowToAccount">Inflow to Account</option>
+              <option value="accountToOutflow">Account to Outflow</option>
+              <option value="accountToAccount">Account to Account Transfer</option>
+            </select>
+          </div>
+
+          {/* Inflow to Account Form */}
+          {mappingType === 'inflowToAccount' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-2">
+                  Mode
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="inflow-to-account-mode"
+                      value="group"
+                      checked={inflowToAccountMode === 'group'}
+                      onChange={() => {
+                        setInflowToAccountMode('group')
+                        setInflowToAccountItem('')
+                      }}
+                      className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
+                    />
+                    <span className="text-text-primary text-[0.525rem] md:text-xs">Whole Group</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="inflow-to-account-mode"
+                      value="item"
+                      checked={inflowToAccountMode === 'item'}
+                      onChange={() => {
+                        setInflowToAccountMode('item')
+                        setInflowToAccountGroup('')
+                      }}
+                      className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
+                    />
+                    <span className="text-text-primary text-[0.525rem] md:text-xs">Single Item</span>
+                  </label>
+                </div>
+              </div>
+
+              {inflowToAccountMode === 'group' ? (
+                <div>
+                  <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-group">
+                    Inflow Group
+                  </label>
+                  <select
+                    id="inflow-to-account-group"
+                    value={inflowToAccountGroup}
+                    onChange={(e) => setInflowToAccountGroup(e.target.value as InflowGroupName)}
+                    className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                  >
+                    <option value="">Select a group...</option>
+                    {inflowGroups.map((group) => (
+                      <option key={group} value={group}>
+                        {group}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-item">
+                    Inflow Item
+                  </label>
+                  <select
+                    id="inflow-to-account-item"
+                    value={inflowToAccountItem}
+                    onChange={(e) => setInflowToAccountItem(e.target.value)}
+                    className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                  >
+                    <option value="">Select an item...</option>
+                    {inflowItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.item} ({item.group})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-target">
+                  Account (target)
+                </label>
+                <select
+                  id="inflow-to-account-target"
+                  value={inflowToAccountTarget}
+                  onChange={(e) => setInflowToAccountTarget(e.target.value as AccountPlatform)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="">Select an account...</option>
+                  {accountPlatforms.map((platform) => (
+                    <option key={platform} value={platform}>
+                      {platform}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(inflowToAccountGroup || inflowToAccountItem) && (
+                <div className="bg-bg-surface-2 rounded-input px-3 py-2">
+                  <div className="text-text-secondary text-[0.525rem] md:text-xs mb-1">Computed Amount</div>
+                  <div className="text-success text-sm md:text-base font-semibold">{formatChf(getInflowToAccountAmount())}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Account to Outflow Form */}
+          {mappingType === 'accountToOutflow' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-source">
+                  Account (source)
+                </label>
+                <select
+                  id="account-to-outflow-source"
+                  value={accountToOutflowSource}
+                  onChange={(e) => setAccountToOutflowSource(e.target.value as AccountPlatform)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="">Select an account...</option>
+                  {accountPlatforms.map((platform) => (
+                    <option key={platform} value={platform}>
+                      {platform}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-2">
+                  Mode
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="account-to-outflow-mode"
+                      value="group"
+                      checked={accountToOutflowMode === 'group'}
+                      onChange={() => {
+                        setAccountToOutflowMode('group')
+                        setAccountToOutflowItem('')
+                      }}
+                      className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
+                    />
+                    <span className="text-text-primary text-[0.525rem] md:text-xs">Whole Group</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="account-to-outflow-mode"
+                      value="item"
+                      checked={accountToOutflowMode === 'item'}
+                      onChange={() => {
+                        setAccountToOutflowMode('item')
+                        setAccountToOutflowGroup('')
+                      }}
+                      className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
+                    />
+                    <span className="text-text-primary text-[0.525rem] md:text-xs">Single Item</span>
+                  </label>
+                </div>
+              </div>
+
+              {accountToOutflowMode === 'group' ? (
+                <div>
+                  <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-group">
+                    Outflow Group
+                  </label>
+                  <select
+                    id="account-to-outflow-group"
+                    value={accountToOutflowGroup}
+                    onChange={(e) => setAccountToOutflowGroup(e.target.value as OutflowGroupName)}
+                    className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                  >
+                    <option value="">Select a group...</option>
+                    {outflowGroups.map((group) => (
+                      <option key={group} value={group}>
+                        {group}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-item">
+                    Outflow Item
+                  </label>
+                  <select
+                    id="account-to-outflow-item"
+                    value={accountToOutflowItem}
+                    onChange={(e) => setAccountToOutflowItem(e.target.value)}
+                    className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                  >
+                    <option value="">Select an item...</option>
+                    {outflowItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.item} ({item.group})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {(accountToOutflowGroup || accountToOutflowItem) && (
+                <div className="bg-bg-surface-2 rounded-input px-3 py-2">
+                  <div className="text-text-secondary text-[0.525rem] md:text-xs mb-1">Computed Amount</div>
+                  <div className="text-danger text-sm md:text-base font-semibold">{formatChf(getAccountToOutflowAmount())}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Account to Account Transfer Form */}
+          {mappingType === 'accountToAccount' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-from">
+                  From Account
+                </label>
+                <select
+                  id="account-to-account-from"
+                  value={accountToAccountFrom}
+                  onChange={(e) => setAccountToAccountFrom(e.target.value as AccountPlatform)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="">Select an account...</option>
+                  {accountPlatforms.map((platform) => (
+                    <option key={platform} value={platform}>
+                      {platform}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-to">
+                  To Account
+                </label>
+                <select
+                  id="account-to-account-to"
+                  value={accountToAccountTo}
+                  onChange={(e) => setAccountToAccountTo(e.target.value as AccountPlatform)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="">Select an account...</option>
+                  {accountPlatforms
+                    .filter(p => p !== accountToAccountFrom)
+                    .map((platform) => (
+                      <option key={platform} value={platform}>
+                        {platform}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-amount">
+                  Amount (CHF)
+                </label>
+                <input
+                  id="account-to-account-amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={accountToAccountAmount}
+                  onChange={(e) => setAccountToAccountAmount(e.target.value)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+            >
+              Save Mapping
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // Add Accountflow Item Modal
 interface AddAccountflowItemModalProps {
   platform: AccountPlatform
@@ -1101,6 +1729,7 @@ function Cashflow() {
   const [inflowItems, setInflowItems] = useState<InflowItem[]>(mockInflowItems)
   const [outflowItems, setOutflowItems] = useState<OutflowItem[]>(mockOutflowItems)
   const [accountflowItems, setAccountflowItems] = useState<AccountflowItem[]>(mockAccountflowItems)
+  const [accountflowMappings, setAccountflowMappings] = useState<AccountflowMapping[]>([])
 
   const handleAddInflowItem = (group: InflowGroupName, data: { item: string; amountChf: number; currency: string; provider: string }) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `inflow-${Date.now()}`
@@ -1170,6 +1799,14 @@ function Cashflow() {
     }
   }
 
+  const handleAddMapping = (mapping: AccountflowMapping) => {
+    setAccountflowMappings(prev => [...prev, mapping])
+  }
+
+  const handleRemoveMapping = (id: string) => {
+    setAccountflowMappings(prev => prev.filter(m => m.id !== id))
+  }
+
   return (
     <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -1195,10 +1832,11 @@ function Cashflow() {
         {/* Accountflow Section - Full width */}
         <div>
           <AccountflowSection
-            items={accountflowItems}
-            onAddItem={handleAddAccountflowItem}
-            onEditItem={handleEditAccountflowItem}
-            onRemoveItem={handleRemoveAccountflowItem}
+            mappings={accountflowMappings}
+            onAddMapping={handleAddMapping}
+            onRemoveMapping={handleRemoveMapping}
+            inflowItems={inflowItems}
+            outflowItems={outflowItems}
           />
         </div>
       </div>
