@@ -1,6 +1,6 @@
 import React from 'react'
 
-type TotalVariant = 'inflow' | 'outflow' | 'neutral'
+type TotalVariant = 'inflow' | 'outflow' | 'neutral' | 'spare'
 
 export interface TotalTextProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant: TotalVariant
@@ -10,6 +10,7 @@ const colorMap: Record<TotalVariant, string> = {
   inflow: 'text-success',
   outflow: 'text-danger',
   neutral: 'text-text-primary',
+  spare: 'text-[#DAA520]',
 }
 
 const TotalText: React.FC<TotalTextProps> = ({ variant, className = '', children, ...rest }) => {
@@ -18,6 +19,8 @@ const TotalText: React.FC<TotalTextProps> = ({ variant, className = '', children
     ? { color: '#2ECC71' } 
     : variant === 'outflow' 
     ? { color: '#E74C3C' } 
+    : variant === 'spare'
+    ? { color: '#DAA520' }
     : {}
   
   // Use text1 for font size (as defined in tailwind.config.js fontSize.text1)

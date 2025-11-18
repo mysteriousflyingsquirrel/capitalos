@@ -612,7 +612,7 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                     <TotalText variant="outflow">
                       {formatCurrency(totalOutflow)}
                     </TotalText>
-                    <TotalText variant="neutral">
+                    <TotalText variant="spare">
                       {formatCurrency(spare)}
                     </TotalText>
                   </div>

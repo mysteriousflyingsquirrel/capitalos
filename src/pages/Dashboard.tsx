@@ -474,7 +474,7 @@ function Dashboard() {
               </div>
               <div className="pt-2 border-t border-border-subtle">
                 <div className="text-xs md:text-sm text-text-muted mb-1">Spare Change</div>
-                <TotalText variant="neutral">{formatCurrencyValue(convert(monthlySpareChangeChf, 'CHF'))}</TotalText>
+                <TotalText variant="spare">{formatCurrencyValue(convert(monthlySpareChangeChf, 'CHF'))}</TotalText>
               </div>
             </div>
           </div>
