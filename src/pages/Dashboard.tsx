@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import {
   LineChart,
   Line,
@@ -27,7 +27,6 @@ import {
 } from '../services/storageService'
 import {
   loadSnapshots,
-  takeSnapshotForCurrentMonthIfNeeded,
 } from '../services/snapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
@@ -145,31 +144,10 @@ function Dashboard() {
   const inflowItems = useMemo(() => loadCashflowInflowItems([]), [])
   const outflowItems = useMemo(() => loadCashflowOutflowItems([]), [])
 
-  // Load historical snapshots and check if we need to take a snapshot for current month
-  const [snapshots, setSnapshots] = useState(() => {
-    const loaded = loadSnapshots()
-    // Check if we should take a snapshot for the current month (on component mount)
-    const newSnapshot = takeSnapshotForCurrentMonthIfNeeded(netWorthItems, transactions)
-    if (newSnapshot) {
-      return [...loaded, newSnapshot].sort((a, b) => a.timestamp - b.timestamp)
-    }
-    return loaded
-  })
-
-  // Update snapshots when net worth items or transactions change
-  // Check if we need to take a snapshot for the current month
-  useEffect(() => {
-    const newSnapshot = takeSnapshotForCurrentMonthIfNeeded(netWorthItems, transactions)
-    if (newSnapshot) {
-      setSnapshots(prev => {
-        // Check if we already have this snapshot
-        if (prev.some(s => s.date === newSnapshot.date)) {
-          return prev
-        }
-        return [...prev, newSnapshot].sort((a, b) => a.timestamp - b.timestamp)
-      })
-    }
-  }, [netWorthItems, transactions])
+  // Load historical snapshots only (no new snapshots created)
+  const snapshots = useMemo(() => {
+    return loadSnapshots()
+  }, [])
 
   // Calculate total net worth from actual data
   const totalNetWorthChf = useMemo(() => {
