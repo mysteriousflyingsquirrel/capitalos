@@ -3,6 +3,7 @@ import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { formatMoney } from '../lib/currency'
+import { formatDate } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import {
   saveNetWorthItems,
@@ -264,6 +265,7 @@ function NetWorth() {
   }, [transactions])
   const [activeCategory, setActiveCategory] = useState<NetWorthCategory | null>(null)
   const [transactionItemId, setTransactionItemId] = useState<string | null>(null)
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null)
   const [showTransactionsItemId, setShowTransactionsItemId] = useState<string | null>(null)
   const [menuOpenItemId, setMenuOpenItemId] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
@@ -324,6 +326,33 @@ function NetWorth() {
 
     setNetWorthItems((prev) => [...prev, newItem])
     setActiveCategory(null)
+    
+    // Return the item ID so it can be used for creating the transaction
+    return id
+  }
+  
+  const handleAddItemWithTransaction = (
+    category: NetWorthCategory,
+    data: { name: string; currency: string; platform: string },
+    transactionData?: Omit<NetWorthTransaction, 'id' | 'itemId'>
+  ) => {
+    const itemId = handleAddItem(category, data)
+    
+    // If transaction data is provided, create the transaction
+    if (transactionData && itemId) {
+      const transactionId =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `tx-${Date.now()}`
+      
+      const newTransaction: NetWorthTransaction = {
+        id: transactionId,
+        itemId,
+        ...transactionData,
+      }
+      
+      setTransactions((prev) => [...prev, newTransaction])
+    }
   }
 
   const handleAddTransaction = (itemId: string) => {
@@ -343,6 +372,22 @@ function NetWorth() {
 
     setTransactions((prev) => [...prev, newTransaction])
     setTransactionItemId(null)
+  }
+
+  const handleEditTransaction = (transactionId: string) => {
+    setEditingTransactionId(transactionId)
+    setShowTransactionsItemId(null) // Close the transactions modal
+  }
+
+  const handleUpdateTransaction = (transactionId: string, transaction: Omit<NetWorthTransaction, 'id'>) => {
+    setTransactions((prev) =>
+      prev.map((tx) => (tx.id === transactionId ? { ...tx, ...transaction } : tx))
+    )
+    setEditingTransactionId(null)
+  }
+
+  const handleDeleteTransaction = (transactionId: string) => {
+    setTransactions((prev) => prev.filter((tx) => tx.id !== transactionId))
   }
 
   const handleShowMenu = (itemId: string, buttonElement: HTMLButtonElement) => {
@@ -417,6 +462,12 @@ function NetWorth() {
             category={activeCategory}
             onClose={() => setActiveCategory(null)}
             onSubmit={handleAddItem}
+            onSaveTransaction={(itemId, transaction) => {
+              handleSaveTransaction({
+                ...transaction,
+                itemId,
+              } as Omit<NetWorthTransaction, 'id'>)
+            }}
           />
         )}
 
@@ -435,8 +486,28 @@ function NetWorth() {
             item={netWorthItems.find(i => i.id === showTransactionsItemId)!}
             transactions={transactions.filter(tx => tx.itemId === showTransactionsItemId)}
             onClose={() => setShowTransactionsItemId(null)}
+            onEdit={handleEditTransaction}
+            onDelete={handleDeleteTransaction}
           />
         )}
+
+        {/* Edit Transaction Modal */}
+        {editingTransactionId && (() => {
+          const transaction = transactions.find(tx => tx.id === editingTransactionId)
+          if (!transaction) return null
+          const item = netWorthItems.find(i => i.id === transaction.itemId)
+          if (!item) return null
+          return (
+            <AddTransactionModal
+              item={item}
+              transaction={transaction}
+              onClose={() => setEditingTransactionId(null)}
+              onSave={(updatedTransaction) => {
+                handleUpdateTransaction(editingTransactionId, updatedTransaction)
+              }}
+            />
+          )
+        })()}
 
         {/* Context Menu */}
         {menuOpenItemId && menuPosition && selectedItem && (
@@ -471,14 +542,20 @@ interface AddNetWorthItemModalProps {
   onSubmit: (
     category: NetWorthCategory,
     data: { name: string; currency: string; platform: string }
-  ) => void
+  ) => string | void // Returns itemId if available
+  onSaveTransaction?: (itemId: string, transaction: Omit<NetWorthTransaction, 'id' | 'itemId'>) => void
 }
 
-function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemModalProps) {
+function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }: AddNetWorthItemModalProps) {
   const [name, setName] = useState('')
   const [currency, setCurrency] = useState('CHF')
   const [platform, setPlatform] = useState('Physical')
   const [error, setError] = useState<string | null>(null)
+  
+  // Transaction fields for categories without price per item
+  const needsTransaction = categoriesWithoutPricePerItem.includes(category)
+  const [amount, setAmount] = useState('')
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -489,15 +566,42 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
       return
     }
 
-    onSubmit(category, {
+    // Validate transaction fields if needed
+    if (needsTransaction) {
+      const parsedAmount = Number(amount)
+      if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+        setError('Please enter a valid amount greater than 0.')
+        return
+      }
+      if (!date) {
+        setError('Please select a date.')
+        return
+      }
+    }
+
+    // Create the item first and get its ID
+    const newItemId = onSubmit(category, {
       name: name.trim(),
       currency,
       platform,
     })
 
+    // If transaction is needed and we have an itemId, create the transaction
+    if (needsTransaction && onSaveTransaction && newItemId) {
+      onSaveTransaction(newItemId, {
+        side: 'buy',
+        currency,
+        amount: Number(amount),
+        pricePerItemChf: 1, // For categories without price per item, use 1
+        date,
+      })
+    }
+
     setName('')
     setCurrency('CHF')
     setPlatform('Physical')
+    setAmount('')
+    setDate(new Date().toISOString().split('T')[0])
     onClose()
   }
 
@@ -590,6 +694,45 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
             </div>
           </div>
 
+          {needsTransaction && (
+            <>
+              <div>
+                <label
+                  className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                  htmlFor="nw-initial-amount"
+                >
+                  Amount (CHF)
+                </label>
+                <input
+                  id="nw-initial-amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                  placeholder="e.g. 1000, 5000, 10000"
+                />
+              </div>
+
+              <div>
+                <label
+                  className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                  htmlFor="nw-initial-date"
+                >
+                  Date
+                </label>
+                <input
+                  id="nw-initial-date"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                />
+              </div>
+            </>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
@@ -614,29 +757,44 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
 // Add Transaction Modal
 interface AddTransactionModalProps {
   item: NetWorthItem
+  transaction?: NetWorthTransaction // If provided, we're editing
   onClose: () => void
   onSave: (transaction: Omit<NetWorthTransaction, 'id'>) => void
 }
 
+// Categories that don't need price per item (1 unit = 1 CHF equivalent)
+const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Real Estate', 'Inventory']
+
 type TransactionTab = 'buy' | 'sell'
 
-function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps) {
+function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransactionModalProps) {
   const { baseCurrency, convert } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
-  const [activeTab, setActiveTab] = useState<TransactionTab>('buy')
-  const [amount, setAmount] = useState('')
-  const [pricePerItemChf, setPricePerItemChf] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const isEditing = !!transaction
+  const [activeTab, setActiveTab] = useState<TransactionTab>(transaction?.side || 'buy')
+  const [amount, setAmount] = useState(transaction?.amount.toString() || '')
+  const [pricePerItemChf, setPricePerItemChf] = useState(transaction?.pricePerItemChf.toString() || '')
+  const [date, setDate] = useState(transaction?.date || new Date().toISOString().split('T')[0])
   const [error, setError] = useState<string | null>(null)
+
+  const needsPricePerItem = !categoriesWithoutPricePerItem.includes(item.category)
 
   const totalChf = useMemo(() => {
     const parsedAmount = Number(amount)
-    const parsedPrice = Number(pricePerItemChf)
-    if (isNaN(parsedAmount) || isNaN(parsedPrice) || parsedAmount <= 0 || parsedPrice <= 0) {
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
       return 0
     }
-    return parsedAmount * parsedPrice
-  }, [amount, pricePerItemChf])
+    if (needsPricePerItem) {
+      const parsedPrice = Number(pricePerItemChf)
+      if (isNaN(parsedPrice) || parsedPrice <= 0) {
+        return 0
+      }
+      return parsedAmount * parsedPrice
+    } else {
+      // For categories without price per item, amount directly represents the value in CHF
+      return parsedAmount
+    }
+  }, [amount, pricePerItemChf, needsPricePerItem])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -649,9 +807,11 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
       setError('Please enter a valid amount greater than 0.')
       return
     }
-    if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
-      setError('Please enter a valid price per item greater than 0.')
-      return
+    if (needsPricePerItem) {
+      if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+        setError('Please enter a valid price per item greater than 0.')
+        return
+      }
     }
     if (!date) {
       setError('Please select a date.')
@@ -663,7 +823,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
       side: activeTab,
       currency: item.currency,
       amount: parsedAmount,
-      pricePerItemChf: parsedPrice,
+      pricePerItemChf: needsPricePerItem ? parsedPrice : 1, // For categories without price per item, use 1 (amount = total value)
       date,
     })
 
@@ -677,7 +837,10 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
       <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
-          Add Transaction – {item.name}
+          {isEditing 
+            ? `Edit Transaction – ${item.name}`
+            : `${activeTab === 'buy' ? 'Add Buy Transaction' : 'Add Sell Transaction'} – ${item.name}`
+          }
         </Heading>
 
         {/* Tabs */}
@@ -731,7 +894,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
               className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
               htmlFor="tx-amount"
             >
-              Amount
+              {needsPricePerItem ? 'Amount' : 'Amount (CHF)'}
             </label>
             <input
               id="tx-amount"
@@ -741,37 +904,41 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              placeholder="e.g. 0.5, 100, 1"
+              placeholder={needsPricePerItem ? "e.g. 0.5, 100, 1" : "e.g. 1000, 5000, 10000"}
             />
           </div>
 
-          <div>
-            <label
-              className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
-              htmlFor="tx-price"
-            >
-              Price per item (CHF)
-            </label>
-            <input
-              id="tx-price"
-              type="number"
-              min="0"
-              step="0.01"
-              value={pricePerItemChf}
-              onChange={(e) => setPricePerItemChf(e.target.value)}
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              placeholder="e.g. 40000, 1.5, 100"
-            />
-          </div>
-
-          <div>
-            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
-              {activeTab === 'buy' ? 'Total spent' : 'Total sold'} (CHF)
-            </label>
-            <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm">
-              {formatCurrency(convert(totalChf, 'CHF'))}
+          {needsPricePerItem && (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                htmlFor="tx-price"
+              >
+                Price per item (CHF)
+              </label>
+              <input
+                id="tx-price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={pricePerItemChf}
+                onChange={(e) => setPricePerItemChf(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                placeholder="e.g. 40000, 1.5, 100"
+              />
             </div>
-          </div>
+          )}
+
+          {needsPricePerItem && (
+            <div>
+              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
+                {activeTab === 'buy' ? 'Total spent' : 'Total sold'} (CHF)
+              </label>
+              <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm">
+                {formatCurrency(convert(totalChf, 'CHF'))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label
@@ -801,7 +968,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
               type="submit"
               className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
-              {activeTab === 'buy' ? 'Buy' : 'Sell'}
+              {isEditing ? 'Save Changes' : (activeTab === 'buy' ? 'Add Buy' : 'Add Sell')}
             </button>
           </div>
         </form>
@@ -815,9 +982,11 @@ interface ShowTransactionsModalProps {
   item: NetWorthItem
   transactions: NetWorthTransaction[]
   onClose: () => void
+  onEdit: (transactionId: string) => void
+  onDelete: (transactionId: string) => void
 }
 
-function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactionsModalProps) {
+function ShowTransactionsModal({ item, transactions, onClose, onEdit, onDelete }: ShowTransactionsModalProps) {
   const { baseCurrency, convert } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   
@@ -854,6 +1023,7 @@ function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactions
                   <th className="text-right py-2 px-3 text2 font-bold">Amount</th>
                   <th className="text-right py-2 px-3 text2 font-bold">Price per item</th>
                   <th className="text-right py-2 px-3 text2 font-bold">Total</th>
+                  <th className="text-left py-2 px-3 text2 font-bold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -864,7 +1034,7 @@ function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactions
                   const sign = tx.side === 'buy' ? '+' : '-'
                   return (
                     <tr key={tx.id} className="border-b border-border-subtle">
-                      <td className="py-2 px-3 text2">{tx.date}</td>
+                      <td className="py-2 px-3 text2">{formatDate(tx.date)}</td>
                       <td className="py-2 px-3 text2">
                         <span className={tx.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
                           {tx.side === 'buy' ? 'Buy' : 'Sell'}
@@ -877,6 +1047,32 @@ function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactions
                         <span className={tx.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
                           {sign}{formatCurrency(totalConverted)}
                         </span>
+                      </td>
+                      <td className="py-2 px-3 text2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => onEdit(tx.id)}
+                            className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
+                            title="Edit"
+                          >
+                            <svg className="w-4 h-4 text-text-secondary hover:text-text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm('Are you sure you want to delete this transaction?')) {
+                                onDelete(tx.id)
+                              }
+                            }}
+                            className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
+                            title="Delete"
+                          >
+                            <svg className="w-4 h-4 text-text-secondary hover:text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )

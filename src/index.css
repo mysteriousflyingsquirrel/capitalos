@@ -97,3 +97,23 @@ select {
   background-size: 12px;
 }
 
+/* Date input calendar icon styling - make it white */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: brightness(0) invert(1);
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  color: inherit;
+}
+
+input[type="date"]::-webkit-datetime-edit-text {
+  color: inherit;
+}
+
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  color: inherit;
+}
+
