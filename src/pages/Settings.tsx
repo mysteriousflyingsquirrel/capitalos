@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import Heading from '../components/Heading'
 
-type BaseCurrency = 'CHF' | 'EUR' | 'USD' | 'GBP'
+type BaseCurrency = 'CHF' | 'EUR' | 'USD'
 type NumberFormat = 'ch' | 'us' | 'de'
 
 function Settings() {
@@ -65,7 +65,6 @@ function Settings() {
                 <option value="CHF">CHF</option>
                 <option value="EUR">EUR</option>
                 <option value="USD">USD</option>
-                <option value="GBP">GBP</option>
               </select>
               <p className="mt-2 text-text-muted text-[0.525rem] md:text-xs">
                 All values in Capitalos will be displayed in this currency (conversion logic to be implemented).
