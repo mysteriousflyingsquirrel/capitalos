@@ -380,10 +380,14 @@ function NetWorth() {
         
         {/* Total Net Worth */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-          <Heading level={2} className="mb-2">
-            Total Net Worth
-          </Heading>
-          <TotalText variant={totalNetWorth >= 0 ? 'inflow' : 'outflow'}>{formatCurrency(totalNetWorth)}</TotalText>
+          <div className="mb-6 pb-4 border-b border-border-strong">
+            <div className="flex flex-col">
+              <Heading level={2}>Total Net Worth</Heading>
+              <TotalText variant={totalNetWorth >= 0 ? 'inflow' : 'outflow'} className="mt-1">
+                {formatCurrency(totalNetWorth)}
+              </TotalText>
+            </div>
+          </div>
         </div>
 
         {/* Grouped Categories */}

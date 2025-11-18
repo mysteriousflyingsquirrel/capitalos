@@ -426,13 +426,15 @@ function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Total Net Worth KPI with Monthly PnL */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-            <Heading level={2} className="mb-2">
-              Total Net Worth
-            </Heading>
-            <TotalText variant={totalNetWorthConverted >= 0 ? 'inflow' : 'outflow'} className="mb-2">
-              {formatCurrencyValue(totalNetWorthConverted)}
-            </TotalText>
-            <div className="mt-2 pt-2 border-t border-border-subtle space-y-2">
+            <div className="mb-6 pb-4 border-b border-border-strong">
+              <div className="flex flex-col">
+                <Heading level={2}>Total Net Worth</Heading>
+                <TotalText variant={totalNetWorthConverted >= 0 ? 'inflow' : 'outflow'} className="mt-1">
+                  {formatCurrencyValue(totalNetWorthConverted)}
+                </TotalText>
+              </div>
+            </div>
+            <div className="space-y-2">
               <div>
                 <div className="text-xs md:text-sm text-text-muted mb-1">Monthly PnL</div>
                 <div className="flex items-baseline gap-2">
@@ -460,9 +462,7 @@ function Dashboard() {
 
           {/* Monthly Cashflow KPI with Inflow, Outflow, and Spare Change */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-            <Heading level={2} className="mb-2">
-              Monthly Cashflow
-            </Heading>
+            <Heading level={2} className="mb-2">Monthly Cashflow</Heading>
             <div className="space-y-2">
               <div>
                 <div className="text-xs md:text-sm text-text-muted mb-1">Inflow</div>
@@ -472,7 +472,7 @@ function Dashboard() {
                 <div className="text-xs md:text-sm text-text-muted mb-1">Outflow</div>
                 <TotalText variant="outflow">{formatCurrencyValue(monthlyOutflowConverted)}</TotalText>
               </div>
-              <div className="pt-2 border-t border-border-subtle">
+              <div>
                 <div className="text-xs md:text-sm text-text-muted mb-1">Spare Change</div>
                 <TotalText variant="spare">{formatCurrencyValue(convert(monthlySpareChangeChf, 'CHF'))}</TotalText>
               </div>
@@ -482,20 +482,20 @@ function Dashboard() {
 
         {/* Second Row: Net Worth Evolution (Full Width) */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <Heading level={2}>
-              Net Worth Evolution
-            </Heading>
-            <select
-              value={timeFrame}
-              onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '1Year' | '5Year' | 'Max')}
-              className="bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text2 focus:outline-none focus:border-accent-blue"
-            >
-              <option value="YTD">YTD</option>
-              <option value="1Year">1Year</option>
-              <option value="5Year">5Year</option>
-              <option value="Max">Max</option>
-            </select>
+          <div className="mb-6 pb-4 border-b border-border-strong">
+            <div className="flex items-center justify-between">
+              <Heading level={2}>Net Worth Evolution</Heading>
+              <select
+                value={timeFrame}
+                onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '1Year' | '5Year' | 'Max')}
+                className="bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text2 focus:outline-none focus:border-accent-blue"
+              >
+                <option value="YTD">YTD</option>
+                <option value="1Year">1Year</option>
+                <option value="5Year">5Year</option>
+                <option value="Max">Max</option>
+              </select>
+            </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={netWorthData}>
@@ -610,9 +610,9 @@ function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Asset Allocation Pie Chart */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-            <Heading level={2} className="mb-4">
-              Asset Allocation
-            </Heading>
+            <div className="mb-6 pb-4 border-b border-border-strong">
+              <Heading level={2}>Asset Allocation</Heading>
+            </div>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -658,9 +658,9 @@ function Dashboard() {
 
           {/* Inflow Breakdown Pie Chart */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-            <Heading level={2} className="mb-4">
-              Inflow Breakdown
-            </Heading>
+            <div className="mb-6 pb-4 border-b border-border-strong">
+              <Heading level={2}>Inflow Breakdown</Heading>
+            </div>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -706,9 +706,9 @@ function Dashboard() {
 
           {/* Outflow Breakdown Pie Chart */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-            <Heading level={2} className="mb-4">
-              Outflow Breakdown
-            </Heading>
+            <div className="mb-6 pb-4 border-b border-border-strong">
+              <Heading level={2}>Outflow Breakdown</Heading>
+            </div>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -755,9 +755,9 @@ function Dashboard() {
 
         {/* Fourth Row: Monthly Cashflow (Full Width) */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-          <Heading level={2} className="mb-4">
-            Monthly Cashflow
-          </Heading>
+          <div className="mb-6 pb-4 border-b border-border-strong">
+            <Heading level={2}>Monthly Cashflow</Heading>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={cashflowData}>
               <CartesianGrid
