@@ -4,6 +4,14 @@ import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { formatMoney } from '../lib/currency'
+import {
+  saveCashflowInflowItems,
+  loadCashflowInflowItems,
+  saveCashflowOutflowItems,
+  loadCashflowOutflowItems,
+  saveCashflowAccountflowMappings,
+  loadCashflowAccountflowMappings,
+} from '../services/storageService'
 
 type InflowGroupName = 'Time' | 'Service' | 'Worker Bees'
 
@@ -74,62 +82,10 @@ type AccountflowMapping =
   | AccountToOutflowMapping
   | AccountToAccountMapping
 
-// Mock data - Inflow
-const mockInflowItems: InflowItem[] = [
-  // Time
-  { id: 'i1', item: 'Consulting Hours', amountChf: 5000, provider: 'Client A', group: 'Time' },
-  { id: 'i2', item: 'Development Work', amountChf: 3000, provider: 'Client B', group: 'Time' },
-  { id: 'i3', item: 'Project Management', amountChf: 2000, provider: 'Client C', group: 'Time' },
-  
-  // Service
-  { id: 'i4', item: 'Software License', amountChf: 1500, provider: 'TechCorp', group: 'Service' },
-  { id: 'i5', item: 'Maintenance Contract', amountChf: 800, provider: 'ServicePro', group: 'Service' },
-  
-  // Worker Bees
-  { id: 'i6', item: 'Freelance Design', amountChf: 1200, provider: 'Design Studio', group: 'Worker Bees' },
-  { id: 'i7', item: 'Content Writing', amountChf: 500, provider: 'Content Agency', group: 'Worker Bees' },
-]
-
-// Mock data - Outflow
-const mockOutflowItems: OutflowItem[] = [
-  // Fix
-  { id: 'o1', item: 'Rent', amountChf: 2000, receiver: 'Landlord', group: 'Fix' },
-  { id: 'o2', item: 'Insurance', amountChf: 300, receiver: 'Insurance Co', group: 'Fix' },
-  { id: 'o3', item: 'Phone Bill', amountChf: 50, receiver: 'Swisscom', group: 'Fix' },
-  
-  // Variable
-  { id: 'o4', item: 'Groceries', amountChf: 400, receiver: 'Migros', group: 'Variable' },
-  { id: 'o5', item: 'Restaurants', amountChf: 200, receiver: 'Various', group: 'Variable' },
-  
-  // Shared Variable
-  { id: 'o6', item: 'Utilities', amountChf: 150, receiver: 'EWZ', group: 'Shared Variable' },
-  { id: 'o7', item: 'Internet', amountChf: 60, receiver: 'Swisscom', group: 'Shared Variable' },
-  
-  // Investments
-  { id: 'o8', item: 'Stock Purchase', amountChf: 1000, receiver: 'IBKR', group: 'Investments' },
-  { id: 'o9', item: 'Crypto Investment', amountChf: 500, receiver: 'Kraken', group: 'Investments' },
-]
-
-// Mock data - Accountflow
-const mockAccountflowItems: AccountflowItem[] = [
-  // Raiffeisen
-  { id: 'a1', item: 'Main Account', inflowChf: 8000, outflowChf: 2500, spareChf: 5500, platform: 'Raiffeisen' },
-  { id: 'a2', item: 'Savings Account', inflowChf: 2000, outflowChf: 0, spareChf: 2000, platform: 'Raiffeisen' },
-  
-  // Revolut
-  { id: 'a3', item: 'Personal Card', inflowChf: 1500, outflowChf: 800, spareChf: 700, platform: 'Revolut' },
-  { id: 'a4', item: 'Business Card', inflowChf: 3000, outflowChf: 1200, spareChf: 1800, platform: 'Revolut' },
-  
-  // yuh!
-  { id: 'a5', item: 'Investment Account', inflowChf: 1000, outflowChf: 500, spareChf: 500, platform: 'yuh!' },
-  
-  // SAXO
-  { id: 'a6', item: 'Trading Account', inflowChf: 5000, outflowChf: 2000, spareChf: 3000, platform: 'SAXO' },
-  { id: 'a7', item: 'Investment Portfolio', inflowChf: 3000, outflowChf: 1000, spareChf: 2000, platform: 'SAXO' },
-  
-  // Kraken
-  { id: 'a8', item: 'Crypto Wallet', inflowChf: 2000, outflowChf: 500, spareChf: 1500, platform: 'Kraken' },
-]
+// Empty data - user will add their own data
+const mockInflowItems: InflowItem[] = []
+const mockOutflowItems: OutflowItem[] = []
+const mockAccountflowItems: AccountflowItem[] = []
 
 // Helper function to format CHF
 // formatChf will be replaced with currency-aware formatting in the component
@@ -240,7 +196,6 @@ function GroupedList<T extends Record<string, any>>({
     <div className="space-y-8">
       {groupOrder.map((groupName) => {
         const groupItems = grouped[groupName] || []
-        if (groupItems.length === 0) return null
 
         return (
           <div key={groupName} className="space-y-3 pb-4 border-b border-border-strong last:border-b-0">
@@ -249,7 +204,13 @@ function GroupedList<T extends Record<string, any>>({
               <>
             {renderHeader && renderHeader()}
             <div className="space-y-2">
-              {groupItems.map((item) => renderItem(item))}
+              {groupItems.length === 0 ? (
+                <div className="text-center text-text-muted text-[0.525rem] md:text-xs py-4">
+                  No items yet. Click "Add Item" to get started.
+                </div>
+              ) : (
+                groupItems.map((item) => renderItem(item))
+              )}
             </div>
               </>
             )}
@@ -344,29 +305,37 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
                 </tr>
               </thead>
               <tbody>
-                {groupItems.map((item) => (
-                  <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
-                    <td className="py-2">
-                      <div className="text2 truncate">{item.item}</div>
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="text-success text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="text2 truncate">{item.provider}</div>
-                    </td>
-                    <td className="py-2">
-                      <div className="flex items-center justify-end">
-                        <CashflowItemMenu
-                          itemId={item.id}
-                          itemType="inflow"
-                          onEdit={() => onEditItem(item.id)}
-                          onRemove={() => onRemoveItem(item.id)}
-                        />
-          </div>
+                {groupItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.525rem] md:text-xs">
+                      No items yet. Click "Add Item" to get started.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  groupItems.map((item) => (
+                    <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
+                      <td className="py-2">
+                        <div className="text2 truncate">{item.item}</div>
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="text-success text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="text2 truncate">{item.provider}</div>
+                      </td>
+                      <td className="py-2">
+                        <div className="flex items-center justify-end">
+                          <CashflowItemMenu
+                            itemId={item.id}
+                            itemType="inflow"
+                            onEdit={() => onEditItem(item.id)}
+                            onRemove={() => onRemoveItem(item.id)}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -470,29 +439,37 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
                 </tr>
               </thead>
               <tbody>
-                {groupItems.map((item) => (
-                  <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
-                    <td className="py-2">
-                      <div className="text2 truncate">{item.item}</div>
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="text-danger text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="text2 truncate">{item.receiver}</div>
-                    </td>
-                    <td className="py-2">
-                      <div className="flex items-center justify-end">
-                        <CashflowItemMenu
-                          itemId={item.id}
-                          itemType="outflow"
-                          onEdit={() => onEditItem(item.id)}
-                          onRemove={() => onRemoveItem(item.id)}
-                        />
-          </div>
+                {groupItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.525rem] md:text-xs">
+                      No items yet. Click "Add Item" to get started.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  groupItems.map((item) => (
+                    <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
+                      <td className="py-2">
+                        <div className="text2 truncate">{item.item}</div>
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="text-danger text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="text2 truncate">{item.receiver}</div>
+                      </td>
+                      <td className="py-2">
+                        <div className="flex items-center justify-end">
+                          <CashflowItemMenu
+                            itemId={item.id}
+                            itemType="outflow"
+                            onEdit={() => onEditItem(item.id)}
+                            onRemove={() => onRemoveItem(item.id)}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1745,10 +1722,33 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
 function Cashflow() {
   const { baseCurrency, convert } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
-  const [inflowItems, setInflowItems] = useState<InflowItem[]>(mockInflowItems)
-  const [outflowItems, setOutflowItems] = useState<OutflowItem[]>(mockOutflowItems)
-  const [accountflowItems, setAccountflowItems] = useState<AccountflowItem[]>(mockAccountflowItems)
-  const [accountflowMappings, setAccountflowMappings] = useState<AccountflowMapping[]>([])
+  
+  // Load data from localStorage on mount
+  const [inflowItems, setInflowItems] = useState<InflowItem[]>(() => 
+    loadCashflowInflowItems(mockInflowItems)
+  )
+  const [outflowItems, setOutflowItems] = useState<OutflowItem[]>(() => 
+    loadCashflowOutflowItems(mockOutflowItems)
+  )
+  const [accountflowItems, setAccountflowItems] = useState<AccountflowItem[]>(() => 
+    mockAccountflowItems // Accountflow items are not used anymore, but keeping for compatibility
+  )
+  const [accountflowMappings, setAccountflowMappings] = useState<AccountflowMapping[]>(() => 
+    loadCashflowAccountflowMappings([])
+  )
+
+  // Save to localStorage whenever data changes
+  useEffect(() => {
+    saveCashflowInflowItems(inflowItems)
+  }, [inflowItems])
+
+  useEffect(() => {
+    saveCashflowOutflowItems(outflowItems)
+  }, [outflowItems])
+
+  useEffect(() => {
+    saveCashflowAccountflowMappings(accountflowMappings)
+  }, [accountflowMappings])
 
   const handleAddInflowItem = (group: InflowGroupName, data: { item: string; amountChf: number; currency: string; provider: string }) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `inflow-${Date.now()}`

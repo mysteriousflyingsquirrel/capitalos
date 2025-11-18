@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   LineChart,
   Line,
@@ -19,6 +19,20 @@ import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { formatMoney } from '../lib/currency'
 import type { CurrencyCode } from '../lib/currency'
+import {
+  loadNetWorthItems,
+  loadNetWorthTransactions,
+  loadCashflowInflowItems,
+  loadCashflowOutflowItems,
+} from '../services/storageService'
+import {
+  loadSnapshots,
+  takeSnapshotForCurrentMonthIfNeeded,
+} from '../services/snapshotService'
+import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
+import type { NetWorthCategory } from './NetWorth'
+import { calculateBalanceChf } from './NetWorth'
+import type { InflowItem, OutflowItem } from './Cashflow'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -53,162 +67,22 @@ interface KpiCardProps {
 }
 
 
-// Mock data configuration - YTD (Year to Date)
-const netWorthDataYTD: NetWorthDataPoint[] = [
-  { 
-    month: 'Jan', 
-    'Total Net Worth': 140000,
-    'Cash': 750,
-    'Bank Accounts': 25000,
-    'Funds': 40000,
-    'Stocks': 20000,
-    'Commodities': 7000,
-    'Crypto': 60000,
-    'Real Estate': 450000,
-    'Inventory': 8000
-  },
-  { 
-    month: 'Feb', 
-    'Total Net Worth': 145000,
-    'Cash': 800,
-    'Bank Accounts': 26000,
-    'Funds': 42000,
-    'Stocks': 21000,
-    'Commodities': 7200,
-    'Crypto': 65000,
-    'Real Estate': 450000,
-    'Inventory': 8000
-  },
-  { 
-    month: 'Mar', 
-    'Total Net Worth': 150000,
-    'Cash': 850,
-    'Bank Accounts': 27000,
-    'Funds': 44000,
-    'Stocks': 22000,
-    'Commodities': 7400,
-    'Crypto': 70000,
-    'Real Estate': 450000,
-    'Inventory': 8000
-  },
-  { 
-    month: 'Apr', 
-    'Total Net Worth': 160000,
-    'Cash': 900,
-    'Bank Accounts': 28000,
-    'Funds': 46000,
-    'Stocks': 23000,
-    'Commodities': 7600,
-    'Crypto': 75000,
-    'Real Estate': 450000,
-    'Inventory': 8000
-  },
-  { 
-    month: 'May', 
-    'Total Net Worth': 170000,
-    'Cash': 950,
-    'Bank Accounts': 29000,
-    'Funds': 48000,
-    'Stocks': 24000,
-    'Commodities': 7800,
-    'Crypto': 80000,
-    'Real Estate': 450000,
-    'Inventory': 8000
-  },
-  { 
-    month: 'Jun', 
-    'Total Net Worth': 180000,
-    'Cash': 1000,
-    'Bank Accounts': 30000,
-    'Funds': 50000,
-    'Stocks': 25000,
-    'Commodities': 8000,
-    'Crypto': 85000,
-    'Real Estate': 450000,
-    'Inventory': 8000
-  },
-]
+// Empty data - user will add their own data
+const netWorthDataYTD: NetWorthDataPoint[] = []
+const netWorthData1Year: NetWorthDataPoint[] = []
+const netWorthData5Year: NetWorthDataPoint[] = []
+const netWorthDataMax: NetWorthDataPoint[] = []
 
-// 1 Year data (monthly for 12 months)
-const netWorthData1Year: NetWorthDataPoint[] = [
-  { month: 'Jul 2023', 'Total Net Worth': 120000, 'Cash': 600, 'Bank Accounts': 20000, 'Funds': 30000, 'Stocks': 15000, 'Commodities': 5000, 'Crypto': 50000, 'Real Estate': 450000, 'Inventory': 7000 },
-  { month: 'Aug 2023', 'Total Net Worth': 125000, 'Cash': 650, 'Bank Accounts': 21000, 'Funds': 32000, 'Stocks': 16000, 'Commodities': 5500, 'Crypto': 52000, 'Real Estate': 450000, 'Inventory': 7200 },
-  { month: 'Sep 2023', 'Total Net Worth': 128000, 'Cash': 680, 'Bank Accounts': 22000, 'Funds': 34000, 'Stocks': 17000, 'Commodities': 5800, 'Crypto': 54000, 'Real Estate': 450000, 'Inventory': 7400 },
-  { month: 'Oct 2023', 'Total Net Worth': 132000, 'Cash': 700, 'Bank Accounts': 23000, 'Funds': 36000, 'Stocks': 18000, 'Commodities': 6200, 'Crypto': 56000, 'Real Estate': 450000, 'Inventory': 7600 },
-  { month: 'Nov 2023', 'Total Net Worth': 135000, 'Cash': 720, 'Bank Accounts': 24000, 'Funds': 38000, 'Stocks': 19000, 'Commodities': 6500, 'Crypto': 58000, 'Real Estate': 450000, 'Inventory': 7800 },
-  { month: 'Dec 2023', 'Total Net Worth': 138000, 'Cash': 740, 'Bank Accounts': 24500, 'Funds': 39000, 'Stocks': 19500, 'Commodities': 6800, 'Crypto': 59000, 'Real Estate': 450000, 'Inventory': 7900 },
-  ...netWorthDataYTD,
-]
-
-// 5 Year data (quarterly for 20 quarters)
-const netWorthData5Year: NetWorthDataPoint[] = [
-  { month: 'Q1 2020', 'Total Net Worth': 80000, 'Cash': 400, 'Bank Accounts': 12000, 'Funds': 18000, 'Stocks': 8000, 'Commodities': 3000, 'Crypto': 30000, 'Real Estate': 400000, 'Inventory': 5000 },
-  { month: 'Q2 2020', 'Total Net Worth': 85000, 'Cash': 450, 'Bank Accounts': 13000, 'Funds': 20000, 'Stocks': 9000, 'Commodities': 3200, 'Crypto': 32000, 'Real Estate': 410000, 'Inventory': 5200 },
-  { month: 'Q3 2020', 'Total Net Worth': 90000, 'Cash': 500, 'Bank Accounts': 14000, 'Funds': 22000, 'Stocks': 10000, 'Commodities': 3500, 'Crypto': 35000, 'Real Estate': 420000, 'Inventory': 5500 },
-  { month: 'Q4 2020', 'Total Net Worth': 95000, 'Cash': 520, 'Bank Accounts': 15000, 'Funds': 24000, 'Stocks': 11000, 'Commodities': 3800, 'Crypto': 38000, 'Real Estate': 430000, 'Inventory': 5800 },
-  { month: 'Q1 2021', 'Total Net Worth': 100000, 'Cash': 550, 'Bank Accounts': 16000, 'Funds': 26000, 'Stocks': 12000, 'Commodities': 4000, 'Crypto': 40000, 'Real Estate': 435000, 'Inventory': 6000 },
-  { month: 'Q2 2021', 'Total Net Worth': 105000, 'Cash': 580, 'Bank Accounts': 17000, 'Funds': 28000, 'Stocks': 13000, 'Commodities': 4200, 'Crypto': 42000, 'Real Estate': 440000, 'Inventory': 6200 },
-  { month: 'Q3 2021', 'Total Net Worth': 110000, 'Cash': 600, 'Bank Accounts': 18000, 'Funds': 30000, 'Stocks': 14000, 'Commodities': 4500, 'Crypto': 45000, 'Real Estate': 442000, 'Inventory': 6500 },
-  { month: 'Q4 2021', 'Total Net Worth': 115000, 'Cash': 620, 'Bank Accounts': 19000, 'Funds': 32000, 'Stocks': 15000, 'Commodities': 4800, 'Crypto': 48000, 'Real Estate': 444000, 'Inventory': 6800 },
-  { month: 'Q1 2022', 'Total Net Worth': 118000, 'Cash': 640, 'Bank Accounts': 20000, 'Funds': 34000, 'Stocks': 16000, 'Commodities': 5000, 'Crypto': 50000, 'Real Estate': 446000, 'Inventory': 7000 },
-  { month: 'Q2 2022', 'Total Net Worth': 122000, 'Cash': 660, 'Bank Accounts': 21000, 'Funds': 35000, 'Stocks': 17000, 'Commodities': 5200, 'Crypto': 52000, 'Real Estate': 447000, 'Inventory': 7200 },
-  { month: 'Q3 2022', 'Total Net Worth': 125000, 'Cash': 680, 'Bank Accounts': 22000, 'Funds': 36000, 'Stocks': 18000, 'Commodities': 5500, 'Crypto': 54000, 'Real Estate': 448000, 'Inventory': 7400 },
-  { month: 'Q4 2022', 'Total Net Worth': 130000, 'Cash': 700, 'Bank Accounts': 23000, 'Funds': 37000, 'Stocks': 19000, 'Commodities': 5800, 'Crypto': 56000, 'Real Estate': 449000, 'Inventory': 7600 },
-  { month: 'Q1 2023', 'Total Net Worth': 133000, 'Cash': 720, 'Bank Accounts': 23500, 'Funds': 38000, 'Stocks': 19500, 'Commodities': 6000, 'Crypto': 57000, 'Real Estate': 449500, 'Inventory': 7700 },
-  { month: 'Q2 2023', 'Total Net Worth': 136000, 'Cash': 740, 'Bank Accounts': 24000, 'Funds': 38500, 'Stocks': 19700, 'Commodities': 6500, 'Crypto': 58000, 'Real Estate': 449800, 'Inventory': 7800 },
-  { month: 'Q3 2023', 'Total Net Worth': 138000, 'Cash': 760, 'Bank Accounts': 24500, 'Funds': 39000, 'Stocks': 19800, 'Commodities': 6800, 'Crypto': 59000, 'Real Estate': 450000, 'Inventory': 7900 },
-  { month: 'Q4 2023', 'Total Net Worth': 140000, 'Cash': 780, 'Bank Accounts': 25000, 'Funds': 39500, 'Stocks': 19900, 'Commodities': 6900, 'Crypto': 60000, 'Real Estate': 450000, 'Inventory': 8000 },
-  { month: 'Q1 2024', 'Total Net Worth': 145000, 'Cash': 850, 'Bank Accounts': 27000, 'Funds': 44000, 'Stocks': 22000, 'Commodities': 7400, 'Crypto': 70000, 'Real Estate': 450000, 'Inventory': 8000 },
-  { month: 'Q2 2024', 'Total Net Worth': 160000, 'Cash': 900, 'Bank Accounts': 28000, 'Funds': 46000, 'Stocks': 23000, 'Commodities': 7600, 'Crypto': 75000, 'Real Estate': 450000, 'Inventory': 8000 },
-]
-
-// Max data (yearly for 10 years)
-const netWorthDataMax: NetWorthDataPoint[] = [
-  { month: '2015', 'Total Net Worth': 50000, 'Cash': 300, 'Bank Accounts': 8000, 'Funds': 10000, 'Stocks': 5000, 'Commodities': 2000, 'Crypto': 20000, 'Real Estate': 350000, 'Inventory': 3000 },
-  { month: '2016', 'Total Net Worth': 60000, 'Cash': 350, 'Bank Accounts': 10000, 'Funds': 12000, 'Stocks': 6000, 'Commodities': 2500, 'Crypto': 25000, 'Real Estate': 370000, 'Inventory': 3500 },
-  { month: '2017', 'Total Net Worth': 70000, 'Cash': 400, 'Bank Accounts': 12000, 'Funds': 15000, 'Stocks': 7000, 'Commodities': 3000, 'Crypto': 30000, 'Real Estate': 390000, 'Inventory': 4000 },
-  { month: '2018', 'Total Net Worth': 75000, 'Cash': 450, 'Bank Accounts': 14000, 'Funds': 18000, 'Stocks': 8000, 'Commodities': 3500, 'Crypto': 32000, 'Real Estate': 400000, 'Inventory': 4500 },
-  { month: '2019', 'Total Net Worth': 78000, 'Cash': 480, 'Bank Accounts': 15000, 'Funds': 20000, 'Stocks': 9000, 'Commodities': 4000, 'Crypto': 35000, 'Real Estate': 410000, 'Inventory': 5000 },
-  { month: '2020', 'Total Net Worth': 85000, 'Cash': 500, 'Bank Accounts': 16000, 'Funds': 24000, 'Stocks': 11000, 'Commodities': 3800, 'Crypto': 38000, 'Real Estate': 430000, 'Inventory': 5800 },
-  { month: '2021', 'Total Net Worth': 105000, 'Cash': 600, 'Bank Accounts': 18000, 'Funds': 30000, 'Stocks': 14000, 'Commodities': 4500, 'Crypto': 45000, 'Real Estate': 442000, 'Inventory': 6500 },
-  { month: '2022', 'Total Net Worth': 125000, 'Cash': 680, 'Bank Accounts': 22000, 'Funds': 36000, 'Stocks': 18000, 'Commodities': 5500, 'Crypto': 54000, 'Real Estate': 448000, 'Inventory': 7400 },
-  { month: '2023', 'Total Net Worth': 138000, 'Cash': 740, 'Bank Accounts': 24500, 'Funds': 39000, 'Stocks': 19800, 'Commodities': 6800, 'Crypto': 59000, 'Real Estate': 450000, 'Inventory': 7900 },
-  { month: '2024', 'Total Net Worth': 180000, 'Cash': 1000, 'Bank Accounts': 30000, 'Funds': 50000, 'Stocks': 25000, 'Commodities': 8000, 'Crypto': 85000, 'Real Estate': 450000, 'Inventory': 8000 },
-]
-
-const assetAllocationData: AssetAllocationItem[] = [
-  { name: 'Crypto', value: 70 },
-  { name: 'Cash', value: 10 },
-  { name: 'Funds', value: 20 },
-]
-
-const inflowBreakdownData: AssetAllocationItem[] = [
-  { name: 'Time', value: 80 },
-  { name: 'Service', value: 10 },
-  { name: 'Worker Bees', value: 10 },
-]
-
-const outflowBreakdownData: AssetAllocationItem[] = [
-  { name: 'Fix', value: 70 },
-  { name: 'Variables', value: 10 },
-  { name: 'Shared Variables', value: 5 },
-  { name: 'Investments', value: 15 },
-]
-
-const cashflowData: CashflowDataPoint[] = [
-  { month: 'Jan', inflow: 8000, outflow: 4500, spare: 3500 },
-  { month: 'Feb', inflow: 8200, outflow: 4600, spare: 3600 },
-  { month: 'Mar', inflow: 7900, outflow: 4300, spare: 3600 },
-  { month: 'Apr', inflow: 8500, outflow: 4800, spare: 3700 },
-  { month: 'May', inflow: 8800, outflow: 4900, spare: 3900 },
-  { month: 'Jun', inflow: 9000, outflow: 5000, spare: 4000 },
-]
+const assetAllocationData: AssetAllocationItem[] = []
+const inflowBreakdownData: AssetAllocationItem[] = []
+const outflowBreakdownData: AssetAllocationItem[] = []
+const cashflowData: CashflowDataPoint[] = []
 
 // KPI values
-const totalNetWorth = 180000
-const monthlyInflow = 8000
-const monthlyOutflow = 4500
-const monthlySpareChange = 3500
+const totalNetWorth = 0
+const monthlyInflow = 0
+const monthlyOutflow = 0
+const monthlySpareChange = 0
 
 // Color palette for charts (muted, premium colors)
 const CHART_COLORS = {
@@ -265,10 +139,58 @@ function Dashboard() {
   const [timeFrame, setTimeFrame] = useState<'YTD' | '1Year' | '5Year' | 'Max'>('Max')
   const { baseCurrency, convert } = useCurrency()
 
+  // Load data from localStorage
+  const netWorthItems = useMemo(() => loadNetWorthItems([]), [])
+  const transactions = useMemo(() => loadNetWorthTransactions([]), [])
+  const inflowItems = useMemo(() => loadCashflowInflowItems([]), [])
+  const outflowItems = useMemo(() => loadCashflowOutflowItems([]), [])
+
+  // Load historical snapshots and check if we need to take a snapshot for current month
+  const [snapshots, setSnapshots] = useState(() => {
+    const loaded = loadSnapshots()
+    // Check if we should take a snapshot for the current month (on component mount)
+    const newSnapshot = takeSnapshotForCurrentMonthIfNeeded(netWorthItems, transactions)
+    if (newSnapshot) {
+      return [...loaded, newSnapshot].sort((a, b) => a.timestamp - b.timestamp)
+    }
+    return loaded
+  })
+
+  // Update snapshots when net worth items or transactions change
+  // Check if we need to take a snapshot for the current month
+  useEffect(() => {
+    const newSnapshot = takeSnapshotForCurrentMonthIfNeeded(netWorthItems, transactions)
+    if (newSnapshot) {
+      setSnapshots(prev => {
+        // Check if we already have this snapshot
+        if (prev.some(s => s.date === newSnapshot.date)) {
+          return prev
+        }
+        return [...prev, newSnapshot].sort((a, b) => a.timestamp - b.timestamp)
+      })
+    }
+  }, [netWorthItems, transactions])
+
+  // Calculate total net worth from actual data
+  const totalNetWorthChf = useMemo(() => {
+    return netWorthItems.reduce((sum, item) => sum + calculateBalanceChf(item.id, transactions), 0)
+  }, [netWorthItems, transactions])
+
+  // Calculate monthly inflow/outflow from cashflow items
+  const monthlyInflowChf = useMemo(() => {
+    return inflowItems.reduce((sum, item) => sum + item.amountChf, 0)
+  }, [inflowItems])
+
+  const monthlyOutflowChf = useMemo(() => {
+    return outflowItems.reduce((sum, item) => sum + item.amountChf, 0)
+  }, [outflowItems])
+
+  const monthlySpareChangeChf = monthlyInflowChf - monthlyOutflowChf
+
   // Convert values from CHF to baseCurrency
-  const totalNetWorthConverted = convert(totalNetWorth, 'CHF')
-  const monthlyInflowConverted = convert(monthlyInflow, 'CHF')
-  const monthlyOutflowConverted = convert(monthlyOutflow, 'CHF')
+  const totalNetWorthConverted = convert(totalNetWorthChf, 'CHF')
+  const monthlyInflowConverted = convert(monthlyInflowChf, 'CHF')
+  const monthlyOutflowConverted = convert(monthlyOutflowChf, 'CHF')
 
   // Format currency helper
   const formatCurrencyValue = (value: number) => formatMoney(value, baseCurrency, 'ch')
@@ -282,46 +204,130 @@ function Dashboard() {
     return converted.toString()
   }
 
-  const getNetWorthData = () => {
-    const data = (() => {
-      switch (timeFrame) {
-        case 'YTD':
-          return netWorthDataYTD
-        case '1Year':
-          return netWorthData1Year
-        case '5Year':
-          return netWorthData5Year
-        case 'Max':
-          return netWorthDataMax
-        default:
-          return netWorthDataYTD
+  // Calculate asset allocation from net worth items
+  const assetAllocationData = useMemo(() => {
+    const categoryTotals: Record<NetWorthCategory, number> = {
+      'Cash': 0,
+      'Bank Accounts': 0,
+      'Funds': 0,
+      'Stocks': 0,
+      'Commodities': 0,
+      'Crypto': 0,
+      'Real Estate': 0,
+      'Inventory': 0,
+    }
+
+    netWorthItems.forEach(item => {
+      const balance = calculateBalanceChf(item.id, transactions)
+      categoryTotals[item.category] += balance
+    })
+
+    const total = Object.values(categoryTotals).reduce((sum, val) => sum + val, 0)
+    if (total === 0) return []
+
+    return Object.entries(categoryTotals)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value]) => ({
+        name,
+        value: Math.round((value / total) * 100),
+      }))
+  }, [netWorthItems, transactions])
+
+  // Calculate inflow breakdown
+  const inflowBreakdownData = useMemo(() => {
+    const groupTotals: Record<string, number> = {}
+    inflowItems.forEach(item => {
+      groupTotals[item.group] = (groupTotals[item.group] || 0) + item.amountChf
+    })
+
+    const total = Object.values(groupTotals).reduce((sum, val) => sum + val, 0)
+    if (total === 0) return []
+
+    return Object.entries(groupTotals).map(([name, value]) => ({
+      name,
+      value: Math.round((value / total) * 100),
+    }))
+  }, [inflowItems])
+
+  // Calculate outflow breakdown
+  const outflowBreakdownData = useMemo(() => {
+    const groupTotals: Record<string, number> = {}
+    outflowItems.forEach(item => {
+      groupTotals[item.group] = (groupTotals[item.group] || 0) + item.amountChf
+    })
+
+    const total = Object.values(groupTotals).reduce((sum, val) => sum + val, 0)
+    if (total === 0) return []
+
+    return Object.entries(groupTotals).map(([name, value]) => ({
+      name,
+      value: Math.round((value / total) * 100),
+    }))
+  }, [outflowItems])
+
+  // Generate net worth evolution data from historical snapshots + current value
+  const netWorthData = useMemo(() => {
+    // Calculate cutoff date based on timeframe
+    const now = new Date()
+    let cutoffDate: Date | null = null
+
+    switch (timeFrame) {
+      case 'YTD':
+        // Year to date: from January 1st of current year
+        cutoffDate = new Date(now.getFullYear(), 0, 1)
+        break
+      case '1Year':
+        // Last 12 months
+        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate())
+        break
+      case '5Year':
+        // Last 5 years
+        cutoffDate = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
+        break
+      case 'Max':
+      default:
+        // All data (no cutoff)
+        cutoffDate = null
+        break
+    }
+
+    // Filter snapshots based on timeframe
+    const filteredSnapshots = cutoffDate
+      ? snapshots.filter(snapshot => new Date(snapshot.date) >= cutoffDate)
+      : snapshots
+
+    // Convert snapshots to chart data format
+    // Only show snapshot data, not current state
+    const chartData = filteredSnapshots.map(snapshot => {
+      const date = new Date(snapshot.date)
+      const month = date.toLocaleString('en-US', { month: 'short', year: 'numeric' })
+      
+      return {
+        month,
+        'Total Net Worth': convert(snapshot.total, 'CHF'),
+        'Cash': convert(snapshot.categories['Cash'], 'CHF'),
+        'Bank Accounts': convert(snapshot.categories['Bank Accounts'], 'CHF'),
+        'Funds': convert(snapshot.categories['Funds'], 'CHF'),
+        'Stocks': convert(snapshot.categories['Stocks'], 'CHF'),
+        'Commodities': convert(snapshot.categories['Commodities'], 'CHF'),
+        'Crypto': convert(snapshot.categories['Crypto'], 'CHF'),
+        'Real Estate': convert(snapshot.categories['Real Estate'], 'CHF'),
+        'Inventory': convert(snapshot.categories['Inventory'], 'CHF'),
       }
-    })()
+    })
 
-    // Convert all values in the data to baseCurrency
-    return data.map(point => ({
-      ...point,
-      'Total Net Worth': convert(point['Total Net Worth'], 'CHF'),
-      'Cash': convert(point['Cash'], 'CHF'),
-      'Bank Accounts': convert(point['Bank Accounts'], 'CHF'),
-      'Funds': convert(point['Funds'], 'CHF'),
-      'Stocks': convert(point['Stocks'], 'CHF'),
-      'Commodities': convert(point['Commodities'], 'CHF'),
-      'Crypto': convert(point['Crypto'], 'CHF'),
-      'Real Estate': convert(point['Real Estate'], 'CHF'),
-      'Inventory': convert(point['Inventory'], 'CHF'),
-    }))
-  }
+    return chartData
+  }, [snapshots, convert, timeFrame])
 
-  // Convert cashflow data
-  const getCashflowData = () => {
-    return cashflowData.map(point => ({
-      ...point,
-      inflow: convert(point.inflow, 'CHF'),
-      outflow: convert(point.outflow, 'CHF'),
-      spare: convert(point.spare, 'CHF'),
-    }))
-  }
+  // Generate cashflow data (currently just current month)
+  const cashflowData = useMemo(() => {
+    return [{
+      month: new Date().toLocaleString('en-US', { month: 'short' }),
+      inflow: monthlyInflowConverted,
+      outflow: monthlyOutflowConverted,
+      spare: convert(monthlySpareChangeChf, 'CHF'),
+    }]
+  }, [monthlyInflowConverted, monthlyOutflowConverted, monthlySpareChangeChf, convert])
 
   return (
     <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
@@ -374,7 +380,7 @@ function Dashboard() {
             </select>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={getNetWorthData()}>
+            <LineChart data={netWorthData}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke={CHART_COLORS.muted1}
@@ -383,11 +389,11 @@ function Dashboard() {
               <XAxis
                 dataKey="month"
                 stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1 }}
+                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.60rem' }}
               />
               <YAxis
                 stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1 }}
+                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.60rem' }}
                 tickFormatter={formatCurrencyTick}
               />
               <Tooltip
@@ -411,72 +417,72 @@ function Dashboard() {
                 dataKey="Total Net Worth"
                 stroke={CHART_COLORS.gold}
                 strokeWidth={3}
-                dot={{ fill: CHART_COLORS.gold, r: 4 }}
-                activeDot={{ r: 6 }}
+                dot={false}
+                activeDot={false}
               />
               <Line
                 type="monotone"
                 dataKey="Cash"
                 stroke={CHART_COLORS.accent1}
                 strokeWidth={2}
-                dot={{ fill: CHART_COLORS.accent1, r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={false}
+                activeDot={false}
               />
               <Line
                 type="monotone"
                 dataKey="Bank Accounts"
                 stroke={CHART_COLORS.accent2}
                 strokeWidth={2}
-                dot={{ fill: CHART_COLORS.accent2, r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={false}
+                activeDot={false}
               />
               <Line
                 type="monotone"
                 dataKey="Funds"
                 stroke={CHART_COLORS.accent3}
                 strokeWidth={2}
-                dot={{ fill: CHART_COLORS.accent3, r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={false}
+                activeDot={false}
               />
               <Line
                 type="monotone"
                 dataKey="Stocks"
                 stroke={CHART_COLORS.success}
                 strokeWidth={2}
-                dot={{ fill: CHART_COLORS.success, r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={false}
+                activeDot={false}
               />
               <Line
                 type="monotone"
                 dataKey="Commodities"
                 stroke={CHART_COLORS.bronze}
                 strokeWidth={2}
-                dot={{ fill: CHART_COLORS.bronze, r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={false}
+                activeDot={false}
               />
               <Line
                 type="monotone"
                 dataKey="Crypto"
                 stroke="#F8C445"
                 strokeWidth={2}
-                dot={{ fill: '#F8C445', r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={false}
+                activeDot={false}
               />
               <Line
                 type="monotone"
                 dataKey="Real Estate"
                 stroke="#4A56FF"
                 strokeWidth={2}
-                dot={{ fill: '#4A56FF', r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={false}
+                activeDot={false}
               />
               <Line
                 type="monotone"
                 dataKey="Inventory"
                 stroke={CHART_COLORS.muted1}
                 strokeWidth={2}
-                dot={{ fill: CHART_COLORS.muted1, r: 3 }}
-                activeDot={{ r: 5 }}
+                dot={false}
+                activeDot={false}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -635,7 +641,7 @@ function Dashboard() {
             Monthly Cashflow
           </Heading>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={getCashflowData()}>
+            <BarChart data={cashflowData}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke={CHART_COLORS.muted1}
@@ -644,11 +650,11 @@ function Dashboard() {
               <XAxis
                 dataKey="month"
                 stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1 }}
+                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.60rem' }}
               />
               <YAxis
                 stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1 }}
+                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.60rem' }}
                 tickFormatter={formatCurrencyTick}
               />
               <Tooltip

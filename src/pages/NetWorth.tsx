@@ -4,6 +4,12 @@ import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { formatMoney } from '../lib/currency'
 import type { CurrencyCode } from '../lib/currency'
+import {
+  saveNetWorthItems,
+  loadNetWorthItems,
+  saveNetWorthTransactions,
+  loadNetWorthTransactions,
+} from '../services/storageService'
 
 // TypeScript types
 type NetWorthCategory =
@@ -36,47 +42,9 @@ export interface NetWorthTransaction {
   date: string
 }
 
-// Mock data - items without balanceChf
-const mockNetWorthItems: NetWorthItem[] = [
-  { id: '1', name: 'Wallet', currency: 'CHF', platform: 'Physical', category: 'Cash' },
-  { id: '2', name: 'Emergency Cash', currency: 'CHF', platform: 'Physical', category: 'Cash' },
-  { id: '3', name: 'Main Account', currency: 'CHF', platform: 'Raiffeisen', category: 'Bank Accounts' },
-  { id: '4', name: 'Savings Account', currency: 'CHF', platform: 'Raiffeisen', category: 'Bank Accounts' },
-  { id: '5', name: 'Business Account', currency: 'CHF', platform: 'UBS', category: 'Bank Accounts' },
-  { id: '6', name: 'Swiss Equity Fund', currency: 'CHF', platform: 'Saxo', category: 'Funds' },
-  { id: '7', name: 'Global Index Fund', currency: 'CHF', platform: 'IBKR', category: 'Funds' },
-  { id: '8', name: 'Apple Inc.', currency: 'CHF', platform: 'IBKR', category: 'Stocks' },
-  { id: '9', name: 'Nestlé SA', currency: 'CHF', platform: 'Saxo', category: 'Stocks' },
-  { id: '10', name: 'Gold', currency: 'CHF', platform: 'Physical', category: 'Commodities' },
-  { id: '11', name: 'Silver', currency: 'CHF', platform: 'Physical', category: 'Commodities' },
-  { id: '12', name: 'BTC', currency: 'BTC', platform: 'Trezor', category: 'Crypto' },
-  { id: '13', name: 'ETH', currency: 'ETH', platform: 'Trezor', category: 'Crypto' },
-  { id: '14', name: 'USDC', currency: 'USD', platform: 'Ledger', category: 'Crypto' },
-  { id: '15', name: 'Apartment Zurich', currency: 'CHF', platform: 'Property', category: 'Real Estate' },
-  { id: '16', name: 'Electronics', currency: 'CHF', platform: 'Physical', category: 'Inventory' },
-  { id: '17', name: 'Furniture', currency: 'CHF', platform: 'Physical', category: 'Inventory' },
-]
-
-// Initial mock transactions to match existing balances
-const initialMockTransactions: NetWorthTransaction[] = [
-  { id: 'tx1', itemId: '1', side: 'buy', currency: 'CHF', amount: 250, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx2', itemId: '2', side: 'buy', currency: 'CHF', amount: 500, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx3', itemId: '3', side: 'buy', currency: 'CHF', amount: 12000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx4', itemId: '4', side: 'buy', currency: 'CHF', amount: 5000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx5', itemId: '5', side: 'buy', currency: 'CHF', amount: 8000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx6', itemId: '6', side: 'buy', currency: 'CHF', amount: 25000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx7', itemId: '7', side: 'buy', currency: 'CHF', amount: 15000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx8', itemId: '8', side: 'buy', currency: 'CHF', amount: 12000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx9', itemId: '9', side: 'buy', currency: 'CHF', amount: 8000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx10', itemId: '10', side: 'buy', currency: 'CHF', amount: 5000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx11', itemId: '11', side: 'buy', currency: 'CHF', amount: 2000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx12', itemId: '12', side: 'buy', currency: 'BTC', amount: 1, pricePerItemChf: 40000, date: '2025-01-01' },
-  { id: 'tx13', itemId: '13', side: 'buy', currency: 'ETH', amount: 10, pricePerItemChf: 1500, date: '2025-01-01' },
-  { id: 'tx14', itemId: '14', side: 'buy', currency: 'USD', amount: 5000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx15', itemId: '15', side: 'buy', currency: 'CHF', amount: 450000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx16', itemId: '16', side: 'buy', currency: 'CHF', amount: 3000, pricePerItemChf: 1, date: '2025-01-01' },
-  { id: 'tx17', itemId: '17', side: 'buy', currency: 'CHF', amount: 5000, pricePerItemChf: 1, date: '2025-01-01' },
-]
+// Empty data - user will add their own data
+const mockNetWorthItems: NetWorthItem[] = []
+const initialMockTransactions: NetWorthTransaction[] = []
 
 // Category order
 const categoryOrder: NetWorthCategory[] = [
@@ -94,7 +62,7 @@ const categoryOrder: NetWorthCategory[] = [
 // formatChf will be replaced with currency-aware formatting in the component
 
 // Helper function to calculate balance from transactions
-const calculateBalanceChf = (itemId: string, transactions: NetWorthTransaction[]): number => {
+export function calculateBalanceChf(itemId: string, transactions: NetWorthTransaction[]): number {
   return transactions
     .filter(tx => tx.itemId === itemId)
     .reduce((sum, tx) => sum + (tx.side === 'buy' ? 1 : -1) * tx.amount * tx.pricePerItemChf, 0)
@@ -188,46 +156,54 @@ function NetWorthCategorySection({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => {
-                const balanceChf = calculateBalanceChf(item.id, transactions)
-                const balanceConverted = convert(balanceChf, 'CHF')
-                return (
-                  <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
-                    <td className="py-2">
-                      <div className="text2 truncate">{item.name}</div>
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="text2 whitespace-nowrap">
-                        {formatCurrency(balanceConverted)}
-                      </div>
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="text2 truncate">
-                        {item.platform}
-                      </div>
-                    </td>
-                    <td className="py-2">
-                      <div className="flex items-center justify-end -space-x-1">
-                        <button
-                          onClick={() => onAddTransaction(item.id)}
-                          className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
-                          title="Add Transaction"
-                        >
-                          <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        </button>
-                        <ItemMenu
-                          itemId={item.id}
-                          onShowMenu={onShowMenu}
-                          onRemoveItem={onRemoveItem}
-                          onShowTransactions={onShowTransactions}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
+              {items.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-4 text-center text-text-muted text-[0.525rem] md:text-xs">
+                    No items yet. Click "Add Item" to get started.
+                  </td>
+                </tr>
+              ) : (
+                items.map((item) => {
+                  const balanceChf = calculateBalanceChf(item.id, transactions)
+                  const balanceConverted = convert(balanceChf, 'CHF')
+                  return (
+                    <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
+                      <td className="py-2">
+                        <div className="text2 truncate">{item.name}</div>
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="text2 whitespace-nowrap">
+                          {formatCurrency(balanceConverted)}
+                        </div>
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="text2 truncate">
+                          {item.platform}
+                        </div>
+                      </td>
+                      <td className="py-2">
+                        <div className="flex items-center justify-end -space-x-1">
+                          <button
+                            onClick={() => onAddTransaction(item.id)}
+                            className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
+                            title="Add Transaction"
+                          >
+                            <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                          <ItemMenu
+                            itemId={item.id}
+                            onShowMenu={onShowMenu}
+                            onRemoveItem={onRemoveItem}
+                            onShowTransactions={onShowTransactions}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -270,8 +246,22 @@ function NetWorth() {
   const { baseCurrency, convert } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   
-  const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>(mockNetWorthItems)
-  const [transactions, setTransactions] = useState<NetWorthTransaction[]>(initialMockTransactions)
+  // Load data from localStorage on mount
+  const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>(() => 
+    loadNetWorthItems(mockNetWorthItems)
+  )
+  const [transactions, setTransactions] = useState<NetWorthTransaction[]>(() => 
+    loadNetWorthTransactions(initialMockTransactions)
+  )
+
+  // Save to localStorage whenever data changes
+  useEffect(() => {
+    saveNetWorthItems(netWorthItems)
+  }, [netWorthItems])
+
+  useEffect(() => {
+    saveNetWorthTransactions(transactions)
+  }, [transactions])
   const [activeCategory, setActiveCategory] = useState<NetWorthCategory | null>(null)
   const [transactionItemId, setTransactionItemId] = useState<string | null>(null)
   const [showTransactionsItemId, setShowTransactionsItemId] = useState<string | null>(null)
@@ -400,7 +390,6 @@ function NetWorth() {
         <div className="space-y-4">
           {categoryOrder.map((category) => {
             const items = groupedItems[category] || []
-            if (items.length === 0) return null
 
             return (
               <NetWorthCategorySection
