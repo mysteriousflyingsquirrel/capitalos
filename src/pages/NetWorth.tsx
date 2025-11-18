@@ -109,7 +109,7 @@ function NetWorthCategorySection({
           </div>
           <button
             onClick={onAddClick}
-            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
+            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.63rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
           >
             <svg
               className="w-4 h-4 transition-transform group-hover:rotate-90"
@@ -158,7 +158,7 @@ function NetWorthCategorySection({
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-text-muted text-[0.525rem] md:text-xs">
+                  <td colSpan={4} className="py-4 text-center text-text-muted text-[0.63rem] md:text-xs">
                     No items yet. Click "Add Item" to get started.
                   </td>
                 </tr>
@@ -443,13 +443,13 @@ function NetWorth() {
           >
             <button
               onClick={() => handleShowTransactions(menuOpenItemId)}
-              className="w-full text-left px-4 py-2 text-text-primary text-[0.525rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+              className="w-full text-left px-4 py-2 text-text-primary text-[0.63rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
             >
               Show Transactions
             </button>
             <button
               onClick={() => handleRemoveItem(menuOpenItemId)}
-              className="w-full text-left px-4 py-2 text-danger text-[0.525rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+              className="w-full text-left px-4 py-2 text-danger text-[0.63rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
             >
               Remove
             </button>
@@ -505,14 +505,14 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
         </Heading>
 
         {error && (
-          <div className="mb-3 text-[0.525rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+          <div className="mb-3 text-[0.63rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
               Category
             </label>
             <div className="text-text-primary text-xs md:text-sm">{category}</div>
@@ -520,7 +520,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
 
           <div>
             <label
-              className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
+              className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
               htmlFor="nw-item-name"
             >
               Item
@@ -538,7 +538,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label
-                className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
+                className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
                 htmlFor="nw-currency"
               >
                 Currency
@@ -558,7 +558,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
             </div>
             <div>
               <label
-                className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
+                className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
                 htmlFor="nw-platform"
               >
                 Platform
@@ -590,13 +590,13 @@ function AddNetWorthItemModal({ category, onClose, onSubmit }: AddNetWorthItemMo
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
               Add Item
             </button>
@@ -681,7 +681,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
           <button
             type="button"
             onClick={() => setActiveTab('buy')}
-            className={`px-4 py-2 text-[0.525rem] md:text-xs font-medium transition-colors ${
+            className={`px-4 py-2 text-[0.63rem] md:text-xs font-medium transition-colors ${
               activeTab === 'buy'
                 ? 'text-highlight-yellow border-b-2 border-highlight-yellow'
                 : 'text-text-secondary hover:text-text-primary'
@@ -692,7 +692,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
           <button
             type="button"
             onClick={() => setActiveTab('sell')}
-            className={`px-4 py-2 text-[0.525rem] md:text-xs font-medium transition-colors ${
+            className={`px-4 py-2 text-[0.63rem] md:text-xs font-medium transition-colors ${
               activeTab === 'sell'
                 ? 'text-highlight-yellow border-b-2 border-highlight-yellow'
                 : 'text-text-secondary hover:text-text-primary'
@@ -703,20 +703,20 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
         </div>
 
         {error && (
-          <div className="mb-3 text-[0.525rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+          <div className="mb-3 text-[0.63rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
             {error}
           </div>
         )}
 
         {/* Read-only item info */}
         <div className="mb-4 p-3 bg-bg-surface-2 rounded-input space-y-1">
-          <div className="text-text-secondary text-[0.525rem] md:text-xs">
+          <div className="text-text-secondary text-[0.63rem] md:text-xs">
             <span className="font-medium">Item:</span> {item.name}
           </div>
-          <div className="text-text-secondary text-[0.525rem] md:text-xs">
+          <div className="text-text-secondary text-[0.63rem] md:text-xs">
             <span className="font-medium">Category:</span> {item.category}
           </div>
-          <div className="text-text-secondary text-[0.525rem] md:text-xs">
+          <div className="text-text-secondary text-[0.63rem] md:text-xs">
             <span className="font-medium">Platform:</span> {item.platform}
           </div>
         </div>
@@ -724,7 +724,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
-              className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
+              className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
               htmlFor="tx-amount"
             >
               Amount
@@ -743,7 +743,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
 
           <div>
             <label
-              className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
+              className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
               htmlFor="tx-price"
             >
               Price per item (CHF)
@@ -761,7 +761,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
           </div>
 
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
               {activeTab === 'buy' ? 'Total spent' : 'Total sold'} (CHF)
             </label>
             <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm">
@@ -771,7 +771,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
 
           <div>
             <label
-              className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1"
+              className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
               htmlFor="tx-date"
             >
               Date
@@ -789,13 +789,13 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
               {activeTab === 'buy' ? 'Buy' : 'Sell'}
             </button>
@@ -830,13 +830,13 @@ function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactions
 
         {/* Balance */}
         <div className="mb-6 p-4 bg-bg-surface-2 rounded-input">
-          <div className="text-text-secondary text-[0.525rem] md:text-xs mb-1">Balance</div>
+          <div className="text-text-secondary text-[0.63rem] md:text-xs mb-1">Balance</div>
           <TotalText variant="neutral">{formatCurrency(balanceConverted)}</TotalText>
         </div>
 
         {/* Transactions Table */}
         {sortedTransactions.length === 0 ? (
-          <div className="text-text-secondary text-[0.525rem] md:text-xs text-center py-8">
+          <div className="text-text-secondary text-[0.63rem] md:text-xs text-center py-8">
             No transactions found.
           </div>
         ) : (
@@ -886,7 +886,7 @@ function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactions
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+            className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
           >
             Close
           </button>

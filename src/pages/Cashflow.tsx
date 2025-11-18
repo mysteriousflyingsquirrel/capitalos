@@ -205,7 +205,7 @@ function GroupedList<T extends Record<string, any>>({
             {renderHeader && renderHeader()}
             <div className="space-y-2">
               {groupItems.length === 0 ? (
-                <div className="text-center text-text-muted text-[0.525rem] md:text-xs py-4">
+                <div className="text-center text-text-muted text-[0.63rem] md:text-xs py-4">
                   No items yet. Click "Add Item" to get started.
                 </div>
               ) : (
@@ -259,7 +259,7 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
               </div>
               <button
                   onClick={() => setAddItemGroup(groupName as InflowGroupName)}
-                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.63rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
               >
                 <svg
                   className="w-4 h-4 transition-transform group-hover:rotate-90"
@@ -307,7 +307,7 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
               <tbody>
                 {groupItems.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.525rem] md:text-xs">
+                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.63rem] md:text-xs">
                       No items yet. Click "Add Item" to get started.
                     </td>
                   </tr>
@@ -393,7 +393,7 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
               </div>
               <button
                   onClick={() => setAddItemGroup(groupName as OutflowGroupName)}
-                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.63rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
               >
                 <svg
                   className="w-4 h-4 transition-transform group-hover:rotate-90"
@@ -441,7 +441,7 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
               <tbody>
                 {groupItems.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.525rem] md:text-xs">
+                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.63rem] md:text-xs">
                       No items yet. Click "Add Item" to get started.
                     </td>
                   </tr>
@@ -560,7 +560,7 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
         <div className="mb-6 pb-4 border-b border-border-strong">
           <button
             onClick={() => setShowAddMappingModal(true)}
-            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.525rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.63rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
           >
             <svg
               className="w-4 h-4 transition-transform group-hover:rotate-90"
@@ -624,7 +624,7 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                   <div className="space-y-3">
                     <Heading level={3} className="mb-2">Inflow</Heading>
                     {inflowMappings.length === 0 ? (
-                      <div className="text-text-muted text-[0.525rem] md:text-xs">No inflow mappings</div>
+                      <div className="text-text-muted text-[0.63rem] md:text-xs">No inflow mappings</div>
                     ) : (
                       <>
                         {inflowMappings.map((mapping) => {
@@ -633,8 +633,8 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                           const amount = convert(amountChf, 'CHF')
                           return (
                             <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
-                              <div className="text-text-primary text-[0.525rem] md:text-xs truncate flex-1">{label}</div>
-                              <div className="text-success text-[0.525rem] md:text-xs ml-4">{formatCurrency(amount)}</div>
+                              <div className="text-text-primary text-[0.63rem] md:text-xs truncate flex-1">{label}</div>
+                              <div className="text-success text-[0.63rem] md:text-xs ml-4">{formatCurrency(amount)}</div>
                             </div>
                           )
                         })}
@@ -646,7 +646,7 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                   <div className="space-y-3">
                     <Heading level={3} className="mb-2">Outflow</Heading>
                     {outflowMappings.length === 0 ? (
-                      <div className="text-text-muted text-[0.525rem] md:text-xs">No outflow mappings</div>
+                      <div className="text-text-muted text-[0.63rem] md:text-xs">No outflow mappings</div>
                     ) : (
                       <>
                         {outflowMappings.map((mapping) => {
@@ -660,8 +660,8 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                           const amount = convert(amountChf, 'CHF')
                           return (
                             <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
-                              <div className="text-text-primary text-[0.525rem] md:text-xs truncate flex-1">{label}</div>
-                              <div className="text-danger text-[0.525rem] md:text-xs ml-4">{formatCurrency(amount)}</div>
+                              <div className="text-text-primary text-[0.63rem] md:text-xs truncate flex-1">{label}</div>
+                              <div className="text-danger text-[0.63rem] md:text-xs ml-4">{formatCurrency(amount)}</div>
                             </div>
                           )
                         })}
@@ -762,13 +762,13 @@ function CashflowItemMenu({ itemId, onEdit, onRemove }: CashflowItemMenuProps) {
         >
           <button
             onClick={handleEdit}
-            className="w-full text-left px-4 py-2 text-text-primary text-[0.525rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+            className="w-full text-left px-4 py-2 text-text-primary text-[0.63rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
           >
             Edit
           </button>
           <button
             onClick={handleRemove}
-            className="w-full text-left px-4 py-2 text-danger text-[0.525rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+            className="w-full text-left px-4 py-2 text-danger text-[0.63rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
           >
             Remove
           </button>
@@ -832,21 +832,21 @@ function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProp
         </Heading>
 
         {error && (
-          <div className="mb-3 text-[0.525rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+          <div className="mb-3 text-[0.63rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
               Group
             </label>
             <div className="text-text-primary text-xs md:text-sm">{group}</div>
           </div>
 
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-item">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-item">
               Item
             </label>
             <input
@@ -861,7 +861,7 @@ function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProp
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-amount">
+              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-amount">
                 Inflow
               </label>
               <input
@@ -875,7 +875,7 @@ function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProp
               />
             </div>
             <div>
-              <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-currency">
+              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-currency">
                 Currency
               </label>
               <select
@@ -894,7 +894,7 @@ function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProp
           </div>
 
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-provider">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-provider">
               Provider
             </label>
             <input
@@ -910,13 +910,13 @@ function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProp
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
               Add Item
             </button>
@@ -981,21 +981,21 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
         </Heading>
 
         {error && (
-          <div className="mb-3 text-[0.525rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+          <div className="mb-3 text-[0.63rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
               Group
             </label>
             <div className="text-text-primary text-xs md:text-sm">{group}</div>
           </div>
 
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="outflow-item">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="outflow-item">
               Item
             </label>
             <input
@@ -1010,7 +1010,7 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="outflow-amount">
+              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="outflow-amount">
                 Outflow
               </label>
               <input
@@ -1024,7 +1024,7 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
               />
             </div>
             <div>
-              <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="outflow-currency">
+              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="outflow-currency">
                 Currency
               </label>
               <select
@@ -1043,7 +1043,7 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
           </div>
 
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="outflow-receiver">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="outflow-receiver">
               Receiver
             </label>
             <input
@@ -1059,13 +1059,13 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
               Add Item
             </button>
@@ -1237,7 +1237,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
         </Heading>
 
         {error && (
-          <div className="mb-3 text-[0.525rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+          <div className="mb-3 text-[0.63rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
             {error}
           </div>
         )}
@@ -1245,7 +1245,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Mapping Type Selection */}
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-2">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-2">
               Mapping Type
             </label>
             <select
@@ -1263,7 +1263,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
           {mappingType === 'inflowToAccount' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-2">
+                <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-2">
                   Mode
                 </label>
                 <div className="flex gap-4">
@@ -1279,7 +1279,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
                       }}
                       className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
                     />
-                    <span className="text-text-primary text-[0.525rem] md:text-xs">Whole Group</span>
+                    <span className="text-text-primary text-[0.63rem] md:text-xs">Whole Group</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1293,14 +1293,14 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
                       }}
                       className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
                     />
-                    <span className="text-text-primary text-[0.525rem] md:text-xs">Single Item</span>
+                    <span className="text-text-primary text-[0.63rem] md:text-xs">Single Item</span>
                   </label>
                 </div>
               </div>
 
               {inflowToAccountMode === 'group' ? (
                 <div>
-                  <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-group">
+                  <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-group">
                     Inflow Group
                   </label>
                   <select
@@ -1319,7 +1319,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
                 </div>
               ) : (
                 <div>
-                  <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-item">
+                  <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-item">
                     Inflow Item
                   </label>
                   <select
@@ -1339,7 +1339,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
               )}
 
               <div>
-                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-target">
+                <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-target">
                   Account (target)
                 </label>
                 <select
@@ -1359,7 +1359,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
 
               {(inflowToAccountGroup || inflowToAccountItem) && (
                 <div className="bg-bg-surface-2 rounded-input px-3 py-2">
-                  <div className="text-text-secondary text-[0.525rem] md:text-xs mb-1">Computed Amount</div>
+                  <div className="text-text-secondary text-[0.63rem] md:text-xs mb-1">Computed Amount</div>
                   <div className="text-success text-sm md:text-base font-semibold">{formatCurrency(convert(getInflowToAccountAmount(), 'CHF'))}</div>
                 </div>
               )}
@@ -1370,7 +1370,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
           {mappingType === 'accountToOutflow' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-source">
+                <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-source">
                   Account (source)
                 </label>
                 <select
@@ -1389,7 +1389,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
               </div>
 
               <div>
-                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-2">
+                <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-2">
                   Mode
                 </label>
                 <div className="flex gap-4">
@@ -1405,7 +1405,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
                       }}
                       className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
                     />
-                    <span className="text-text-primary text-[0.525rem] md:text-xs">Whole Group</span>
+                    <span className="text-text-primary text-[0.63rem] md:text-xs">Whole Group</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1419,14 +1419,14 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
                       }}
                       className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
                     />
-                    <span className="text-text-primary text-[0.525rem] md:text-xs">Single Item</span>
+                    <span className="text-text-primary text-[0.63rem] md:text-xs">Single Item</span>
                   </label>
                 </div>
               </div>
 
               {accountToOutflowMode === 'group' ? (
                 <div>
-                  <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-group">
+                  <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-group">
                     Outflow Group
                   </label>
                   <select
@@ -1445,7 +1445,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
                 </div>
               ) : (
                 <div>
-                  <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-item">
+                  <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-item">
                     Outflow Item
                   </label>
                   <select
@@ -1466,7 +1466,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
 
               {(accountToOutflowGroup || accountToOutflowItem) && (
                 <div className="bg-bg-surface-2 rounded-input px-3 py-2">
-                  <div className="text-text-secondary text-[0.525rem] md:text-xs mb-1">Computed Amount</div>
+                  <div className="text-text-secondary text-[0.63rem] md:text-xs mb-1">Computed Amount</div>
                   <div className="text-danger text-sm md:text-base font-semibold">{formatCurrency(convert(getAccountToOutflowAmount(), 'CHF'))}</div>
                 </div>
               )}
@@ -1477,7 +1477,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
           {mappingType === 'accountToAccount' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-from">
+                <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-from">
                   From Account
                 </label>
                 <select
@@ -1496,7 +1496,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
               </div>
 
               <div>
-                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-to">
+                <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-to">
                   To Account
                 </label>
                 <select
@@ -1517,7 +1517,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
               </div>
 
               <div>
-                <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-amount">
+                <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-amount">
                   Amount (CHF)
                 </label>
                 <input
@@ -1537,13 +1537,13 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
               Save Mapping
             </button>
@@ -1611,7 +1611,7 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
               setType('inflow')
               setAmount('')
             }}
-            className={`px-4 py-2 text-[0.525rem] md:text-xs font-medium transition-colors ${
+            className={`px-4 py-2 text-[0.63rem] md:text-xs font-medium transition-colors ${
               type === 'inflow'
                 ? 'text-highlight-yellow border-b-2 border-highlight-yellow'
                 : 'text-text-secondary hover:text-text-primary'
@@ -1625,7 +1625,7 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
               setType('outflow')
               setAmount('')
             }}
-            className={`px-4 py-2 text-[0.525rem] md:text-xs font-medium transition-colors ${
+            className={`px-4 py-2 text-[0.63rem] md:text-xs font-medium transition-colors ${
               type === 'outflow'
                 ? 'text-highlight-yellow border-b-2 border-highlight-yellow'
                 : 'text-text-secondary hover:text-text-primary'
@@ -1636,21 +1636,21 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
         </div>
 
         {error && (
-          <div className="mb-3 text-[0.525rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+          <div className="mb-3 text-[0.63rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
               Platform
             </label>
             <div className="text-text-primary text-xs md:text-sm">{platform}</div>
           </div>
 
           <div>
-            <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-item">
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-item">
               Item
             </label>
             <input
@@ -1665,7 +1665,7 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-amount">
+              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-amount">
                 {type === 'inflow' ? 'Inflow' : 'Outflow'}
               </label>
               <input
@@ -1679,7 +1679,7 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
               />
             </div>
             <div>
-              <label className="block text-text-secondary text-[0.525rem] md:text-xs font-medium mb-1" htmlFor="account-currency">
+              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-currency">
                 Currency
               </label>
               <select
@@ -1701,13 +1701,13 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-full text-[0.525rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
               Add Item
             </button>
