@@ -1,6 +1,9 @@
 import React, { useState, useMemo, FormEvent, useRef, useEffect } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
+import { useCurrency } from '../contexts/CurrencyContext'
+import { formatMoney } from '../lib/currency'
+import type { CurrencyCode } from '../lib/currency'
 
 // TypeScript types
 type NetWorthCategory =
@@ -88,12 +91,7 @@ const categoryOrder: NetWorthCategory[] = [
 ]
 
 // Helper function to format CHF
-const formatChf = (value: number): string => {
-  return new Intl.NumberFormat('de-CH', {
-    style: 'currency',
-    currency: 'CHF',
-  }).format(value)
-}
+// formatChf will be replaced with currency-aware formatting in the component
 
 // Helper function to calculate balance from transactions
 const calculateBalanceChf = (itemId: string, transactions: NetWorthTransaction[]): number => {
@@ -124,7 +122,12 @@ function NetWorthCategorySection({
   onRemoveItem,
   onShowTransactions,
 }: NetWorthCategorySectionProps) {
-  const subtotal = items.reduce((sum, item) => sum + calculateBalanceChf(item.id, transactions), 0)
+  const { baseCurrency, convert } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  
+  // Calculate subtotal in CHF, then convert to baseCurrency
+  const subtotalChf = items.reduce((sum, item) => sum + calculateBalanceChf(item.id, transactions), 0)
+  const subtotal = convert(subtotalChf, 'CHF')
 
   return (
     <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
@@ -133,7 +136,7 @@ function NetWorthCategorySection({
           <div>
             <Heading level={2}>{category}</Heading>
             <TotalText variant="neutral" className="block mt-1">
-              {formatChf(subtotal)}
+              {formatCurrency(subtotal)}
             </TotalText>
           </div>
           <button
@@ -187,6 +190,7 @@ function NetWorthCategorySection({
             <tbody>
               {items.map((item) => {
                 const balanceChf = calculateBalanceChf(item.id, transactions)
+                const balanceConverted = convert(balanceChf, 'CHF')
                 return (
                   <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
                     <td className="py-2">
@@ -194,7 +198,7 @@ function NetWorthCategorySection({
                     </td>
                     <td className="py-2 text-right">
                       <div className="text2 whitespace-nowrap">
-                        {formatChf(balanceChf)}
+                        {formatCurrency(balanceConverted)}
                       </div>
                     </td>
                     <td className="py-2 text-right">
@@ -263,6 +267,9 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions }: Item
 }
 
 function NetWorth() {
+  const { baseCurrency, convert } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  
   const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>(mockNetWorthItems)
   const [transactions, setTransactions] = useState<NetWorthTransaction[]>(initialMockTransactions)
   const [activeCategory, setActiveCategory] = useState<NetWorthCategory | null>(null)
@@ -287,10 +294,11 @@ function NetWorth() {
     [netWorthItems]
   )
 
-  const totalNetWorth = useMemo(
+  const totalNetWorthChf = useMemo(
     () => netWorthItems.reduce((sum, item) => sum + calculateBalanceChf(item.id, transactions), 0),
     [netWorthItems, transactions]
   )
+  const totalNetWorth = convert(totalNetWorthChf, 'CHF')
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -385,7 +393,7 @@ function NetWorth() {
           <Heading level={2} className="mb-2">
             Total Net Worth
           </Heading>
-          <TotalText variant="neutral">{formatChf(totalNetWorth)}</TotalText>
+          <TotalText variant="neutral">{formatCurrency(totalNetWorth)}</TotalText>
         </div>
 
         {/* Grouped Categories */}
@@ -620,6 +628,8 @@ interface AddTransactionModalProps {
 type TransactionTab = 'buy' | 'sell'
 
 function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps) {
+  const { baseCurrency, convert } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const [activeTab, setActiveTab] = useState<TransactionTab>('buy')
   const [amount, setAmount] = useState('')
   const [pricePerItemChf, setPricePerItemChf] = useState('')
@@ -766,7 +776,7 @@ function AddTransactionModal({ item, onClose, onSave }: AddTransactionModalProps
               {activeTab === 'buy' ? 'Total spent' : 'Total sold'} (CHF)
             </label>
             <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm">
-              {formatChf(totalChf)}
+              {formatCurrency(convert(totalChf, 'CHF'))}
             </div>
           </div>
 
@@ -815,7 +825,11 @@ interface ShowTransactionsModalProps {
 }
 
 function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactionsModalProps) {
+  const { baseCurrency, convert } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  
   const balanceChf = calculateBalanceChf(item.id, transactions)
+  const balanceConverted = convert(balanceChf, 'CHF')
   const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
@@ -827,8 +841,8 @@ function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactions
 
         {/* Balance */}
         <div className="mb-6 p-4 bg-bg-surface-2 rounded-input">
-          <div className="text-text-secondary text-[0.525rem] md:text-xs mb-1">Balance (CHF)</div>
-          <TotalText variant="neutral">{formatChf(balanceChf)}</TotalText>
+          <div className="text-text-secondary text-[0.525rem] md:text-xs mb-1">Balance</div>
+          <TotalText variant="neutral">{formatCurrency(balanceConverted)}</TotalText>
         </div>
 
         {/* Transactions Table */}
@@ -845,13 +859,15 @@ function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactions
                   <th className="text-left py-2 px-3 text2 font-bold">Side</th>
                   <th className="text-left py-2 px-3 text2 font-bold">Currency</th>
                   <th className="text-right py-2 px-3 text2 font-bold">Amount</th>
-                  <th className="text-right py-2 px-3 text2 font-bold">Price per item (CHF)</th>
-                  <th className="text-right py-2 px-3 text2 font-bold">Total (CHF)</th>
+                  <th className="text-right py-2 px-3 text2 font-bold">Price per item</th>
+                  <th className="text-right py-2 px-3 text2 font-bold">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedTransactions.map((tx) => {
-                  const total = tx.amount * tx.pricePerItemChf
+                  const totalChf = tx.amount * tx.pricePerItemChf
+                  const totalConverted = convert(totalChf, 'CHF')
+                  const priceConverted = convert(tx.pricePerItemChf, 'CHF')
                   const sign = tx.side === 'buy' ? '+' : '-'
                   return (
                     <tr key={tx.id} className="border-b border-border-subtle">
@@ -863,10 +879,10 @@ function ShowTransactionsModal({ item, transactions, onClose }: ShowTransactions
                       </td>
                       <td className="py-2 px-3 text2">{tx.currency}</td>
                       <td className="py-2 px-3 text2 text-right">{tx.amount}</td>
-                      <td className="py-2 px-3 text2 text-right">{formatChf(tx.pricePerItemChf)}</td>
+                      <td className="py-2 px-3 text2 text-right">{formatCurrency(priceConverted)}</td>
                       <td className="py-2 px-3 text2 text-right">
                         <span className={tx.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
-                          {sign}{formatChf(total)}
+                          {sign}{formatCurrency(totalConverted)}
                         </span>
                       </td>
                     </tr>

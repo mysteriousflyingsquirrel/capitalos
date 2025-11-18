@@ -16,6 +16,9 @@ import {
 } from 'recharts'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
+import { useCurrency } from '../contexts/CurrencyContext'
+import { formatMoney } from '../lib/currency'
+import type { CurrencyCode } from '../lib/currency'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -245,9 +248,9 @@ function KpiCard({ title, value, subtitle }: KpiCardProps) {
   )
 }
 
-// Helper function: Format CHF currency
-function formatCHF(value: number): string {
-  return `CHF ${value.toLocaleString('de-CH').replace(/\./g, "'")}`
+// Helper function: Format currency (will be used with currency context)
+function formatCurrency(value: number, currency: CurrencyCode): string {
+  return formatMoney(value, currency, 'ch')
 }
 
 // Helper function: Format CHF for chart ticks
@@ -260,20 +263,64 @@ function formatCHFTick(value: number): string {
 
 function Dashboard() {
   const [timeFrame, setTimeFrame] = useState<'YTD' | '1Year' | '5Year' | 'Max'>('Max')
+  const { baseCurrency, convert } = useCurrency()
+
+  // Convert values from CHF to baseCurrency
+  const totalNetWorthConverted = convert(totalNetWorth, 'CHF')
+  const monthlyInflowConverted = convert(monthlyInflow, 'CHF')
+  const monthlyOutflowConverted = convert(monthlyOutflow, 'CHF')
+
+  // Format currency helper
+  const formatCurrencyValue = (value: number) => formatMoney(value, baseCurrency, 'ch')
+
+  // Format for chart ticks
+  const formatCurrencyTick = (value: number) => {
+    const converted = convert(value, 'CHF')
+    if (converted >= 1000) {
+      return `${(converted / 1000).toFixed(0)}'k`
+    }
+    return converted.toString()
+  }
 
   const getNetWorthData = () => {
-    switch (timeFrame) {
-      case 'YTD':
-        return netWorthDataYTD
-      case '1Year':
-        return netWorthData1Year
-      case '5Year':
-        return netWorthData5Year
-      case 'Max':
-        return netWorthDataMax
-      default:
-        return netWorthDataYTD
-    }
+    const data = (() => {
+      switch (timeFrame) {
+        case 'YTD':
+          return netWorthDataYTD
+        case '1Year':
+          return netWorthData1Year
+        case '5Year':
+          return netWorthData5Year
+        case 'Max':
+          return netWorthDataMax
+        default:
+          return netWorthDataYTD
+      }
+    })()
+
+    // Convert all values in the data to baseCurrency
+    return data.map(point => ({
+      ...point,
+      'Total Net Worth': convert(point['Total Net Worth'], 'CHF'),
+      'Cash': convert(point['Cash'], 'CHF'),
+      'Bank Accounts': convert(point['Bank Accounts'], 'CHF'),
+      'Funds': convert(point['Funds'], 'CHF'),
+      'Stocks': convert(point['Stocks'], 'CHF'),
+      'Commodities': convert(point['Commodities'], 'CHF'),
+      'Crypto': convert(point['Crypto'], 'CHF'),
+      'Real Estate': convert(point['Real Estate'], 'CHF'),
+      'Inventory': convert(point['Inventory'], 'CHF'),
+    }))
+  }
+
+  // Convert cashflow data
+  const getCashflowData = () => {
+    return cashflowData.map(point => ({
+      ...point,
+      inflow: convert(point.inflow, 'CHF'),
+      outflow: convert(point.outflow, 'CHF'),
+      spare: convert(point.spare, 'CHF'),
+    }))
   }
 
   return (
@@ -289,7 +336,7 @@ function Dashboard() {
             <Heading level={2} className="mb-2">
               Total Net Worth
             </Heading>
-            <TotalText variant="neutral">{formatCHF(totalNetWorth)}</TotalText>
+            <TotalText variant="neutral">{formatCurrencyValue(totalNetWorthConverted)}</TotalText>
           </div>
 
           {/* Monthly Inflow KPI */}
@@ -297,7 +344,7 @@ function Dashboard() {
             <Heading level={2} className="mb-2">
               Monthly Inflow
             </Heading>
-            <TotalText variant="inflow">{formatCHF(monthlyInflow)}</TotalText>
+            <TotalText variant="inflow">{formatCurrencyValue(monthlyInflowConverted)}</TotalText>
           </div>
 
           {/* Monthly Outflow KPI */}
@@ -305,7 +352,7 @@ function Dashboard() {
             <Heading level={2} className="mb-2">
               Monthly Outflow
             </Heading>
-            <TotalText variant="outflow">{formatCHF(monthlyOutflow)}</TotalText>
+            <TotalText variant="outflow">{formatCurrencyValue(monthlyOutflowConverted)}</TotalText>
           </div>
         </div>
 
@@ -341,7 +388,7 @@ function Dashboard() {
               <YAxis
                 stroke={CHART_COLORS.muted1}
                 tick={{ fill: CHART_COLORS.muted1 }}
-                tickFormatter={formatCHFTick}
+                tickFormatter={formatCurrencyTick}
               />
               <Tooltip
                 contentStyle={{
@@ -352,7 +399,7 @@ function Dashboard() {
                   fontSize: '0.60rem',
                   fontWeight: '400',
                 }}
-                formatter={(value: number) => formatCHF(value)}
+                formatter={(value: number) => formatCurrencyValue(value)}
               />
               <Legend
                 wrapperStyle={{ color: '#8B8F99', fontSize: '0.60rem', fontWeight: '400' }}
@@ -588,7 +635,7 @@ function Dashboard() {
             Monthly Cashflow
           </Heading>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={cashflowData}>
+            <BarChart data={getCashflowData()}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke={CHART_COLORS.muted1}
@@ -602,7 +649,7 @@ function Dashboard() {
               <YAxis
                 stroke={CHART_COLORS.muted1}
                 tick={{ fill: CHART_COLORS.muted1 }}
-                tickFormatter={formatCHFTick}
+                tickFormatter={formatCurrencyTick}
               />
               <Tooltip
                 contentStyle={{
@@ -613,7 +660,7 @@ function Dashboard() {
                   fontSize: '0.60rem',
                   fontWeight: '400',
                 }}
-                formatter={(value: number) => formatCHF(value)}
+                formatter={(value: number) => formatCurrencyValue(value)}
               />
               <Legend
                 wrapperStyle={{ color: '#8B8F99', fontSize: '0.60rem', fontWeight: '400' }}

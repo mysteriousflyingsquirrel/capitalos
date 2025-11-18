@@ -1,12 +1,20 @@
 import React, { useState } from 'react'
 import Heading from '../components/Heading'
+import { useCurrency } from '../contexts/CurrencyContext'
+import type { CurrencyCode } from '../lib/currency'
+import { supportedCurrencies } from '../lib/currency'
 
-type BaseCurrency = 'CHF' | 'EUR' | 'USD'
 type NumberFormat = 'ch' | 'us' | 'de'
 
 function Settings() {
-  const [baseCurrency, setBaseCurrency] = useState<BaseCurrency>('CHF')
+  const { baseCurrency, setBaseCurrency, exchangeRates, isLoading, error } = useCurrency()
   const [numberFormat, setNumberFormat] = useState<NumberFormat>('ch')
+
+  // Format rate for display
+  const formatRate = (value: number) => value.toFixed(4)
+
+  // Get other currencies (all except base)
+  const otherCurrencies = supportedCurrencies.filter(c => c !== baseCurrency)
 
   // Report generation handlers (stubs for now)
   const handleCryptoTaxReport = () => {
@@ -59,7 +67,7 @@ function Settings() {
               </label>
               <select
                 value={baseCurrency}
-                onChange={(e) => setBaseCurrency(e.target.value as BaseCurrency)}
+                onChange={(e) => setBaseCurrency(e.target.value as CurrencyCode)}
                 className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
               >
                 <option value="CHF">CHF</option>
@@ -67,8 +75,34 @@ function Settings() {
                 <option value="USD">USD</option>
               </select>
               <p className="mt-2 text-text-muted text-[0.525rem] md:text-xs">
-                All values in Capitalos will be displayed in this currency (conversion logic to be implemented).
+                All values in Capitalos will be displayed in this currency.
               </p>
+              
+              {/* Exchange Rates Display */}
+              <div className="mt-4 space-y-2">
+                {isLoading && (
+                  <p className="text-text-muted text-[0.525rem] md:text-xs italic">
+                    Loading latest rates...
+                  </p>
+                )}
+                {error && (
+                  <p className="text-danger text-[0.525rem] md:text-xs">
+                    {error}
+                  </p>
+                )}
+                {!isLoading && !error && exchangeRates && (
+                  <div className="space-y-1">
+                    {otherCurrencies.map((currency) => {
+                      const rate = exchangeRates.rates[currency]
+                      return (
+                        <p key={currency} className="text-text-secondary text-[0.525rem] md:text-xs">
+                          1 {baseCurrency} = {formatRate(rate)} {currency}
+                        </p>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Number Format */}

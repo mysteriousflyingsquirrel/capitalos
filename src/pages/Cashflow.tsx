@@ -2,6 +2,8 @@
 import React, { useState, useRef, useEffect, FormEvent } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
+import { useCurrency } from '../contexts/CurrencyContext'
+import { formatMoney } from '../lib/currency'
 
 type InflowGroupName = 'Time' | 'Service' | 'Worker Bees'
 
@@ -130,12 +132,7 @@ const mockAccountflowItems: AccountflowItem[] = [
 ]
 
 // Helper function to format CHF
-const formatChf = (value: number): string => {
-  return new Intl.NumberFormat('de-CH', {
-    style: 'currency',
-    currency: 'CHF',
-  }).format(value)
-}
+// formatChf will be replaced with currency-aware formatting in the component
 
 // Helper functions for mapping amounts
 function getInflowGroupSum(group: InflowGroupName, items: InflowItem[]): number {
@@ -184,6 +181,9 @@ interface SectionCardProps {
 }
 
 function SectionCard({ title, children, total, totalColor = 'success' }: SectionCardProps) {
+  const { baseCurrency } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  
   return (
     <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
@@ -191,10 +191,7 @@ function SectionCard({ title, children, total, totalColor = 'success' }: Section
           <Heading level={2}>{title}</Heading>
           {total !== undefined && (
             <TotalText variant={totalColor === 'success' ? 'inflow' : 'outflow'} className="mt-1">
-              {new Intl.NumberFormat('de-CH', {
-                style: 'currency',
-                currency: 'CHF',
-              }).format(total)}
+              {formatCurrency(total)}
             </TotalText>
           )}
         </div>
@@ -273,8 +270,12 @@ interface InflowSectionProps {
 }
 
 function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSectionProps) {
+  const { baseCurrency, convert } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  
   const inflowGroups: InflowGroupName[] = ['Time', 'Service', 'Worker Bees']
-  const totalInflow = items.reduce((sum, item) => sum + item.amountChf, 0)
+  const totalInflowChf = items.reduce((sum, item) => sum + item.amountChf, 0)
+  const totalInflow = convert(totalInflowChf, 'CHF')
   const [addItemGroup, setAddItemGroup] = useState<InflowGroupName | null>(null)
 
   return (
@@ -285,13 +286,14 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
         groupKey="group"
         groupOrder={inflowGroups}
         renderGroupHeader={(groupName, groupItems) => {
-          const total = groupItems.reduce((sum, item) => sum + item.amountChf, 0)
+          const totalChf = groupItems.reduce((sum, item) => sum + item.amountChf, 0)
+          const total = convert(totalChf, 'CHF')
           return (
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
               <div>
                 <Heading level={3}>{groupName}</Heading>
                 <TotalText variant="inflow" className="block mt-1">
-                  {formatChf(total)}
+                  {formatCurrency(total)}
                 </TotalText>
               </div>
               <button
@@ -348,7 +350,7 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
                       <div className="text2 truncate">{item.item}</div>
                     </td>
                     <td className="py-2 text-right">
-                      <div className="text-success text2 whitespace-nowrap">{formatChf(item.amountChf)}</div>
+                      <div className="text-success text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
                     </td>
                     <td className="py-2 text-right">
                       <div className="text2 truncate">{item.provider}</div>
@@ -394,8 +396,12 @@ interface OutflowSectionProps {
 }
 
 function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowSectionProps) {
+  const { baseCurrency, convert } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  
   const outflowGroups: OutflowGroupName[] = ['Fix', 'Variable', 'Shared Variable', 'Investments']
-  const totalOutflow = items.reduce((sum, item) => sum + item.amountChf, 0)
+  const totalOutflowChf = items.reduce((sum, item) => sum + item.amountChf, 0)
+  const totalOutflow = convert(totalOutflowChf, 'CHF')
   const [addItemGroup, setAddItemGroup] = useState<OutflowGroupName | null>(null)
 
   return (
@@ -406,13 +412,14 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
         groupKey="group"
         groupOrder={outflowGroups}
         renderGroupHeader={(groupName, groupItems) => {
-          const total = groupItems.reduce((sum, item) => sum + item.amountChf, 0)
+          const totalChf = groupItems.reduce((sum, item) => sum + item.amountChf, 0)
+          const total = convert(totalChf, 'CHF')
           return (
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
               <div>
                 <Heading level={3}>{groupName}</Heading>
                 <TotalText variant="outflow" className="block mt-1">
-                  {formatChf(total)}
+                  {formatCurrency(total)}
                 </TotalText>
               </div>
               <button
@@ -469,7 +476,7 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
                       <div className="text2 truncate">{item.item}</div>
                     </td>
                     <td className="py-2 text-right">
-                      <div className="text-danger text2 whitespace-nowrap">{formatChf(item.amountChf)}</div>
+                      <div className="text-danger text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
                     </td>
                     <td className="py-2 text-right">
                       <div className="text2 truncate">{item.receiver}</div>
@@ -542,6 +549,8 @@ interface AccountflowSectionProps {
 }
 
 function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowItems, outflowItems }: AccountflowSectionProps) {
+  const { baseCurrency, convert } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const [showAddMappingModal, setShowAddMappingModal] = useState(false)
 
   // Helper to get inflow mappings for an account
@@ -600,15 +609,19 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
             const outflowMappings = getOutflowMappings(account)
 
             // Calculate totals
-            const totalInflow = inflowMappings.reduce((sum, m) => {
+            const totalInflowChf = inflowMappings.reduce((sum, m) => {
               return sum + computeMappingAmount(m, inflowItems, outflowItems)
             }, 0)
 
-            const totalOutflow = outflowMappings.reduce((sum, m) => {
+            const totalOutflowChf = outflowMappings.reduce((sum, m) => {
               return sum + computeMappingAmount(m, inflowItems, outflowItems)
             }, 0)
 
-            const spare = totalInflow - totalOutflow
+            const spareChf = totalInflowChf - totalOutflowChf
+
+            const totalInflow = convert(totalInflowChf, 'CHF')
+            const totalOutflow = convert(totalOutflowChf, 'CHF')
+            const spare = convert(spareChf, 'CHF')
 
             return (
               <div key={account} className="space-y-4 pb-4 border-b border-border-strong last:border-b-0">
@@ -617,13 +630,13 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                   <Heading level={2}>{account}</Heading>
                   <div className="mt-1 flex items-center gap-4">
                     <span className="text1 font-normal" style={{ color: '#2ECC71' }}>
-                      {formatChf(totalInflow)}
+                      {formatCurrency(totalInflow)}
                     </span>
                     <span className="text1 font-normal" style={{ color: '#E74C3C' }}>
-                      {formatChf(totalOutflow)}
+                      {formatCurrency(totalOutflow)}
                     </span>
                     <span className="text1 font-normal" style={{ color: '#FFFFFF' }}>
-                      {formatChf(spare)}
+                      {formatCurrency(spare)}
                     </span>
                   </div>
                 </div>
@@ -639,11 +652,12 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                       <>
                         {inflowMappings.map((mapping) => {
                           const label = getMappingLabel(mapping, inflowItems, outflowItems)
-                          const amount = computeMappingAmount(mapping, inflowItems, outflowItems)
+                          const amountChf = computeMappingAmount(mapping, inflowItems, outflowItems)
+                          const amount = convert(amountChf, 'CHF')
                           return (
                             <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
                               <div className="text-text-primary text-[0.525rem] md:text-xs truncate flex-1">{label}</div>
-                              <div className="text-success text-[0.525rem] md:text-xs ml-4">{formatChf(amount)}</div>
+                              <div className="text-success text-[0.525rem] md:text-xs ml-4">{formatCurrency(amount)}</div>
                             </div>
                           )
                         })}
@@ -665,11 +679,12 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                           } else {
                             label = getMappingLabel(mapping, inflowItems, outflowItems)
                           }
-                          const amount = computeMappingAmount(mapping, inflowItems, outflowItems)
+                          const amountChf = computeMappingAmount(mapping, inflowItems, outflowItems)
+                          const amount = convert(amountChf, 'CHF')
                           return (
                             <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
                               <div className="text-text-primary text-[0.525rem] md:text-xs truncate flex-1">{label}</div>
-                              <div className="text-danger text-[0.525rem] md:text-xs ml-4">{formatChf(amount)}</div>
+                              <div className="text-danger text-[0.525rem] md:text-xs ml-4">{formatCurrency(amount)}</div>
                             </div>
                           )
                         })}
@@ -1093,6 +1108,8 @@ interface AddMappingModalProps {
 }
 
 function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMappingModalProps) {
+  const { baseCurrency, convert } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const [mappingType, setMappingType] = useState<MappingKind>('inflowToAccount')
   const [error, setError] = useState<string | null>(null)
 
@@ -1366,7 +1383,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
               {(inflowToAccountGroup || inflowToAccountItem) && (
                 <div className="bg-bg-surface-2 rounded-input px-3 py-2">
                   <div className="text-text-secondary text-[0.525rem] md:text-xs mb-1">Computed Amount</div>
-                  <div className="text-success text-sm md:text-base font-semibold">{formatChf(getInflowToAccountAmount())}</div>
+                  <div className="text-success text-sm md:text-base font-semibold">{formatCurrency(convert(getInflowToAccountAmount(), 'CHF'))}</div>
                 </div>
               )}
             </div>
@@ -1473,7 +1490,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
               {(accountToOutflowGroup || accountToOutflowItem) && (
                 <div className="bg-bg-surface-2 rounded-input px-3 py-2">
                   <div className="text-text-secondary text-[0.525rem] md:text-xs mb-1">Computed Amount</div>
-                  <div className="text-danger text-sm md:text-base font-semibold">{formatChf(getAccountToOutflowAmount())}</div>
+                  <div className="text-danger text-sm md:text-base font-semibold">{formatCurrency(convert(getAccountToOutflowAmount(), 'CHF'))}</div>
                 </div>
               )}
             </div>
@@ -1726,6 +1743,8 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
 
 // Main Cashflow Component
 function Cashflow() {
+  const { baseCurrency, convert } = useCurrency()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const [inflowItems, setInflowItems] = useState<InflowItem[]>(mockInflowItems)
   const [outflowItems, setOutflowItems] = useState<OutflowItem[]>(mockOutflowItems)
   const [accountflowItems, setAccountflowItems] = useState<AccountflowItem[]>(mockAccountflowItems)
