@@ -275,7 +275,6 @@ function Dashboard() {
       : snapshots
 
     // Convert snapshots to chart data format
-    // Only show snapshot data, not current state
     const chartData = filteredSnapshots.map(snapshot => {
       const date = new Date(snapshot.date)
       const month = date.toLocaleString('en-US', { month: 'short', year: 'numeric' })
@@ -294,8 +293,51 @@ function Dashboard() {
       }
     })
 
+    // Add current state as the next month after the last snapshot
+    if (filteredSnapshots.length > 0) {
+      const lastSnapshot = filteredSnapshots[filteredSnapshots.length - 1]
+      const lastDate = new Date(lastSnapshot.date)
+      
+      // Calculate the next month after the last snapshot
+      const nextMonth = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, 1)
+      const nextMonthLabel = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' })
+      
+      // Calculate current values by category
+      const categoryTotals: Record<NetWorthCategory, number> = {
+        'Cash': 0,
+        'Bank Accounts': 0,
+        'Funds': 0,
+        'Stocks': 0,
+        'Commodities': 0,
+        'Crypto': 0,
+        'Real Estate': 0,
+        'Inventory': 0,
+      }
+
+      netWorthItems.forEach(item => {
+        const balance = calculateBalanceChf(item.id, transactions)
+        categoryTotals[item.category] += balance
+      })
+
+      const currentTotal = totalNetWorthChf
+
+      // Add current state as the next month
+      chartData.push({
+        month: nextMonthLabel,
+        'Total Net Worth': convert(currentTotal, 'CHF'),
+        'Cash': convert(categoryTotals['Cash'], 'CHF'),
+        'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
+        'Funds': convert(categoryTotals['Funds'], 'CHF'),
+        'Stocks': convert(categoryTotals['Stocks'], 'CHF'),
+        'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
+        'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
+        'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
+        'Inventory': convert(categoryTotals['Inventory'], 'CHF'),
+      })
+    }
+
     return chartData
-  }, [snapshots, convert, timeFrame])
+  }, [snapshots, netWorthItems, transactions, totalNetWorthChf, convert, timeFrame])
 
   // Generate cashflow data (currently just current month)
   const cashflowData = useMemo(() => {
