@@ -103,7 +103,7 @@ function NetWorthCategorySection({
         <div className="flex items-center justify-between gap-4">
           <div>
             <Heading level={2}>{category}</Heading>
-            <TotalText variant="neutral" className="block mt-1">
+            <TotalText variant={subtotal >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
               {formatCurrency(subtotal)}
             </TotalText>
           </div>
@@ -383,7 +383,7 @@ function NetWorth() {
           <Heading level={2} className="mb-2">
             Total Net Worth
           </Heading>
-          <TotalText variant="neutral">{formatCurrency(totalNetWorth)}</TotalText>
+          <TotalText variant={totalNetWorth >= 0 ? 'inflow' : 'outflow'}>{formatCurrency(totalNetWorth)}</TotalText>
         </div>
 
         {/* Grouped Categories */}

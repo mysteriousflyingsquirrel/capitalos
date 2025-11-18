@@ -606,15 +606,15 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                 <div>
                   <Heading level={2}>{account}</Heading>
                   <div className="mt-1 flex items-center gap-4">
-                    <span className="text1 font-normal" style={{ color: '#2ECC71' }}>
+                    <TotalText variant="inflow">
                       {formatCurrency(totalInflow)}
-                    </span>
-                    <span className="text1 font-normal" style={{ color: '#E74C3C' }}>
+                    </TotalText>
+                    <TotalText variant="outflow">
                       {formatCurrency(totalOutflow)}
-                    </span>
-                    <span className="text1 font-normal" style={{ color: '#FFFFFF' }}>
+                    </TotalText>
+                    <TotalText variant="neutral">
                       {formatCurrency(spare)}
-                    </span>
+                    </TotalText>
                   </div>
                 </div>
 

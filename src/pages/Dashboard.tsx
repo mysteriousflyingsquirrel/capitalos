@@ -165,10 +165,77 @@ function Dashboard() {
 
   const monthlySpareChangeChf = monthlyInflowChf - monthlyOutflowChf
 
+  // Calculate monthly PnL (difference between current net worth and last snapshot)
+  const monthlyPnLChf = useMemo(() => {
+    if (snapshots.length === 0) return 0
+    const lastSnapshot = snapshots[snapshots.length - 1]
+    return totalNetWorthChf - lastSnapshot.total
+  }, [snapshots, totalNetWorthChf])
+
+  // Calculate monthly PnL percentage
+  const monthlyPnLPercentage = useMemo(() => {
+    if (snapshots.length === 0) return 0
+    const lastSnapshot = snapshots[snapshots.length - 1]
+    if (lastSnapshot.total === 0) return 0
+    return ((totalNetWorthChf - lastSnapshot.total) / lastSnapshot.total) * 100
+  }, [snapshots, totalNetWorthChf])
+
+  // Calculate Year-to-Date (YTD) PnL
+  const ytdPnLChf = useMemo(() => {
+    if (snapshots.length === 0) return 0
+    const currentYear = new Date().getFullYear()
+    // Find the first snapshot of the current year (or the last snapshot before the year started)
+    const firstSnapshotOfYear = snapshots.find(snapshot => {
+      const snapshotDate = new Date(snapshot.date)
+      return snapshotDate.getFullYear() === currentYear
+    })
+    
+    // If no snapshot found for current year, use the last snapshot before the year
+    if (!firstSnapshotOfYear) {
+      const snapshotsBeforeYear = snapshots.filter(snapshot => {
+        const snapshotDate = new Date(snapshot.date)
+        return snapshotDate.getFullYear() < currentYear
+      })
+      if (snapshotsBeforeYear.length === 0) return 0
+      const lastSnapshotBeforeYear = snapshotsBeforeYear[snapshotsBeforeYear.length - 1]
+      return totalNetWorthChf - lastSnapshotBeforeYear.total
+    }
+    
+    return totalNetWorthChf - firstSnapshotOfYear.total
+  }, [snapshots, totalNetWorthChf])
+
+  // Calculate YTD PnL percentage
+  const ytdPnLPercentage = useMemo(() => {
+    if (snapshots.length === 0) return 0
+    const currentYear = new Date().getFullYear()
+    const firstSnapshotOfYear = snapshots.find(snapshot => {
+      const snapshotDate = new Date(snapshot.date)
+      return snapshotDate.getFullYear() === currentYear
+    })
+    
+    let baseTotal = 0
+    if (!firstSnapshotOfYear) {
+      const snapshotsBeforeYear = snapshots.filter(snapshot => {
+        const snapshotDate = new Date(snapshot.date)
+        return snapshotDate.getFullYear() < currentYear
+      })
+      if (snapshotsBeforeYear.length === 0) return 0
+      const lastSnapshotBeforeYear = snapshotsBeforeYear[snapshotsBeforeYear.length - 1]
+      baseTotal = lastSnapshotBeforeYear.total
+    } else {
+      baseTotal = firstSnapshotOfYear.total
+    }
+    
+    if (baseTotal === 0) return 0
+    return ((totalNetWorthChf - baseTotal) / baseTotal) * 100
+  }, [snapshots, totalNetWorthChf])
+
   // Convert values from CHF to baseCurrency
   const totalNetWorthConverted = convert(totalNetWorthChf, 'CHF')
   const monthlyInflowConverted = convert(monthlyInflowChf, 'CHF')
   const monthlyOutflowConverted = convert(monthlyOutflowChf, 'CHF')
+  const monthlyPnLConverted = convert(monthlyPnLChf, 'CHF')
+  const ytdPnLConverted = convert(ytdPnLChf, 'CHF')
 
   // Format currency helper
   const formatCurrencyValue = (value: number) => formatMoney(value, baseCurrency, 'ch')
@@ -355,30 +422,61 @@ function Dashboard() {
         {/* Page Title */}
         <Heading level={1}>Dashboard</Heading>
         
-        {/* First Row: Total Net Worth + Monthly Inflow + Monthly Outflow */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Total Net Worth KPI */}
+        {/* First Row: Total Net Worth (with PnL) + Monthly Cashflow (Inflow/Outflow) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Total Net Worth KPI with Monthly PnL */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-2">
               Total Net Worth
             </Heading>
-            <TotalText variant="neutral">{formatCurrencyValue(totalNetWorthConverted)}</TotalText>
+            <TotalText variant={totalNetWorthConverted >= 0 ? 'inflow' : 'outflow'} className="mb-2">
+              {formatCurrencyValue(totalNetWorthConverted)}
+            </TotalText>
+            <div className="mt-2 pt-2 border-t border-border-subtle space-y-2">
+              <div>
+                <div className="text-xs md:text-sm text-text-muted mb-1">Monthly PnL</div>
+                <div className="flex items-baseline gap-2">
+                  <TotalText variant={monthlyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
+                    {formatCurrencyValue(monthlyPnLConverted)}
+                  </TotalText>
+                  <span className={`text-xs md:text-sm ${monthlyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
+                    ({monthlyPnLPercentage >= 0 ? '+' : ''}{monthlyPnLPercentage.toFixed(2)}%)
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs md:text-sm text-text-muted mb-1">YTD PnL</div>
+                <div className="flex items-baseline gap-2">
+                  <TotalText variant={ytdPnLConverted >= 0 ? 'inflow' : 'outflow'}>
+                    {formatCurrencyValue(ytdPnLConverted)}
+                  </TotalText>
+                  <span className={`text-xs md:text-sm ${ytdPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
+                    ({ytdPnLPercentage >= 0 ? '+' : ''}{ytdPnLPercentage.toFixed(2)}%)
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Monthly Inflow KPI */}
+          {/* Monthly Cashflow KPI with Inflow, Outflow, and Spare Change */}
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-2">
-              Monthly Inflow
+              Monthly Cashflow
             </Heading>
-            <TotalText variant="inflow">{formatCurrencyValue(monthlyInflowConverted)}</TotalText>
-          </div>
-
-          {/* Monthly Outflow KPI */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-            <Heading level={2} className="mb-2">
-              Monthly Outflow
-            </Heading>
-            <TotalText variant="outflow">{formatCurrencyValue(monthlyOutflowConverted)}</TotalText>
+            <div className="space-y-2">
+              <div>
+                <div className="text-xs md:text-sm text-text-muted mb-1">Inflow</div>
+                <TotalText variant="inflow">{formatCurrencyValue(monthlyInflowConverted)}</TotalText>
+              </div>
+              <div>
+                <div className="text-xs md:text-sm text-text-muted mb-1">Outflow</div>
+                <TotalText variant="outflow">{formatCurrencyValue(monthlyOutflowConverted)}</TotalText>
+              </div>
+              <div className="pt-2 border-t border-border-subtle">
+                <div className="text-xs md:text-sm text-text-muted mb-1">Spare Change</div>
+                <TotalText variant="neutral">{formatCurrencyValue(convert(monthlySpareChangeChf, 'CHF'))}</TotalText>
+              </div>
+            </div>
           </div>
         </div>
 
