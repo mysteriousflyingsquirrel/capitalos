@@ -859,38 +859,36 @@ function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProp
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-amount">
-                Inflow
-              </label>
-              <input
-                id="inflow-amount"
-                type="number"
-                min="0"
-                step="0.01"
-                value={inflow}
-                onChange={(e) => setInflow(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              />
-            </div>
-            <div>
-              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-currency">
-                Currency
-              </label>
-              <select
-                id="inflow-currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              >
-                <option value="CHF">CHF</option>
-                <option value="EUR">EUR</option>
-                <option value="USD">USD</option>
-                <option value="BTC">BTC</option>
-                <option value="ETH">ETH</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-amount">
+              Inflow
+            </label>
+            <input
+              id="inflow-amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={inflow}
+              onChange={(e) => setInflow(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+            />
+          </div>
+          <div>
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="inflow-currency">
+              Currency
+            </label>
+            <select
+              id="inflow-currency"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+            >
+              <option value="CHF">CHF</option>
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+              <option value="BTC">BTC</option>
+              <option value="ETH">ETH</option>
+            </select>
           </div>
 
           <div>
@@ -1008,38 +1006,36 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="outflow-amount">
-                Outflow
-              </label>
-              <input
-                id="outflow-amount"
-                type="number"
-                min="0"
-                step="0.01"
-                value={outflow}
-                onChange={(e) => setOutflow(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              />
-            </div>
-            <div>
-              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="outflow-currency">
-                Currency
-              </label>
-              <select
-                id="outflow-currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              >
-                <option value="CHF">CHF</option>
-                <option value="EUR">EUR</option>
-                <option value="USD">USD</option>
-                <option value="BTC">BTC</option>
-                <option value="ETH">ETH</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="outflow-amount">
+              Outflow
+            </label>
+            <input
+              id="outflow-amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={outflow}
+              onChange={(e) => setOutflow(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+            />
+          </div>
+          <div>
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="outflow-currency">
+              Currency
+            </label>
+            <select
+              id="outflow-currency"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+            >
+              <option value="CHF">CHF</option>
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+              <option value="BTC">BTC</option>
+              <option value="ETH">ETH</option>
+            </select>
           </div>
 
           <div>
@@ -1663,38 +1659,36 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-amount">
-                {type === 'inflow' ? 'Inflow' : 'Outflow'}
-              </label>
-              <input
-                id="account-amount"
-                type="number"
-                min="0"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              />
-            </div>
-            <div>
-              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-currency">
-                Currency
-              </label>
-              <select
-                id="account-currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              >
-                <option value="CHF">CHF</option>
-                <option value="EUR">EUR</option>
-                <option value="USD">USD</option>
-                <option value="BTC">BTC</option>
-                <option value="ETH">ETH</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-amount">
+              {type === 'inflow' ? 'Inflow' : 'Outflow'}
+            </label>
+            <input
+              id="account-amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+            />
+          </div>
+          <div>
+            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1" htmlFor="account-currency">
+              Currency
+            </label>
+            <select
+              id="account-currency"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+            >
+              <option value="CHF">CHF</option>
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+              <option value="BTC">BTC</option>
+              <option value="ETH">ETH</option>
+            </select>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
