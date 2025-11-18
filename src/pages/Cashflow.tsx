@@ -615,21 +615,21 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                 {/* Account Header with Totals */}
                 <div>
                   <Heading level={2}>{account}</Heading>
-                  <div className="mt-1 space-y-1">
-                    <TotalText variant="inflow" className="block">
+                  <div className="mt-1 flex items-center gap-4">
+                    <span className="text1 font-normal" style={{ color: '#2ECC71' }}>
                       {formatChf(totalInflow)}
-                    </TotalText>
-                    <TotalText variant="outflow" className="block">
+                    </span>
+                    <span className="text1 font-normal" style={{ color: '#E74C3C' }}>
                       {formatChf(totalOutflow)}
-                    </TotalText>
-                    <TotalText variant="neutral" className="block text-white">
+                    </span>
+                    <span className="text1 font-normal" style={{ color: '#FFFFFF' }}>
                       {formatChf(spare)}
-                    </TotalText>
+                    </span>
                   </div>
                 </div>
 
                 {/* Two Column Layout: Inflow and Outflow */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-2 gap-6">
                   {/* Inflow Column */}
                   <div className="space-y-3">
                     <Heading level={3} className="mb-2">Inflow</Heading>
