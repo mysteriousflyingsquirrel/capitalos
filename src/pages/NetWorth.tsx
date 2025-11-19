@@ -700,11 +700,13 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
   const [platform, setPlatform] = useState('Physical')
   const [error, setError] = useState<string | null>(null)
   
-  // Transaction fields for categories without price per item, and Crypto (which needs first transaction)
-  const needsTransaction = categoriesWithoutPricePerItem.includes(category) || category === 'Crypto'
+  // Transaction fields for categories without price per item, Crypto, and categories that need price per item (Funds, Stocks, Commodities)
+  const needsTransaction = categoriesWithoutPricePerItem.includes(category) || category === 'Crypto' || category === 'Funds' || category === 'Stocks' || category === 'Commodities'
   const isCrypto = category === 'Crypto'
+  const needsPricePerItemInTransaction = (category === 'Funds' || category === 'Stocks' || category === 'Commodities')
   const [amount, setAmount] = useState('')
   const [pricePerCoinUsd, setPricePerCoinUsd] = useState('')
+  const [pricePerItemChf, setPricePerItemChf] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
@@ -774,6 +776,13 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
           return
         }
       }
+      if (needsPricePerItemInTransaction) {
+        const parsedPrice = Number(pricePerItemChf)
+        if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+          setError('Please enter a valid price per item (CHF) greater than 0.')
+          return
+        }
+      }
       if (!date) {
         setError('Please select a date.')
         return
@@ -803,6 +812,15 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
           pricePerItemChf: pricePerCoinChf, // Converted to CHF for storage
           date,
         })
+      } else if (needsPricePerItemInTransaction) {
+        // For Funds, Stocks, Commodities: use entered price per item
+        onSaveTransaction(newItemId, {
+          side: 'buy',
+          currency,
+          amount: Number(amount),
+          pricePerItemChf: Number(pricePerItemChf),
+          date,
+        })
       } else {
         // For other categories without price per item, use 1
         onSaveTransaction(newItemId, {
@@ -821,6 +839,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
     setPlatform('Physical')
     setAmount('')
     setPricePerCoinUsd('')
+    setPricePerItemChf('')
     setDate(new Date().toISOString().split('T')[0])
     setPriceError(null)
     setIsLoadingPrice(false)
@@ -957,7 +976,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
                   className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                   htmlFor="nw-initial-amount"
                 >
-                  Amount {isCrypto ? '(coins)' : '(CHF)'}
+                  Amount {isCrypto ? '(coins)' : needsPricePerItemInTransaction ? '(shares/units)' : '(CHF)'}
                 </label>
                 <input
                   id="nw-initial-amount"
@@ -967,7 +986,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                  placeholder={isCrypto ? 'e.g. 0.5, 1.0, 10.0' : 'e.g. 1000, 5000, 10000'}
+                  placeholder={isCrypto ? 'e.g. 0.5, 1.0, 10.0' : needsPricePerItemInTransaction ? 'e.g. 10, 100, 1000' : 'e.g. 1000, 5000, 10000'}
                 />
               </div>
 
@@ -1012,6 +1031,27 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
                     </div>
                   </div>
                 </>
+              )}
+
+              {needsPricePerItemInTransaction && (
+                <div>
+                  <label
+                    className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                    htmlFor="nw-price-per-item"
+                  >
+                    Price per Item (CHF)
+                  </label>
+                  <input
+                    id="nw-price-per-item"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={pricePerItemChf}
+                    onChange={(e) => setPricePerItemChf(e.target.value)}
+                    className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                    placeholder="e.g. 100.50, 50.25, 25.00"
+                  />
+                </div>
               )}
 
               <div>
