@@ -28,6 +28,7 @@ import {
 } from '../services/storageService'
 import {
   loadSnapshots,
+  type NetWorthSnapshot,
 } from '../services/snapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
@@ -163,9 +164,15 @@ function Dashboard() {
   }, [uid])
 
   // Load historical snapshots only (no new snapshots created)
-  const snapshots = useMemo(() => {
-    return loadSnapshots()
-  }, [])
+  const [snapshots, setSnapshots] = useState<NetWorthSnapshot[]>([])
+  
+  useEffect(() => {
+    if (uid) {
+      loadSnapshots(uid).then(setSnapshots)
+    } else {
+      loadSnapshots().then(setSnapshots)
+    }
+  }, [uid])
 
   // Calculate total net worth from actual data
   const totalNetWorthChf = useMemo(() => {

@@ -29,6 +29,7 @@ export async function saveDocument<T extends { id: string }>(
 }
 
 // Generic function to save multiple documents in a batch
+// Firestore has a limit of 500 operations per batch, so we need to chunk large arrays
 export async function saveDocuments<T extends { id: string }>(
   uid: string,
   collectionName: string,
@@ -36,15 +37,21 @@ export async function saveDocuments<T extends { id: string }>(
 ): Promise<void> {
   if (items.length === 0) return
 
-  const batch = writeBatch(db)
   const collectionPath = getUserCollectionPath(uid, collectionName)
+  const BATCH_SIZE = 500 // Firestore batch limit
 
-  items.forEach((item) => {
-    const docRef = doc(db, collectionPath, item.id)
-    batch.set(docRef, item)
-  })
+  // Process in chunks of 500
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const chunk = items.slice(i, i + BATCH_SIZE)
+    const batch = writeBatch(db)
 
-  await batch.commit()
+    chunk.forEach((item) => {
+      const docRef = doc(db, collectionPath, item.id)
+      batch.set(docRef, item)
+    })
+
+    await batch.commit()
+  }
 }
 
 // Generic function to load all documents from a collection
@@ -60,6 +67,7 @@ export async function loadDocuments<T>(
 }
 
 // Generic function to delete all documents in a collection
+// Firestore has a limit of 500 operations per batch, so we need to chunk large deletions
 export async function deleteAllDocuments(
   uid: string,
   collectionName: string
@@ -68,12 +76,22 @@ export async function deleteAllDocuments(
   const q = query(collection(db, collectionPath))
   const querySnapshot = await getDocs(q)
   
-  const batch = writeBatch(db)
-  querySnapshot.docs.forEach((docSnapshot) => {
-    batch.delete(docSnapshot.ref)
-  })
+  if (querySnapshot.empty) return
   
-  await batch.commit()
+  const BATCH_SIZE = 500 // Firestore batch limit
+  const docs = querySnapshot.docs
+  
+  // Process deletions in chunks of 500
+  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const chunk = docs.slice(i, i + BATCH_SIZE)
+    const batch = writeBatch(db)
+    
+    chunk.forEach((docSnapshot) => {
+      batch.delete(docSnapshot.ref)
+    })
+    
+    await batch.commit()
+  }
 }
 
 // Specific functions for each data type
@@ -132,6 +150,54 @@ export async function loadCashflowAccountflowMappings<T>(uid: string): Promise<T
   return loadDocuments<T>(uid, 'cashflowAccountflowMappings')
 }
 
+// Settings storage
+export async function saveUserSettings(
+  uid: string,
+  settings: { baseCurrency: string }
+): Promise<void> {
+  const docRef = doc(db, `users/${uid}/settings/user`)
+  await setDoc(docRef, settings)
+}
+
+export async function loadUserSettings(uid: string): Promise<{ baseCurrency: string } | null> {
+  const docRef = doc(db, `users/${uid}/settings/user`)
+  const docSnap = await getDoc(docRef)
+  if (docSnap.exists()) {
+    return docSnap.data() as { baseCurrency: string }
+  }
+  return null
+}
+
+// Snapshots storage
+// Snapshots use 'date' as their unique identifier, not 'id'
+export async function saveSnapshotsFirestore<T extends { date: string }>(
+  uid: string,
+  snapshots: T[]
+): Promise<void> {
+  if (snapshots.length === 0) return
+
+  const collectionPath = getUserCollectionPath(uid, 'snapshots')
+  const BATCH_SIZE = 500 // Firestore batch limit
+
+  // Process in chunks of 500
+  for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
+    const chunk = snapshots.slice(i, i + BATCH_SIZE)
+    const batch = writeBatch(db)
+
+    chunk.forEach((snapshot) => {
+      // Use 'date' as the document ID
+      const docRef = doc(db, collectionPath, snapshot.date)
+      batch.set(docRef, snapshot)
+    })
+
+    await batch.commit()
+  }
+}
+
+export async function loadSnapshotsFirestore<T>(uid: string): Promise<T[]> {
+  return loadDocuments<T>(uid, 'snapshots')
+}
+
 // Clear all user data
 export async function clearAllUserData(uid: string): Promise<void> {
   const collections = [
@@ -140,6 +206,7 @@ export async function clearAllUserData(uid: string): Promise<void> {
     'cashflowInflowItems',
     'cashflowOutflowItems',
     'cashflowAccountflowMappings',
+    'snapshots',
   ]
 
   await Promise.all(

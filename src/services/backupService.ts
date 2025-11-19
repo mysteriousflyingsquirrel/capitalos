@@ -12,6 +12,7 @@ import {
   clearAllData,
 } from './storageService'
 import { clearAllUserData } from './firestoreService'
+import { loadSnapshots, saveSnapshots, type NetWorthSnapshot } from './snapshotService'
 
 // Backup schema version
 const BACKUP_SCHEMA_VERSION = '1.0.0'
@@ -26,6 +27,7 @@ export interface BackupData {
     cashflowInflowItems: unknown[]
     cashflowOutflowItems: unknown[]
     cashflowAccountflowMappings: unknown[]
+    snapshots: unknown[]
   }
 }
 
@@ -39,12 +41,14 @@ export async function createBackup(uid: string): Promise<BackupData> {
     cashflowInflowItems,
     cashflowOutflowItems,
     cashflowAccountflowMappings,
+    snapshots,
   ] = await Promise.all([
     loadNetWorthItems([], uid),
     loadNetWorthTransactions([], uid),
     loadCashflowInflowItems([], uid),
     loadCashflowOutflowItems([], uid),
     loadCashflowAccountflowMappings([], uid),
+    loadSnapshots(uid),
   ])
 
   return {
@@ -57,6 +61,7 @@ export async function createBackup(uid: string): Promise<BackupData> {
       cashflowInflowItems,
       cashflowOutflowItems,
       cashflowAccountflowMappings,
+      snapshots,
     },
   }
 }
@@ -91,6 +96,7 @@ export function validateBackup(backup: unknown): backup is BackupData {
     'cashflowInflowItems',
     'cashflowOutflowItems',
     'cashflowAccountflowMappings',
+    'snapshots',
   ]
 
   for (const field of requiredDataFields) {
@@ -147,6 +153,7 @@ export async function restoreBackup(
       backup.data.cashflowAccountflowMappings as { id: string }[],
       currentUid
     ),
+    saveSnapshots(backup.data.snapshots as NetWorthSnapshot[], currentUid),
   ])
 }
 

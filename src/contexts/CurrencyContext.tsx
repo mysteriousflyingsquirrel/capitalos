@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import type { CurrencyCode } from '../lib/currency'
 import { getExchangeRates, type ExchangeRates } from '../services/exchangeRateService'
+import { saveUserSettings, loadUserSettings } from '../services/firestoreService'
+import { useAuth } from './AuthContext'
 
 interface CurrencyContextType {
   baseCurrency: CurrencyCode
@@ -19,9 +21,10 @@ interface CurrencyProviderProps {
   children: ReactNode
 }
 
-export function CurrencyProvider({ children }: CurrencyProviderProps) {
+function CurrencyProviderInner({ children }: CurrencyProviderProps) {
+  const { uid } = useAuth()
   const [baseCurrency, setBaseCurrencyState] = useState<CurrencyCode>(() => {
-    // Load from localStorage on initial mount
+    // Load from localStorage on initial mount (fallback)
     try {
       const stored = localStorage.getItem(BASE_CURRENCY_STORAGE_KEY)
       if (stored && (stored === 'CHF' || stored === 'EUR' || stored === 'USD')) {
@@ -53,19 +56,45 @@ export function CurrencyProvider({ children }: CurrencyProviderProps) {
     }
   }
 
-  // Initial fetch on mount
+  // Load settings from Firestore when uid is available
   useEffect(() => {
-    fetchRates(baseCurrency)
-  }, []) // Only run on mount
+    if (uid) {
+      loadUserSettings(uid)
+        .then((settings) => {
+          if (settings && (settings.baseCurrency === 'CHF' || settings.baseCurrency === 'EUR' || settings.baseCurrency === 'USD')) {
+            setBaseCurrencyState(settings.baseCurrency as CurrencyCode)
+            fetchRates(settings.baseCurrency as CurrencyCode)
+          } else {
+            // No settings in Firestore, fetch rates with current currency
+            fetchRates(baseCurrency)
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to load settings from Firestore:', error)
+          fetchRates(baseCurrency)
+        })
+    } else {
+      // No user, just fetch rates with current currency
+      fetchRates(baseCurrency)
+    }
+  }, [uid]) // Run when uid changes
 
   // Set base currency and refetch rates
-  const setBaseCurrency = (newBase: CurrencyCode) => {
+  const setBaseCurrency = async (newBase: CurrencyCode) => {
     setBaseCurrencyState(newBase)
-    // Save to localStorage
+    // Save to localStorage (backup)
     try {
       localStorage.setItem(BASE_CURRENCY_STORAGE_KEY, newBase)
     } catch (error) {
       console.warn('Failed to save base currency to localStorage:', error)
+    }
+    // Save to Firestore immediately
+    if (uid) {
+      try {
+        await saveUserSettings(uid, { baseCurrency: newBase })
+      } catch (error) {
+        console.error('Failed to save base currency to Firestore:', error)
+      }
     }
     // Refetch rates
     fetchRates(newBase)
@@ -110,6 +139,10 @@ export function CurrencyProvider({ children }: CurrencyProviderProps) {
       {children}
     </CurrencyContext.Provider>
   )
+}
+
+export function CurrencyProvider({ children }: CurrencyProviderProps) {
+  return <CurrencyProviderInner>{children}</CurrencyProviderInner>
 }
 
 export function useCurrency() {
