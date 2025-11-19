@@ -29,34 +29,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true
     let unsubscribe: (() => void) | null = null
 
-    // Check for redirect result first (for Safari/iOS sign-in)
-    // This must complete before we set up the auth state listener
+    // Check for redirect result FIRST (for Safari/iOS sign-in)
+    // This must be called to complete the redirect sign-in flow
+    console.log('Checking for redirect result...')
     getRedirectResult(auth)
       .then((result) => {
         if (!isMounted) return
 
         if (result) {
           // User signed in via redirect
-          // The auth state listener below will pick up the user automatically
-          console.log('Redirect result received, user signed in:', result.user.email)
+          console.log('✅ Redirect result received, user signed in:', result.user.email)
+          console.log('User UID:', result.user.uid)
+          // Set user immediately from redirect result
+          setUser(result.user)
+          setLoading(false)
+        } else {
+          // No redirect result, normal page load
+          console.log('No redirect result (normal page load)')
         }
 
-        // Set up auth state listener after checking redirect result
-        // This will handle both redirect and normal auth state changes
+        // Set up auth state listener after redirect check
+        // This handles future auth state changes
         unsubscribe = onAuthStateChanged(auth, (user) => {
           if (!isMounted) return
+          console.log('Auth state changed:', user ? user.email : 'signed out')
           setUser(user)
-          setLoading(false)
+          
+          // Only set loading to false if we didn't already handle redirect
+          if (!result) {
+            setLoading(false)
+          }
         })
 
-        // If no redirect result, set loading to false immediately
+        // If no redirect result, set loading to false
+        // The auth state listener will update the user state
         if (!result) {
           setLoading(false)
         }
       })
       .catch((error) => {
         if (!isMounted) return
-        console.error('Error getting redirect result:', error)
+        console.error('❌ Error getting redirect result:', error)
+        console.error('Error code:', error.code)
+        console.error('Error message:', error.message)
         
         // Set up auth state listener even if redirect check fails
         unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -71,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Fallback: if redirect check takes too long, set up listener anyway
     const fallbackTimer = setTimeout(() => {
       if (!unsubscribe && isMounted) {
+        console.log('Redirect check timeout, proceeding with normal flow')
         unsubscribe = onAuthStateChanged(auth, (user) => {
           if (!isMounted) return
           setUser(user)
@@ -78,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         setLoading(false)
       }
-    }, 1000)
+    }, 2000)
 
     return () => {
       isMounted = false
