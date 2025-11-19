@@ -2,10 +2,13 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { 
   User, 
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged 
 } from 'firebase/auth'
 import { auth, googleProvider } from '../config/firebase'
+import { isIosSafari } from '../utils/browserDetection'
 
 interface AuthContextType {
   user: User | null
@@ -23,17 +26,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user)
-      setLoading(false)
-    })
+    let isMounted = true
+    let unsubscribe: (() => void) | null = null
 
-    return () => unsubscribe()
+    // Check for redirect result first (for Safari/iOS sign-in)
+    // This must complete before we set up the auth state listener
+    getRedirectResult(auth)
+      .then((result) => {
+        if (!isMounted) return
+
+        if (result) {
+          // User signed in via redirect
+          // The auth state listener below will pick up the user automatically
+          console.log('Redirect result received, user signed in:', result.user.email)
+        }
+
+        // Set up auth state listener after checking redirect result
+        // This will handle both redirect and normal auth state changes
+        unsubscribe = onAuthStateChanged(auth, (user) => {
+          if (!isMounted) return
+          setUser(user)
+          setLoading(false)
+        })
+
+        // If no redirect result, set loading to false immediately
+        if (!result) {
+          setLoading(false)
+        }
+      })
+      .catch((error) => {
+        if (!isMounted) return
+        console.error('Error getting redirect result:', error)
+        
+        // Set up auth state listener even if redirect check fails
+        unsubscribe = onAuthStateChanged(auth, (user) => {
+          if (!isMounted) return
+          setUser(user)
+          setLoading(false)
+        })
+        
+        setLoading(false)
+      })
+
+    // Fallback: if redirect check takes too long, set up listener anyway
+    const fallbackTimer = setTimeout(() => {
+      if (!unsubscribe && isMounted) {
+        unsubscribe = onAuthStateChanged(auth, (user) => {
+          if (!isMounted) return
+          setUser(user)
+          setLoading(false)
+        })
+        setLoading(false)
+      }
+    }, 1000)
+
+    return () => {
+      isMounted = false
+      clearTimeout(fallbackTimer)
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
   }, [])
 
   const signInWithGoogle = async () => {
     try {
-      await signInWithPopup(auth, googleProvider)
+      // Use redirect for iOS Safari, popup for other browsers
+      if (isIosSafari()) {
+        // signInWithRedirect doesn't return a promise that resolves
+        // The user will be redirected and then come back to the app
+        // The redirect result is handled in the useEffect above
+        await signInWithRedirect(auth, googleProvider)
+      } else {
+        await signInWithPopup(auth, googleProvider)
+      }
     } catch (error) {
       console.error('Error signing in with Google:', error)
       throw error

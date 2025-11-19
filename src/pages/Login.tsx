@@ -1,30 +1,47 @@
 import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import Heading from '../components/Heading'
+import { isIosSafari } from '../utils/browserDetection'
 
 function Login() {
   const { signInWithGoogle } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   
-  // Detect if user is on iPhone/iOS
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  // Detect if user is on iOS Safari
+  const isSafari = isIosSafari()
 
   const handleSignIn = async () => {
     setLoading(true)
     setError(null)
+    
     try {
+      if (isSafari) {
+        // For Safari, show redirecting message
+        setIsRedirecting(true)
+      }
+      
       await signInWithGoogle()
+      
+      // For popup flow, loading will be set to false in finally
+      // For redirect flow, user will be redirected away, so this won't execute
+      if (!isSafari) {
+        setLoading(false)
+      }
     } catch (err: any) {
+      setIsRedirecting(false)
       // Don't show error if user closed the popup
       if (err.code === 'auth/popup-closed-by-user') {
         // User closed the popup, which is fine
+        setLoading(false)
         return
       }
       setError(err instanceof Error ? err.message : 'Failed to sign in')
-    } finally {
       setLoading(false)
     }
+    // Note: For redirect flow, the user will be redirected away
+    // so the finally block may not execute. That's expected.
   }
 
   return (
@@ -38,13 +55,6 @@ function Login() {
             Sign in with your Google account to access your personal wealth, cashflow and investing cockpit.
           </p>
           
-          {isIOS && (
-            <div className="mb-4 p-3 bg-bg-surface-2 border border-[#DAA520] rounded-input">
-              <p className="text-[#DAA520] text-[0.567rem] md:text-xs text-center">
-                <strong>iPhone/iPad users:</strong> Please disable popup blockers in Safari settings (Settings → Safari → Block Pop-ups) to sign in.
-              </p>
-            </div>
-          )}
           
           {error && (
             <div className="mb-4 p-3 bg-bg-surface-2 border border-danger rounded-input">
@@ -57,13 +67,13 @@ function Login() {
             disabled={loading}
             className="w-full py-3 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-sm md:text-base font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
           >
-            {loading ? (
+            {loading || isRedirecting ? (
               <>
                 <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Signing in...
+                {isRedirecting ? 'Redirecting to Google Login…' : 'Signing in...'}
               </>
             ) : (
               <>
