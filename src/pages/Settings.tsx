@@ -1,14 +1,11 @@
-import React, { useState } from 'react'
+import React from 'react'
 import Heading from '../components/Heading'
 import { useCurrency } from '../contexts/CurrencyContext'
 import type { CurrencyCode } from '../lib/currency'
 import { supportedCurrencies } from '../lib/currency'
 
-type NumberFormat = 'ch' | 'us' | 'de'
-
 function Settings() {
   const { baseCurrency, setBaseCurrency, exchangeRates, isLoading, error } = useCurrency()
-  const [numberFormat, setNumberFormat] = useState<NumberFormat>('ch')
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -71,7 +68,7 @@ function Settings() {
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
           <Heading level={2} className="mb-4">General</Heading>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
             {/* Base Currency */}
             <div>
               <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
@@ -115,22 +112,6 @@ function Settings() {
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Number Format */}
-            <div>
-              <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
-                Number Format
-              </label>
-              <select
-                value={numberFormat}
-                onChange={(e) => setNumberFormat(e.target.value as NumberFormat)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              >
-                <option value="ch">1'500.00 (CH)</option>
-                <option value="us">1,500.00 (US)</option>
-                <option value="de">1.500,00 (DE)</option>
-              </select>
             </div>
           </div>
         </div>
