@@ -35,12 +35,41 @@ export async function saveDocuments<T extends { id: string }>(
   collectionName: string,
   items: T[]
 ): Promise<void> {
-  if (items.length === 0) return
-
   const collectionPath = getUserCollectionPath(uid, collectionName)
   const BATCH_SIZE = 500 // Firestore batch limit
 
-  // Process in chunks of 500
+  // If items array is empty, delete all documents in the collection
+  if (items.length === 0) {
+    const q = query(collection(db, collectionPath))
+    const querySnapshot = await getDocs(q)
+    
+    if (querySnapshot.empty) return
+    
+    // Delete in batches
+    const docs = querySnapshot.docs
+    for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+      const chunk = docs.slice(i, i + BATCH_SIZE)
+      const batch = writeBatch(db)
+      
+      chunk.forEach((docSnapshot) => {
+        batch.delete(docSnapshot.ref)
+      })
+      
+      await batch.commit()
+    }
+    return
+  }
+
+  // Get existing documents to find ones to delete
+  const q = query(collection(db, collectionPath))
+  const querySnapshot = await getDocs(q)
+  const existingIds = new Set(querySnapshot.docs.map(d => d.id))
+  const newIds = new Set(items.map(item => item.id))
+  
+  // Find IDs to delete (exist in Firestore but not in new items)
+  const idsToDelete = Array.from(existingIds).filter(id => !newIds.has(id))
+
+  // Process saves in chunks of 500
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const chunk = items.slice(i, i + BATCH_SIZE)
     const batch = writeBatch(db)
@@ -51,6 +80,21 @@ export async function saveDocuments<T extends { id: string }>(
     })
 
     await batch.commit()
+  }
+
+  // Delete removed documents in batches
+  if (idsToDelete.length > 0) {
+    for (let i = 0; i < idsToDelete.length; i += BATCH_SIZE) {
+      const chunk = idsToDelete.slice(i, i + BATCH_SIZE)
+      const batch = writeBatch(db)
+      
+      chunk.forEach((id) => {
+        const docRef = doc(db, collectionPath, id)
+        batch.delete(docRef)
+      })
+      
+      await batch.commit()
+    }
   }
 }
 
