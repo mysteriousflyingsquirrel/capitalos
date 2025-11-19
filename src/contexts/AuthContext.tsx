@@ -31,27 +31,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let isMounted = true
+    let redirectCheckComplete = false
+
     // Check for redirect result first (for mobile sign-in)
+    // This must complete before we consider loading done
     getRedirectResult(auth)
       .then((result) => {
+        if (!isMounted) return
+        redirectCheckComplete = true
+        
         if (result) {
           // User signed in via redirect
+          console.log('Redirect result received, user signed in:', result.user.email)
           setUser(result.user)
+          setLoading(false)
+        } else {
+          // No redirect result, set loading to false
+          setLoading(false)
         }
-        setLoading(false)
       })
       .catch((error) => {
+        if (!isMounted) return
+        redirectCheckComplete = true
         console.error('Error getting redirect result:', error)
         setLoading(false)
       })
 
-    // Listen for auth state changes
+    // Set up auth state listener
+    // This will fire when redirect completes and user is authenticated
+    // But we only update loading state after redirect check is complete
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!isMounted) return
+      console.log('Auth state changed:', user ? user.email : 'signed out')
       setUser(user)
-      setLoading(false)
+      
+      // Only set loading to false if redirect check is complete
+      // This prevents setting loading to false before redirect result is processed
+      if (redirectCheckComplete) {
+        setLoading(false)
+      }
     })
 
-    return () => unsubscribe()
+    // Fallback: if redirect check takes too long, set loading to false anyway
+    const fallbackTimer = setTimeout(() => {
+      if (!redirectCheckComplete && isMounted) {
+        redirectCheckComplete = true
+        setLoading(false)
+      }
+    }, 2000)
+
+    return () => {
+      isMounted = false
+      clearTimeout(fallbackTimer)
+      unsubscribe()
+    }
   }, [])
 
   const signInWithGoogle = async () => {
