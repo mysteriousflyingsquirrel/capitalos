@@ -507,11 +507,11 @@ function Dashboard() {
               <XAxis
                 dataKey="month"
                 stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.72rem' }}
+                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
               />
               <YAxis
                 stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.72rem' }}
+                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
                 tickFormatter={formatCurrencyTick}
               />
               <Tooltip
@@ -520,7 +520,7 @@ function Dashboard() {
                   border: '1px solid #E5E7EB',
                   borderRadius: '12px',
                   color: '#111827',
-                  fontSize: '0.72rem',
+                  fontSize: '0.648rem',
                   fontWeight: '400',
                 }}
                 formatter={(value: number) => formatCurrencyValue(value)}
@@ -636,13 +636,13 @@ function Dashboard() {
                     border: '1px solid #E5E7EB',
                     borderRadius: '12px',
                     color: '#111827',
-                    fontSize: '0.72rem',
+                    fontSize: '0.648rem',
                     fontWeight: '400',
                   }}
                   formatter={(value: number) => `${value}%`}
                 />
                 <Legend
-                  wrapperStyle={{ color: '#8B8F99', fontSize: '0.72rem', fontWeight: '400' }}
+                  wrapperStyle={{ color: '#8B8F99', fontSize: '0.648rem', fontWeight: '400' }}
                   iconType="circle"
                   className="text2"
                   formatter={(value, entry) => {
@@ -684,13 +684,13 @@ function Dashboard() {
                     border: '1px solid #E5E7EB',
                     borderRadius: '12px',
                     color: '#111827',
-                    fontSize: '0.72rem',
+                    fontSize: '0.648rem',
                     fontWeight: '400',
                   }}
                   formatter={(value: number) => `${value}%`}
                 />
                 <Legend
-                  wrapperStyle={{ color: '#8B8F99', fontSize: '0.72rem', fontWeight: '400' }}
+                  wrapperStyle={{ color: '#8B8F99', fontSize: '0.648rem', fontWeight: '400' }}
                   iconType="circle"
                   className="text2"
                   formatter={(value, entry) => {
@@ -732,13 +732,13 @@ function Dashboard() {
                     border: '1px solid #E5E7EB',
                     borderRadius: '12px',
                     color: '#111827',
-                    fontSize: '0.72rem',
+                    fontSize: '0.648rem',
                     fontWeight: '400',
                   }}
                   formatter={(value: number) => `${value}%`}
                 />
                 <Legend
-                  wrapperStyle={{ color: '#8B8F99', fontSize: '0.72rem', fontWeight: '400' }}
+                  wrapperStyle={{ color: '#8B8F99', fontSize: '0.648rem', fontWeight: '400' }}
                   iconType="circle"
                   className="text2"
                   formatter={(value, entry) => {
@@ -768,11 +768,11 @@ function Dashboard() {
               <XAxis
                 dataKey="month"
                 stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.72rem' }}
+                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
               />
               <YAxis
                 stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.72rem' }}
+                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
                 tickFormatter={formatCurrencyTick}
               />
               <Tooltip
@@ -781,7 +781,7 @@ function Dashboard() {
                   border: '1px solid #E5E7EB',
                   borderRadius: '12px',
                   color: '#111827',
-                  fontSize: '0.72rem',
+                  fontSize: '0.648rem',
                   fontWeight: '400',
                 }}
                 formatter={(value: number) => formatCurrencyValue(value)}

@@ -30,3 +30,20 @@ export function formatChf(amount: number): string {
   }).format(amount)
 }
 
+// Format number without currency (for table displays)
+export function formatNumber(amount: number, numberFormat: 'ch' | 'us' | 'de' = 'ch'): string {
+  const localeMap: Record<typeof numberFormat, string> = {
+    ch: 'de-CH',
+    us: 'en-US',
+    de: 'de-DE',
+  }
+
+  const locale = localeMap[numberFormat]
+
+  return new Intl.NumberFormat(locale, {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+

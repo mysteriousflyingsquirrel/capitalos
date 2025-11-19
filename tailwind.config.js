@@ -60,24 +60,24 @@ module.exports = {
       },
 
       fontSize: {
-        // Custom typography system (20% larger)
-        header1: "1.20rem",
-        header2: "1.08rem",
-        header3: "0.96rem",
-        header4: "0.72rem",
+        // Custom typography system
+        header1: "1.08rem",
+        header2: "0.972rem",
+        header3: "0.864rem",
+        header4: "0.648rem",
 
-        text1: "0.96rem",
-        text2: "0.72rem",
+        text1: "0.864rem",
+        text2: "0.648rem",
 
-        // Override Tailwind defaults to be 20% larger
-        xs: "0.90rem",      // was 0.75rem * 1.2
-        sm: "1.05rem",      // was 0.875rem * 1.2
-        base: "1.20rem",    // was 1rem * 1.2
-        lg: "1.35rem",      // was 1.125rem * 1.2
-        xl: "1.50rem",      // was 1.25rem * 1.2
-        "2xl": "1.80rem",   // was 1.5rem * 1.2
-        "3xl": "2.25rem",   // was 1.875rem * 1.2
-        "4xl": "2.70rem",   // was 2.25rem * 1.2
+        // Override Tailwind defaults
+        xs: "0.81rem",
+        sm: "0.945rem",
+        base: "1.08rem",
+        lg: "1.215rem",
+        xl: "1.35rem",
+        "2xl": "1.62rem",
+        "3xl": "2.025rem",
+        "4xl": "2.43rem",
       },
 
       fontWeight: {
@@ -131,22 +131,22 @@ module.exports = {
       addUtilities({
         "@media (min-width: 1024px)": {
           ".header1": {
-            fontSize: "1.44rem",
+            fontSize: "1.296rem",
           },
           ".header2": {
-            fontSize: "1.30rem",
+            fontSize: "1.17rem",
           },
           ".header3": {
-            fontSize: "1.15rem",
+            fontSize: "1.035rem",
           },
           ".header4": {
-            fontSize: "0.86rem",
+            fontSize: "0.774rem",
           },
           ".text1": {
-            fontSize: "1.15rem",
+            fontSize: "1.035rem",
           },
           ".text2": {
-            fontSize: "0.86rem",
+            fontSize: "0.774rem",
           },
         },
       });

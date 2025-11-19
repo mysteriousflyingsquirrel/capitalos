@@ -2,7 +2,7 @@ import React, { useState, useMemo, FormEvent, useRef, useEffect } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
-import { formatMoney } from '../lib/currency'
+import { formatMoney, formatNumber } from '../lib/currency'
 import { formatDate } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import { fetchCoinPrice } from '../services/coinGeckoService'
@@ -163,7 +163,7 @@ function NetWorthCategorySection({
           </div>
           <button
             onClick={onAddClick}
-            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.63rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
+            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
           >
             <svg
               className="w-4 h-4 transition-transform group-hover:rotate-90"
@@ -208,11 +208,11 @@ function NetWorthCategorySection({
             <thead>
               <tr className="border-b border-border-subtle">
                 <th className="text-left pb-2">
-                  <Heading level={4}>Item</Heading>
+                  <Heading level={4}>{category === 'Crypto' ? 'Coin' : 'Item'}</Heading>
                 </th>
                 {category === 'Crypto' && (
                   <th className="text-right pb-2">
-                    <Heading level={4}>Amount of Coins</Heading>
+                    <Heading level={4}>Holdings</Heading>
                   </th>
                 )}
                 <th className="text-right pb-2">
@@ -229,7 +229,7 @@ function NetWorthCategorySection({
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={category === 'Crypto' ? 5 : 4} className="py-4 text-center text-text-muted text-[0.63rem] md:text-xs">
+                  <td colSpan={category === 'Crypto' ? 5 : 4} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
                     No items yet. Click "Add Item" to get started.
                   </td>
                 </tr>
@@ -267,7 +267,7 @@ function NetWorthCategorySection({
                       )}
                       <td className="py-2 text-right">
                         <div className="text2 whitespace-nowrap">
-                          {formatCurrency(balanceConverted)}
+                          {formatNumber(balanceConverted, 'ch')}
                         </div>
                       </td>
                       <td className="py-2 text-right">
@@ -665,13 +665,13 @@ function NetWorth() {
           >
             <button
               onClick={() => handleShowTransactions(menuOpenItemId)}
-              className="w-full text-left px-4 py-2 text-text-primary text-[0.63rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+              className="w-full text-left px-4 py-2 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
             >
               Show Transactions
             </button>
             <button
               onClick={() => handleRemoveItem(menuOpenItemId)}
-              className="w-full text-left px-4 py-2 text-danger text-[0.63rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+              className="w-full text-left px-4 py-2 text-danger text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
             >
               Remove
             </button>
@@ -837,14 +837,14 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
         </Heading>
 
         {error && (
-          <div className="mb-3 text-[0.63rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+          <div className="mb-3 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
+            <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
               Category
             </label>
             <div className="text-text-primary text-xs md:text-sm">{category}</div>
@@ -852,7 +852,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
 
           <div>
             <label
-              className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
               htmlFor="nw-item-name"
             >
               {isCrypto ? 'Coin' : 'Item'}
@@ -871,7 +871,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
           {isCrypto ? (
             <div>
               <label
-                className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                 htmlFor="nw-platform"
               >
                 Platform
@@ -901,7 +901,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
             <>
               <div>
                 <label
-                  className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                   htmlFor="nw-currency"
                 >
                   Currency
@@ -921,7 +921,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
               </div>
               <div>
                 <label
-                  className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                   htmlFor="nw-platform"
                 >
                   Platform
@@ -954,7 +954,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
             <>
               <div>
                 <label
-                  className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                   htmlFor="nw-initial-amount"
                 >
                   Amount {isCrypto ? '(coins)' : '(CHF)'}
@@ -975,12 +975,12 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
                 <>
                   <div>
                     <label
-                      className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                      className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                       htmlFor="nw-price-per-coin"
                     >
                       Price per Coin (USD)
                       {isLoadingPrice && (
-                        <span className="ml-2 text-text-muted text-[0.525rem] md:text-[0.63rem]">(fetching...)</span>
+                        <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
                       )}
                     </label>
                     <input
@@ -997,14 +997,14 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
                       disabled={isLoadingPrice}
                     />
                     {priceError && (
-                      <p className="mt-1 text-[0.525rem] md:text-[0.63rem] text-warning">
+                      <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
                         {priceError}
                       </p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
+                    <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
                       Total Spent (USD)
                     </label>
                     <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm">
@@ -1016,7 +1016,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
 
               <div>
                 <label
-                  className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                   htmlFor="nw-initial-date"
                 >
                   Date
@@ -1036,13 +1036,13 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+              className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+              className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
               {isCrypto ? 'Add Coin' : 'Add Item'}
             </button>
@@ -1190,7 +1190,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
           <button
             type="button"
             onClick={() => setActiveTab('buy')}
-            className={`px-4 py-2 text-[0.63rem] md:text-xs font-medium transition-colors ${
+            className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium transition-colors ${
               activeTab === 'buy'
                 ? 'text-highlight-yellow border-b-2 border-highlight-yellow'
                 : 'text-text-secondary hover:text-text-primary'
@@ -1201,7 +1201,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
           <button
             type="button"
             onClick={() => setActiveTab('sell')}
-            className={`px-4 py-2 text-[0.63rem] md:text-xs font-medium transition-colors ${
+            className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium transition-colors ${
               activeTab === 'sell'
                 ? 'text-highlight-yellow border-b-2 border-highlight-yellow'
                 : 'text-text-secondary hover:text-text-primary'
@@ -1212,20 +1212,20 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
         </div>
 
         {error && (
-          <div className="mb-3 text-[0.63rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+          <div className="mb-3 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
             {error}
           </div>
         )}
 
         {/* Read-only item info */}
         <div className="mb-4 p-3 bg-bg-surface-2 rounded-input space-y-1">
-          <div className="text-text-secondary text-[0.63rem] md:text-xs">
+          <div className="text-text-secondary text-[0.567rem] md:text-xs">
             <span className="font-medium">Item:</span> {item.name}
           </div>
-          <div className="text-text-secondary text-[0.63rem] md:text-xs">
+          <div className="text-text-secondary text-[0.567rem] md:text-xs">
             <span className="font-medium">Category:</span> {item.category}
           </div>
-          <div className="text-text-secondary text-[0.63rem] md:text-xs">
+          <div className="text-text-secondary text-[0.567rem] md:text-xs">
             <span className="font-medium">Platform:</span> {item.platform}
           </div>
         </div>
@@ -1233,7 +1233,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
-              className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
               htmlFor="tx-amount"
             >
               {isCrypto ? 'Amount (coins)' : needsPricePerItem ? 'Amount' : 'Amount (CHF)'}
@@ -1253,12 +1253,12 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
           {needsPricePerItem && (
             <div>
               <label
-                className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                 htmlFor="tx-price"
               >
                 {isCrypto ? 'Price per coin (USD)' : 'Price per item (CHF)'}
                 {isLoadingPrice && (
-                  <span className="ml-2 text-text-muted text-[0.525rem] md:text-[0.63rem]">(fetching...)</span>
+                  <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
                 )}
               </label>
               <input
@@ -1275,7 +1275,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
                 disabled={isLoadingPrice}
               />
               {priceError && (
-                <p className="mt-1 text-[0.525rem] md:text-[0.63rem] text-warning">
+                <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
                   {priceError}
                 </p>
               )}
@@ -1284,7 +1284,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
 
           {needsPricePerItem && (
             <div>
-              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1">
+              <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
                 {activeTab === 'buy' ? 'Total spent' : 'Total sold'} {isCrypto ? '(USD)' : '(CHF)'}
               </label>
               <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm">
@@ -1298,7 +1298,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
 
           <div>
             <label
-              className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-1"
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
               htmlFor="tx-date"
             >
               Date
@@ -1316,13 +1316,13 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+              className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+              className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
               {isEditing ? 'Save Changes' : (activeTab === 'buy' ? 'Add Buy' : 'Add Sell')}
             </button>
@@ -1375,13 +1375,13 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose,
 
         {/* Balance */}
         <div className="mb-6 p-4 bg-bg-surface-2 rounded-input">
-          <div className="text-text-secondary text-[0.63rem] md:text-xs mb-1">Balance</div>
+          <div className="text-text-secondary text-[0.567rem] md:text-xs mb-1">Balance</div>
           <TotalText variant="neutral">{formatCurrency(balanceConverted)}</TotalText>
         </div>
 
         {/* Transactions Table */}
         {sortedTransactions.length === 0 ? (
-          <div className="text-text-secondary text-[0.63rem] md:text-xs text-center py-8">
+          <div className="text-text-secondary text-[0.567rem] md:text-xs text-center py-8">
             No transactions found.
           </div>
         ) : (
@@ -1458,7 +1458,7 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose,
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-full text-[0.63rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+            className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
           >
             Close
           </button>

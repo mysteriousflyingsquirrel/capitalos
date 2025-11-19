@@ -74,7 +74,7 @@ function Settings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Base Currency */}
             <div>
-              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-2">
+              <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
                 Base Currency
               </label>
               <select
@@ -86,19 +86,19 @@ function Settings() {
                 <option value="EUR">EUR</option>
                 <option value="USD">USD</option>
               </select>
-              <p className="mt-2 text-text-muted text-[0.63rem] md:text-xs">
+              <p className="mt-2 text-text-muted text-[0.567rem] md:text-xs">
                 All values in Capitalos will be displayed in this currency.
               </p>
               
               {/* Exchange Rates Display */}
               <div className="mt-4 space-y-2">
                 {isLoading && (
-                  <p className="text-text-muted text-[0.63rem] md:text-xs italic">
+                  <p className="text-text-muted text-[0.567rem] md:text-xs italic">
                     Loading latest rates...
                   </p>
                 )}
                 {error && (
-                  <p className="text-danger text-[0.63rem] md:text-xs">
+                  <p className="text-danger text-[0.567rem] md:text-xs">
                     {error}
                   </p>
                 )}
@@ -107,7 +107,7 @@ function Settings() {
                     {otherCurrencies.map((currency) => {
                       const rate = exchangeRates.rates[currency]
                       return (
-                        <p key={currency} className="text-text-secondary text-[0.63rem] md:text-xs">
+                        <p key={currency} className="text-text-secondary text-[0.567rem] md:text-xs">
                           1 {baseCurrency} = {formatRate(rate)} {currency}
                         </p>
                       )
@@ -119,7 +119,7 @@ function Settings() {
 
             {/* Number Format */}
             <div>
-              <label className="block text-text-secondary text-[0.63rem] md:text-xs font-medium mb-2">
+              <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
                 Number Format
               </label>
               <select
@@ -139,14 +139,14 @@ function Settings() {
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
           <Heading level={2} className="mb-4">Reports</Heading>
           
-          <p className="text-text-secondary text-[0.63rem] md:text-xs mb-6">
+          <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
             Generate tax reports based on your Capitalos data. These buttons will trigger server-side report generation in a future version.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               onClick={handleCryptoTaxReport}
-              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.63rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
+              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
             >
               Generate Crypto Tax Report
             </button>
@@ -157,28 +157,28 @@ function Settings() {
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
           <Heading level={2} className="mb-4">Data</Heading>
           
-          <p className="text-text-secondary text-[0.63rem] md:text-xs mb-6">
+          <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
             Export or import your Capitalos data. These buttons will trigger data operations in a future version.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               onClick={handleExportJSON}
-              className="py-2 px-4 bg-bg-surface-2 border border-border-subtle text-text-primary text-[0.63rem] md:text-xs font-medium rounded-full hover:bg-bg-surface-3 transition-colors"
+              className="py-2 px-4 bg-bg-surface-2 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs font-medium rounded-full hover:bg-bg-surface-3 transition-colors"
             >
               Export All Data (JSON)
             </button>
 
             <button
               onClick={handleImportJSON}
-              className="py-2 px-4 bg-bg-surface-2 border border-border-subtle text-text-primary text-[0.63rem] md:text-xs font-medium rounded-full hover:bg-bg-surface-3 transition-colors"
+              className="py-2 px-4 bg-bg-surface-2 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs font-medium rounded-full hover:bg-bg-surface-3 transition-colors"
             >
               Import Data (JSON)
             </button>
 
             <button
               onClick={handleClearSnapshotData}
-              className="py-2 px-4 bg-bg-surface-2 border border-danger hover:border-red-600 text-danger hover:text-red-400 text-[0.63rem] md:text-xs font-medium rounded-full transition-all duration-200"
+              className="py-2 px-4 bg-bg-surface-2 border border-danger hover:border-red-600 text-danger hover:text-red-400 text-[0.567rem] md:text-xs font-medium rounded-full transition-all duration-200"
             >
               Clear Snapshot Data
             </button>
@@ -192,19 +192,19 @@ function Settings() {
           <div className="space-y-4">
             <div>
               <Heading level={3} className="mb-1">Capitalos</Heading>
-              <p className="text-text-secondary text-[0.63rem] md:text-xs">
+              <p className="text-text-secondary text-[0.567rem] md:text-xs">
                 Capitalos is your personal wealth, cashflow and investing cockpit.
               </p>
             </div>
 
             <div>
-              <p className="text-text-secondary text-[0.63rem] md:text-xs">
+              <p className="text-text-secondary text-[0.567rem] md:text-xs">
                 Version: 1.0.0
               </p>
             </div>
 
             <div className="pt-4 border-t border-border-subtle">
-              <p className="text-text-muted text-[0.63rem] md:text-xs italic">
+              <p className="text-text-muted text-[0.567rem] md:text-xs italic">
                 Made for personal use. Do not consider this financial advice.
               </p>
             </div>
