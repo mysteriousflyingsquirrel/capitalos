@@ -12,9 +12,20 @@ function Login() {
     setError(null)
     try {
       await signInWithGoogle()
-    } catch (err) {
+      // Note: On mobile, signInWithRedirect will redirect the user away
+      // so this code may not execute. The redirect result is handled in AuthContext.
+    } catch (err: any) {
+      // Don't show error for popup-closed-by-user on mobile (shouldn't happen with redirect)
+      if (err.code === 'auth/popup-closed-by-user') {
+        // User closed the popup, which is fine
+        return
+      }
       setError(err instanceof Error ? err.message : 'Failed to sign in')
-    } finally {
+      setLoading(false)
+    }
+    // Only set loading to false if we didn't redirect (desktop)
+    // On mobile with redirect, the user will be redirected away
+    if (!/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
       setLoading(false)
     }
   }

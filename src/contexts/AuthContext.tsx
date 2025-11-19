@@ -1,11 +1,19 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { 
   User, 
-  signInWithPopup, 
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged 
 } from 'firebase/auth'
 import { auth, googleProvider } from '../config/firebase'
+
+// Detect if user is on a mobile device
+function isMobileDevice(): boolean {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (typeof window !== 'undefined' && window.innerWidth < 768)
+}
 
 interface AuthContextType {
   user: User | null
@@ -23,6 +31,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Check for redirect result first (for mobile sign-in)
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          // User signed in via redirect
+          setUser(result.user)
+        }
+        setLoading(false)
+      })
+      .catch((error) => {
+        console.error('Error getting redirect result:', error)
+        setLoading(false)
+      })
+
+    // Listen for auth state changes
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user)
       setLoading(false)
@@ -33,9 +56,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     try {
-      await signInWithPopup(auth, googleProvider)
-    } catch (error) {
+      // Use redirect for mobile devices, popup for desktop
+      if (isMobileDevice()) {
+        await signInWithRedirect(auth, googleProvider)
+        // Note: signInWithRedirect doesn't return a promise that resolves
+        // The user will be redirected and then come back to the app
+        // The redirect result is handled in the useEffect above
+      } else {
+        await signInWithPopup(auth, googleProvider)
+      }
+    } catch (error: any) {
       console.error('Error signing in with Google:', error)
+      // Don't throw popup-closed-by-user error, it's expected on mobile
+      if (error.code === 'auth/popup-closed-by-user' && isMobileDevice()) {
+        // This shouldn't happen with redirect, but handle it gracefully
+        return
+      }
       throw error
     }
   }
