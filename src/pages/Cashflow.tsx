@@ -556,28 +556,30 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
 
   return (
     <>
-      <SectionCard title="Accountflow">
-        {/* Add Mapping Button */}
+      <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
         <div className="mb-6 pb-4 border-b border-border-strong">
-          <button
-            onClick={() => setShowAddMappingModal(true)}
-            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
-          >
-            <svg
-              className="w-4 h-4 transition-transform group-hover:rotate-90"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          <div className="flex items-center justify-between">
+            <Heading level={2}>Accountflow</Heading>
+            <button
+              onClick={() => setShowAddMappingModal(true)}
+              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            <span>Add Mapping</span>
-          </button>
+              <svg
+                className="w-4 h-4 transition-transform group-hover:rotate-90"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span>Add Mapping</span>
+            </button>
+          </div>
         </div>
 
         {/* Account Visualizations */}
@@ -605,7 +607,7 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
               <div key={account} className="space-y-4 pb-4 border-b border-border-strong last:border-b-0">
                 {/* Account Header with Totals */}
                 <div>
-                  <Heading level={2}>{account}</Heading>
+                  <Heading level={3}>{account}</Heading>
                   <div className="mt-1 flex items-center gap-4">
                     <TotalText variant="inflow">
                       {formatCurrency(totalInflow)}
@@ -623,7 +625,7 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                 <div className="grid grid-cols-2 gap-6">
                   {/* Inflow Column */}
                   <div className="space-y-3">
-                    <Heading level={3} className="mb-2">Inflow</Heading>
+                    <Heading level={4} className="mb-2">Inflow</Heading>
                     {inflowMappings.length === 0 ? (
                       <div className="text-text-muted text-[0.567rem] md:text-xs">No inflow mappings</div>
                     ) : (
@@ -634,8 +636,8 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                           const amount = convert(amountChf, 'CHF')
                           return (
                             <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
-                              <div className="text-text-primary text-[0.567rem] md:text-xs truncate flex-1">{label}</div>
-                              <div className="text-success text-[0.567rem] md:text-xs ml-4">{formatCurrency(amount)}</div>
+                              <div className="text2 truncate flex-1">{label}</div>
+                              <div className="text-success text2 ml-4 whitespace-nowrap">{formatCurrency(amount)}</div>
                             </div>
                           )
                         })}
@@ -645,7 +647,7 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
 
                   {/* Outflow Column */}
                   <div className="space-y-3">
-                    <Heading level={3} className="mb-2">Outflow</Heading>
+                    <Heading level={4} className="mb-2">Outflow</Heading>
                     {outflowMappings.length === 0 ? (
                       <div className="text-text-muted text-[0.567rem] md:text-xs">No outflow mappings</div>
                     ) : (
@@ -661,8 +663,8 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                           const amount = convert(amountChf, 'CHF')
                           return (
                             <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
-                              <div className="text-text-primary text-[0.567rem] md:text-xs truncate flex-1">{label}</div>
-                              <div className="text-danger text-[0.567rem] md:text-xs ml-4">{formatCurrency(amount)}</div>
+                              <div className="text2 truncate flex-1">{label}</div>
+                              <div className="text-danger text2 ml-4 whitespace-nowrap">{formatCurrency(amount)}</div>
                             </div>
                           )
                         })}
@@ -674,7 +676,7 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
             )
           })}
         </div>
-      </SectionCard>
+      </div>
 
       {showAddMappingModal && (
         <AddMappingModal
