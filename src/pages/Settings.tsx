@@ -133,14 +133,14 @@ function Settings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               onClick={handleExportJSON}
-              className="py-2 px-4 bg-bg-surface-2 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs font-medium rounded-full hover:bg-bg-surface-3 transition-colors"
+              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
             >
               Export All Data (JSON)
             </button>
 
             <button
               onClick={handleImportJSON}
-              className="py-2 px-4 bg-bg-surface-2 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs font-medium rounded-full hover:bg-bg-surface-3 transition-colors"
+              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
             >
               Import Data (JSON)
             </button>
