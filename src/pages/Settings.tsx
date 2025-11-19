@@ -22,18 +22,6 @@ function Settings() {
     alert('JSON export is not implemented yet. This will trigger a serverless function in a future version.')
   }
 
-  const handleClearSnapshotData = () => {
-    if (window.confirm('Are you sure you want to clear all stored snapshot data? This will remove any snapshots stored in localStorage. Historical data will remain intact.')) {
-      try {
-        localStorage.removeItem('capitalos_net_worth_snapshots_v1')
-        alert('Snapshot data cleared successfully. Please refresh the page to see the changes.')
-      } catch (error) {
-        alert('Failed to clear snapshot data. Please try again.')
-        console.error('Error clearing snapshot data:', error)
-      }
-    }
-  }
-
   const handleImportJSON = () => {
     // Create a file input element
     const input = document.createElement('input')
@@ -156,19 +144,12 @@ function Settings() {
             >
               Import Data (JSON)
             </button>
-
-            <button
-              onClick={handleClearSnapshotData}
-              className="py-2 px-4 bg-bg-surface-2 border border-danger hover:border-red-600 text-danger hover:text-red-400 text-[0.567rem] md:text-xs font-medium rounded-full transition-all duration-200"
-            >
-              Clear Snapshot Data
-            </button>
           </div>
         </div>
 
-        {/* About / Legal Section */}
+        {/* About Section */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
-          <Heading level={2} className="mb-4">About & Legal</Heading>
+          <Heading level={2} className="mb-4">About</Heading>
           
           <div className="space-y-4">
             <div>
