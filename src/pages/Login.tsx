@@ -6,26 +6,23 @@ function Login() {
   const { signInWithGoogle } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Detect if user is on iPhone/iOS
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
 
   const handleSignIn = async () => {
     setLoading(true)
     setError(null)
     try {
       await signInWithGoogle()
-      // Note: On mobile, signInWithRedirect will redirect the user away
-      // so this code may not execute. The redirect result is handled in AuthContext.
     } catch (err: any) {
-      // Don't show error for popup-closed-by-user on mobile (shouldn't happen with redirect)
+      // Don't show error if user closed the popup
       if (err.code === 'auth/popup-closed-by-user') {
         // User closed the popup, which is fine
         return
       }
       setError(err instanceof Error ? err.message : 'Failed to sign in')
-      setLoading(false)
-    }
-    // Only set loading to false if we didn't redirect (desktop)
-    // On mobile with redirect, the user will be redirected away
-    if (!/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+    } finally {
       setLoading(false)
     }
   }
@@ -40,6 +37,14 @@ function Login() {
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-8 text-center">
             Sign in with your Google account to access your personal wealth, cashflow and investing cockpit.
           </p>
+          
+          {isIOS && (
+            <div className="mb-4 p-3 bg-bg-surface-2 border border-[#DAA520] rounded-input">
+              <p className="text-[#DAA520] text-[0.567rem] md:text-xs text-center">
+                <strong>iPhone/iPad users:</strong> Please disable popup blockers in Safari settings (Settings → Safari → Block Pop-ups) to sign in.
+              </p>
+            </div>
+          )}
           
           {error && (
             <div className="mb-4 p-3 bg-bg-surface-2 border border-danger rounded-input">
