@@ -34,9 +34,9 @@ interface OutflowItem {
   group: OutflowGroupName
 }
 
-type AccountPlatform = 'Raiffeisen' | 'Revolut' | 'yuh!' | 'SAXO' | 'Kraken'
+type AccountPlatform = 'Physical' | 'Raiffeisen' | 'Revolut' | 'yuh!' | 'SAXO' | 'Kraken' | 'MEXC' | 'BingX' | 'Exodus' | 'Trezor'
 
-const accountPlatforms: AccountPlatform[] = ['Raiffeisen', 'Revolut', 'yuh!', 'SAXO', 'Kraken']
+const accountPlatforms: AccountPlatform[] = ['Physical', 'Raiffeisen', 'Revolut', 'yuh!', 'SAXO', 'Kraken', 'MEXC', 'BingX', 'Exodus', 'Trezor']
 
 interface AccountflowItem {
   id: string

@@ -71,22 +71,6 @@ interface KpiCardProps {
 }
 
 
-// Empty data - user will add their own data
-const netWorthDataYTD: NetWorthDataPoint[] = []
-const netWorthData1Year: NetWorthDataPoint[] = []
-const netWorthData5Year: NetWorthDataPoint[] = []
-const netWorthDataMax: NetWorthDataPoint[] = []
-
-const assetAllocationData: AssetAllocationItem[] = []
-const inflowBreakdownData: AssetAllocationItem[] = []
-const outflowBreakdownData: AssetAllocationItem[] = []
-const cashflowData: CashflowDataPoint[] = []
-
-// KPI values
-const totalNetWorth = 0
-const monthlyInflow = 0
-const monthlyOutflow = 0
-const monthlySpareChange = 0
 
 // Color palette for charts (muted, premium colors)
 const CHART_COLORS = {
@@ -166,7 +150,7 @@ function Dashboard() {
     }
   }, [uid])
 
-  // Load historical snapshots only (no new snapshots created)
+  // Load snapshots from Firestore
   const [snapshots, setSnapshots] = useState<NetWorthSnapshot[]>([])
   
   useEffect(() => {
@@ -376,7 +360,7 @@ function Dashboard() {
     }))
   }, [outflowItems])
 
-  // Generate net worth evolution data from historical snapshots + current value
+  // Generate net worth evolution data from snapshots + current value
   const netWorthData = useMemo(() => {
     // Calculate cutoff date based on timeframe
     const now = new Date()
