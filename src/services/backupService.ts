@@ -13,6 +13,7 @@ import {
 } from './storageService'
 import { clearAllUserData } from './firestoreService'
 import { loadSnapshots, saveSnapshots, type NetWorthSnapshot } from './snapshotService'
+import { loadCashflowSnapshots, saveCashflowSnapshots, type CashflowSnapshot } from './cashflowSnapshotService'
 
 // Backup schema version
 const BACKUP_SCHEMA_VERSION = '1.0.0'
@@ -28,6 +29,7 @@ export interface BackupData {
     cashflowOutflowItems: unknown[]
     cashflowAccountflowMappings: unknown[]
     snapshots: unknown[]
+    cashflowSnapshots: unknown[]
   }
 }
 
@@ -42,6 +44,7 @@ export async function createBackup(uid: string): Promise<BackupData> {
     cashflowOutflowItems,
     cashflowAccountflowMappings,
     snapshots,
+    cashflowSnapshots,
   ] = await Promise.all([
     loadNetWorthItems([], uid),
     loadNetWorthTransactions([], uid),
@@ -49,6 +52,7 @@ export async function createBackup(uid: string): Promise<BackupData> {
     loadCashflowOutflowItems([], uid),
     loadCashflowAccountflowMappings([], uid),
     loadSnapshots(uid),
+    loadCashflowSnapshots(uid),
   ])
 
   return {
@@ -62,6 +66,7 @@ export async function createBackup(uid: string): Promise<BackupData> {
       cashflowOutflowItems,
       cashflowAccountflowMappings,
       snapshots,
+      cashflowSnapshots,
     },
   }
 }
@@ -103,6 +108,11 @@ export function validateBackup(backup: unknown): backup is BackupData {
     if (!Array.isArray(data[field])) {
       return false
     }
+  }
+
+  // cashflowSnapshots is optional for backward compatibility
+  if (data.cashflowSnapshots !== undefined && !Array.isArray(data.cashflowSnapshots)) {
+    return false
   }
 
   return true
@@ -154,6 +164,7 @@ export async function restoreBackup(
       currentUid
     ),
     saveSnapshots(backup.data.snapshots as NetWorthSnapshot[], currentUid),
+    saveCashflowSnapshots((backup.data.cashflowSnapshots as CashflowSnapshot[]) || [], currentUid),
   ])
 }
 

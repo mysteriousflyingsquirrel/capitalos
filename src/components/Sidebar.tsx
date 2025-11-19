@@ -148,6 +148,9 @@ function Sidebar() {
           )}
           <button
             onClick={async () => {
+              const confirmed = window.confirm('Are you sure you want to sign out?')
+              if (!confirmed) return
+              
               try {
                 await signOut()
               } catch (error) {

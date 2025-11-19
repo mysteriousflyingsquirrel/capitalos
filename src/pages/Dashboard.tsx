@@ -5,8 +5,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -30,6 +28,11 @@ import {
   loadSnapshots,
   type NetWorthSnapshot,
 } from '../services/snapshotService'
+import {
+  loadCashflowSnapshots,
+  takeCashflowSnapshotForCurrentMonthIfNeeded,
+  type CashflowSnapshot,
+} from '../services/cashflowSnapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
 import { calculateBalanceChf } from './NetWorth'
@@ -173,6 +176,44 @@ function Dashboard() {
       loadSnapshots().then(setSnapshots)
     }
   }, [uid])
+
+  // Load cashflow snapshots
+  const [cashflowSnapshots, setCashflowSnapshots] = useState<CashflowSnapshot[]>([])
+  
+  useEffect(() => {
+    if (uid) {
+      loadCashflowSnapshots(uid).then(setCashflowSnapshots)
+    } else {
+      loadCashflowSnapshots().then(setCashflowSnapshots)
+    }
+  }, [uid])
+
+  // Create cashflow snapshot for current month if needed
+  useEffect(() => {
+    if (!uid) return
+    
+    // Only run once after data is loaded, use a ref to prevent multiple runs
+    let isMounted = true
+    
+    takeCashflowSnapshotForCurrentMonthIfNeeded(
+      monthlyInflowChf,
+      monthlyOutflowChf,
+      monthlySpareChangeChf,
+      uid
+    ).then((newSnapshot) => {
+      if (isMounted && newSnapshot) {
+        // Reload cashflow snapshots after creating a new one
+        loadCashflowSnapshots(uid).then(setCashflowSnapshots).catch(console.error)
+      }
+    }).catch((error) => {
+      console.error('Failed to create cashflow snapshot:', error)
+    })
+    
+    return () => {
+      isMounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid]) // Only run when uid changes, not on every data change
 
   // Calculate total net worth from actual data
   const totalNetWorthChf = useMemo(() => {
@@ -431,15 +472,81 @@ function Dashboard() {
     return chartData
   }, [snapshots, netWorthItems, transactions, totalNetWorthChf, convert, timeFrame])
 
-  // Generate cashflow data (currently just current month)
+  // Generate cashflow data from snapshots + current value
   const cashflowData = useMemo(() => {
-    return [{
-      month: new Date().toLocaleString('en-US', { month: 'short' }),
-      inflow: monthlyInflowConverted,
-      outflow: monthlyOutflowConverted,
-      spare: convert(monthlySpareChangeChf, 'CHF'),
-    }]
-  }, [monthlyInflowConverted, monthlyOutflowConverted, monthlySpareChangeChf, convert])
+    // Ensure cashflowSnapshots is an array
+    const snapshots = Array.isArray(cashflowSnapshots) ? cashflowSnapshots : []
+    
+    // Calculate cutoff date based on timeframe
+    const now = new Date()
+    let cutoffDate: Date | null = null
+
+    switch (timeFrame) {
+      case 'YTD':
+        // Year to date: from January 1st of current year
+        cutoffDate = new Date(now.getFullYear(), 0, 1)
+        break
+      case '1Year':
+        // Last 12 months
+        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate())
+        break
+      case '5Year':
+        // Last 5 years
+        cutoffDate = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
+        break
+      case 'Max':
+      default:
+        // All data (no cutoff)
+        cutoffDate = null
+        break
+    }
+
+    // Filter snapshots based on timeframe
+    const filteredSnapshots = cutoffDate
+      ? snapshots.filter(snapshot => new Date(snapshot.date) >= cutoffDate)
+      : snapshots
+
+    // Convert snapshots to chart data format
+    const chartData = filteredSnapshots.map(snapshot => {
+      const date = new Date(snapshot.date)
+      const month = date.toLocaleString('en-US', { month: 'short', year: 'numeric' })
+      
+      return {
+        month,
+        inflow: convert(snapshot.inflow, 'CHF'),
+        outflow: convert(snapshot.outflow, 'CHF'),
+        spare: convert(snapshot.spare, 'CHF'),
+      }
+    })
+
+    // Add current state as the next month after the last snapshot
+    if (filteredSnapshots.length > 0) {
+      const lastSnapshot = filteredSnapshots[filteredSnapshots.length - 1]
+      const lastDate = new Date(lastSnapshot.date)
+      
+      // Calculate the next month after the last snapshot
+      const nextMonth = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, 1)
+      const nextMonthLabel = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' })
+      
+      // Add current state as the next month
+      chartData.push({
+        month: nextMonthLabel,
+        inflow: monthlyInflowConverted,
+        outflow: monthlyOutflowConverted,
+        spare: convert(monthlySpareChangeChf, 'CHF'),
+      })
+    } else if (cashflowSnapshots.length === 0) {
+      // If no snapshots, show current month
+      chartData.push({
+        month: new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+        inflow: monthlyInflowConverted,
+        outflow: monthlyOutflowConverted,
+        spare: convert(monthlySpareChangeChf, 'CHF'),
+      })
+    }
+
+    return chartData
+  }, [cashflowSnapshots, monthlyInflowConverted, monthlyOutflowConverted, monthlySpareChangeChf, convert, timeFrame])
 
   return (
     <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
@@ -781,10 +888,22 @@ function Dashboard() {
         {/* Fourth Row: Monthly Cashflow (Full Width) */}
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
           <div className="mb-6 pb-4 border-b border-border-strong">
-            <Heading level={2}>Monthly Cashflow</Heading>
+            <div className="flex items-center justify-between">
+              <Heading level={2}>Monthly Cashflow</Heading>
+              <select
+                value={timeFrame}
+                onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '1Year' | '5Year' | 'Max')}
+                className="bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text2 focus:outline-none focus:border-accent-blue"
+              >
+                <option value="YTD">YTD</option>
+                <option value="1Year">1Year</option>
+                <option value="5Year">5Year</option>
+                <option value="Max">Max</option>
+              </select>
+            </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={cashflowData}>
+            <LineChart data={cashflowData}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke={CHART_COLORS.muted1}
@@ -813,28 +932,37 @@ function Dashboard() {
               />
               <Legend
                 wrapperStyle={{ color: '#8B8F99', fontSize: '0.72rem', fontWeight: '400' }}
-                iconType="square"
+                iconType="line"
                 className="text2"
               />
-              <Bar
+              <Line
+                type="monotone"
                 dataKey="inflow"
-                fill={CHART_COLORS.success}
+                stroke={CHART_COLORS.success}
+                strokeWidth={3}
+                dot={false}
+                activeDot={false}
                 name="Inflow"
-                radius={[4, 4, 0, 0]}
               />
-              <Bar
+              <Line
+                type="monotone"
                 dataKey="outflow"
-                fill={CHART_COLORS.danger}
+                stroke={CHART_COLORS.danger}
+                strokeWidth={3}
+                dot={false}
+                activeDot={false}
                 name="Outflow"
-                radius={[4, 4, 0, 0]}
               />
-              <Bar
+              <Line
+                type="monotone"
                 dataKey="spare"
-                fill={CHART_COLORS.gold}
+                stroke={CHART_COLORS.gold}
+                strokeWidth={3}
+                dot={false}
+                activeDot={false}
                 name="Spare Change"
-                radius={[4, 4, 0, 0]}
               />
-            </BarChart>
+            </LineChart>
           </ResponsiveContainer>
         </div>
 

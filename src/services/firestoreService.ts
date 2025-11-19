@@ -198,6 +198,36 @@ export async function loadSnapshotsFirestore<T>(uid: string): Promise<T[]> {
   return loadDocuments<T>(uid, 'snapshots')
 }
 
+// Cashflow snapshots storage
+// Cashflow snapshots use 'date' as their unique identifier, not 'id'
+export async function saveCashflowSnapshotsFirestore<T extends { date: string }>(
+  uid: string,
+  snapshots: T[]
+): Promise<void> {
+  if (snapshots.length === 0) return
+
+  const collectionPath = getUserCollectionPath(uid, 'cashflowSnapshots')
+  const BATCH_SIZE = 500 // Firestore batch limit
+
+  // Process in chunks of 500
+  for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
+    const chunk = snapshots.slice(i, i + BATCH_SIZE)
+    const batch = writeBatch(db)
+
+    chunk.forEach((snapshot) => {
+      // Use 'date' as the document ID
+      const docRef = doc(db, collectionPath, snapshot.date)
+      batch.set(docRef, snapshot)
+    })
+
+    await batch.commit()
+  }
+}
+
+export async function loadCashflowSnapshotsFirestore<T>(uid: string): Promise<T[]> {
+  return loadDocuments<T>(uid, 'cashflowSnapshots')
+}
+
 // Clear all user data
 export async function clearAllUserData(uid: string): Promise<void> {
   const collections = [
@@ -207,6 +237,7 @@ export async function clearAllUserData(uid: string): Promise<void> {
     'cashflowOutflowItems',
     'cashflowAccountflowMappings',
     'snapshots',
+    'cashflowSnapshots',
   ]
 
   await Promise.all(
