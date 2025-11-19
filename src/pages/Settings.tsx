@@ -1,11 +1,25 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Heading from '../components/Heading'
 import { useCurrency } from '../contexts/CurrencyContext'
+import { useAuth } from '../contexts/AuthContext'
 import type { CurrencyCode } from '../lib/currency'
 import { supportedCurrencies } from '../lib/currency'
+import {
+  createBackup,
+  downloadBackup,
+  readBackupFile,
+  restoreBackup,
+} from '../services/backupService'
 
 function Settings() {
   const { baseCurrency, setBaseCurrency, exchangeRates, isLoading, error } = useCurrency()
+  const { uid } = useAuth()
+  const [exportLoading, setExportLoading] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [exportSuccess, setExportSuccess] = useState(false)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSuccess, setImportSuccess] = useState(false)
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -18,29 +32,82 @@ function Settings() {
     alert('Crypto Tax Report generation is not implemented yet. This will trigger a serverless function in a future version.')
   }
 
-  const handleExportJSON = () => {
-    alert('JSON export is not implemented yet. This will trigger a serverless function in a future version.')
+  const handleExportJSON = async () => {
+    if (!uid) {
+      alert('Please sign in to export your data.')
+      return
+    }
+
+    setExportLoading(true)
+    setExportError(null)
+    setExportSuccess(false)
+
+    try {
+      const backup = await createBackup(uid)
+      downloadBackup(backup)
+      setExportSuccess(true)
+      setTimeout(() => setExportSuccess(false), 3000)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to export data'
+      setExportError(errorMessage)
+      setTimeout(() => setExportError(null), 5000)
+    } finally {
+      setExportLoading(false)
+    }
   }
 
-  const handleImportJSON = () => {
+  const handleImportJSON = async () => {
+    if (!uid) {
+      alert('Please sign in to import your data.')
+      return
+    }
+
     // Create a file input element
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.json'
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
-      if (file) {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-          try {
-            const jsonData = JSON.parse(event.target?.result as string)
-            alert('JSON import is not implemented yet. This will trigger data import logic in a future version.\n\nFile: ' + file.name)
-            // TODO: Implement actual import logic
-          } catch (error) {
-            alert('Error reading JSON file. Please ensure the file is valid JSON.')
-          }
+      if (!file) return
+
+      setImportLoading(true)
+      setImportError(null)
+      setImportSuccess(false)
+
+      try {
+        // Read and validate backup
+        const backup = await readBackupFile(file)
+
+        // Show confirmation dialog
+        const confirmed = window.confirm(
+          'Importing this backup will overwrite all your current data. This action cannot be undone.\n\n' +
+          `Backup exported: ${new Date(backup.exportedAt).toLocaleString()}\n` +
+          (backup.userId ? `Original user: ${backup.userId}\n` : '') +
+          `Current user: ${uid}\n\n` +
+          'Do you want to continue?'
+        )
+
+        if (!confirmed) {
+          setImportLoading(false)
+          return
         }
-        reader.readAsText(file)
+
+        // Restore backup
+        await restoreBackup(backup, uid, { clearExisting: true })
+
+        setImportSuccess(true)
+        setTimeout(() => setImportSuccess(false), 3000)
+
+        // Reload the page to refresh all data
+        setTimeout(() => {
+          window.location.reload()
+        }, 1500)
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to import data'
+        setImportError(errorMessage)
+        setTimeout(() => setImportError(null), 5000)
+      } finally {
+        setImportLoading(false)
       }
     }
     input.click()
@@ -130,20 +197,51 @@ function Settings() {
             Export or import your Capitalos data. These buttons will trigger data operations in a future version.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button
-              onClick={handleExportJSON}
-              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
-            >
-              Export All Data (JSON)
-            </button>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <button
+                  onClick={handleExportJSON}
+                  disabled={exportLoading || !uid}
+                  className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed w-full"
+                >
+                  {exportLoading ? 'Exporting...' : 'Export All Data (JSON)'}
+                </button>
+                {exportSuccess && (
+                  <p className="mt-2 text-success text-[0.567rem] md:text-xs">
+                    Export successful! File downloaded.
+                  </p>
+                )}
+                {exportError && (
+                  <p className="mt-2 text-danger text-[0.567rem] md:text-xs">
+                    {exportError}
+                  </p>
+                )}
+                <p className="mt-2 text-warning text-[0.567rem] md:text-xs">
+                  ⚠️ This JSON file contains sensitive financial data. Keep it private and secure.
+                </p>
+              </div>
 
-            <button
-              onClick={handleImportJSON}
-              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
-            >
-              Import Data (JSON)
-            </button>
+              <div>
+                <button
+                  onClick={handleImportJSON}
+                  disabled={importLoading || !uid}
+                  className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed w-full"
+                >
+                  {importLoading ? 'Importing...' : 'Import Data (JSON)'}
+                </button>
+                {importSuccess && (
+                  <p className="mt-2 text-success text-[0.567rem] md:text-xs">
+                    Import successful! Page will reload shortly...
+                  </p>
+                )}
+                {importError && (
+                  <p className="mt-2 text-danger text-[0.567rem] md:text-xs">
+                    {importError}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

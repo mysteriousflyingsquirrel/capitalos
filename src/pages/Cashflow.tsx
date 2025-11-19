@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, FormEvent } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
+import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, formatNumber } from '../lib/currency'
 import {
   saveCashflowInflowItems,
@@ -1716,33 +1717,68 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
 function Cashflow() {
   const { baseCurrency, convert } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
-  
-  // Load data from localStorage on mount
-  const [inflowItems, setInflowItems] = useState<InflowItem[]>(() => 
-    loadCashflowInflowItems(mockInflowItems)
-  )
-  const [outflowItems, setOutflowItems] = useState<OutflowItem[]>(() => 
-    loadCashflowOutflowItems(mockOutflowItems)
-  )
-  const [accountflowItems, setAccountflowItems] = useState<AccountflowItem[]>(() => 
-    mockAccountflowItems // Accountflow items are not used anymore, but keeping for compatibility
-  )
-  const [accountflowMappings, setAccountflowMappings] = useState<AccountflowMapping[]>(() => 
-    loadCashflowAccountflowMappings([])
-  )
+  const { uid } = useAuth()
+  const [inflowItems, setInflowItems] = useState<InflowItem[]>([])
+  const [outflowItems, setOutflowItems] = useState<OutflowItem[]>([])
+  const [accountflowItems, setAccountflowItems] = useState<AccountflowItem[]>([])
+  const [accountflowMappings, setAccountflowMappings] = useState<AccountflowMapping[]>([])
+  const [dataLoading, setDataLoading] = useState(true)
 
-  // Save to localStorage whenever data changes
+  // Load data from Firestore on mount and when uid changes
   useEffect(() => {
-    saveCashflowInflowItems(inflowItems)
-  }, [inflowItems])
+    if (!uid) {
+      setInflowItems([])
+      setOutflowItems([])
+      setAccountflowItems([])
+      setAccountflowMappings([])
+      setDataLoading(false)
+      return
+    }
+
+    const loadData = async () => {
+      setDataLoading(true)
+      try {
+        const [inflow, outflow, mappings] = await Promise.all([
+          loadCashflowInflowItems(mockInflowItems, uid),
+          loadCashflowOutflowItems(mockOutflowItems, uid),
+          loadCashflowAccountflowMappings([], uid),
+        ])
+        setInflowItems(inflow)
+        setOutflowItems(outflow)
+        setAccountflowMappings(mappings)
+      } catch (error) {
+        console.error('Failed to load data:', error)
+      } finally {
+        setDataLoading(false)
+      }
+    }
+
+    loadData()
+  }, [uid])
 
   useEffect(() => {
-    saveCashflowOutflowItems(outflowItems)
-  }, [outflowItems])
+    if (uid && !dataLoading) {
+      saveCashflowInflowItems(inflowItems, uid).catch((error) => {
+        console.error('Failed to save inflow items:', error)
+      })
+    }
+  }, [inflowItems, uid, dataLoading])
 
   useEffect(() => {
-    saveCashflowAccountflowMappings(accountflowMappings)
-  }, [accountflowMappings])
+    if (uid && !dataLoading) {
+      saveCashflowOutflowItems(outflowItems, uid).catch((error) => {
+        console.error('Failed to save outflow items:', error)
+      })
+    }
+  }, [outflowItems, uid, dataLoading])
+
+  useEffect(() => {
+    if (uid && !dataLoading) {
+      saveCashflowAccountflowMappings(accountflowMappings, uid).catch((error) => {
+        console.error('Failed to save accountflow mappings:', error)
+      })
+    }
+  }, [accountflowMappings, uid, dataLoading])
 
   const handleAddInflowItem = (group: InflowGroupName, data: { item: string; amountChf: number; currency: string; provider: string }) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `inflow-${Date.now()}`

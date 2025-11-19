@@ -2,6 +2,7 @@ import React, { useState, useMemo, FormEvent, useRef, useEffect } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
+import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, formatNumber } from '../lib/currency'
 import { formatDate } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
@@ -338,28 +339,62 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions }: Item
 
 function NetWorth() {
   const { baseCurrency, convert } = useCurrency()
+  const { uid } = useAuth()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   
-  // Load data from localStorage on mount
-  const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>(() => 
-    loadNetWorthItems(mockNetWorthItems)
-  )
-  const [transactions, setTransactions] = useState<NetWorthTransaction[]>(() => 
-    loadNetWorthTransactions(initialMockTransactions)
-  )
+  // Load data from Firestore on mount
+  const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>([])
+  const [transactions, setTransactions] = useState<NetWorthTransaction[]>([])
+  const [dataLoading, setDataLoading] = useState(true)
 
   // Store current crypto prices (ticker -> USD price)
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
   const [cryptoPricesLastUpdate, setCryptoPricesLastUpdate] = useState<number>(0)
 
-  // Save to localStorage whenever data changes
+  // Load data from Firestore on mount and when uid changes
   useEffect(() => {
-    saveNetWorthItems(netWorthItems)
-  }, [netWorthItems])
+    if (!uid) {
+      setNetWorthItems([])
+      setTransactions([])
+      setDataLoading(false)
+      return
+    }
+
+    const loadData = async () => {
+      setDataLoading(true)
+      try {
+        const [items, txs] = await Promise.all([
+          loadNetWorthItems(mockNetWorthItems, uid),
+          loadNetWorthTransactions(initialMockTransactions, uid),
+        ])
+        setNetWorthItems(items)
+        setTransactions(txs)
+      } catch (error) {
+        console.error('Failed to load data:', error)
+      } finally {
+        setDataLoading(false)
+      }
+    }
+
+    loadData()
+  }, [uid])
+
+  // Save to Firestore whenever data changes
+  useEffect(() => {
+    if (uid && !dataLoading) {
+      saveNetWorthItems(netWorthItems, uid).catch((error) => {
+        console.error('Failed to save net worth items:', error)
+      })
+    }
+  }, [netWorthItems, uid, dataLoading])
 
   useEffect(() => {
-    saveNetWorthTransactions(transactions)
-  }, [transactions])
+    if (uid && !dataLoading) {
+      saveNetWorthTransactions(transactions, uid).catch((error) => {
+        console.error('Failed to save transactions:', error)
+      })
+    }
+  }, [transactions, uid, dataLoading])
 
   // Fetch crypto prices for all crypto items
   const fetchAllCryptoPrices = async () => {

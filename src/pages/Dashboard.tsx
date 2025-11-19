@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   LineChart,
   Line,
@@ -17,6 +17,7 @@ import {
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
+import { useAuth } from '../contexts/AuthContext'
 import { formatMoney } from '../lib/currency'
 import type { CurrencyCode } from '../lib/currency'
 import {
@@ -138,11 +139,28 @@ function Dashboard() {
   const [timeFrame, setTimeFrame] = useState<'YTD' | '1Year' | '5Year' | 'Max'>('Max')
   const { baseCurrency, convert } = useCurrency()
 
-  // Load data from localStorage
-  const netWorthItems = useMemo(() => loadNetWorthItems([]), [])
-  const transactions = useMemo(() => loadNetWorthTransactions([]), [])
-  const inflowItems = useMemo(() => loadCashflowInflowItems([]), [])
-  const outflowItems = useMemo(() => loadCashflowOutflowItems([]), [])
+  // Load data from Firestore
+  const { uid } = useAuth()
+  const [netWorthItems, setNetWorthItems] = useState([])
+  const [transactions, setTransactions] = useState([])
+  const [inflowItems, setInflowItems] = useState([])
+  const [outflowItems, setOutflowItems] = useState([])
+  
+  useEffect(() => {
+    if (uid) {
+      Promise.all([
+        loadNetWorthItems([], uid),
+        loadNetWorthTransactions([], uid),
+        loadCashflowInflowItems([], uid),
+        loadCashflowOutflowItems([], uid),
+      ]).then(([items, txs, inflow, outflow]) => {
+        setNetWorthItems(items)
+        setTransactions(txs)
+        setInflowItems(inflow)
+        setOutflowItems(outflow)
+      })
+    }
+  }, [uid])
 
   // Load historical snapshots only (no new snapshots created)
   const snapshots = useMemo(() => {

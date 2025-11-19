@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import logoIcon from '../icons/capitalos_logo.png'
 import dashboardIcon from '../icons/dashboard_icon.svg'
 import netWorthIcon from '../icons/networth_icon.svg'
@@ -24,6 +25,7 @@ const navigation: NavigationItem[] = [
 function Sidebar() {
   const location = useLocation()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const { signOut, email } = useAuth()
 
   return (
     <>
@@ -136,6 +138,40 @@ function Sidebar() {
             )
           })}
         </nav>
+
+        {/* User info and sign out */}
+        <div className="px-4 py-4 border-t border-border-subtle">
+          {email && (
+            <div className="mb-3 px-3 py-2 text-text-muted text-xs truncate">
+              {email}
+            </div>
+          )}
+          <button
+            onClick={async () => {
+              try {
+                await signOut()
+              } catch (error) {
+                console.error('Failed to sign out:', error)
+              }
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-input text-text-secondary hover:text-danger hover:bg-bg-surface-2 transition-all duration-200"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+            <span className="font-semibold text-sm">Sign Out</span>
+          </button>
+        </div>
       </aside>
     </>
   )
