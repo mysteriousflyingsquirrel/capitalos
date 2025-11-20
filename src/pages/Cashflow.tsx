@@ -36,7 +36,7 @@ interface OutflowItem {
 
 type AccountPlatform = 'Physical' | 'Raiffeisen' | 'Revolut' | 'yuh!' | 'SAXO' | 'Kraken' | 'MEXC' | 'BingX' | 'Exodus' | 'Trezor'
 
-const accountPlatforms: AccountPlatform[] = ['Physical', 'Raiffeisen', 'Revolut', 'yuh!', 'SAXO', 'Kraken', 'MEXC', 'BingX', 'Exodus', 'Trezor']
+const accountPlatforms: AccountPlatform[] = ['Raiffeisen', 'Revolut', 'yuh!', 'SAXO', 'Kraken', 'MEXC', 'BingX', 'Exodus', 'Trezor']
 
 interface AccountflowItem {
   id: string
@@ -559,7 +559,7 @@ function getMappingLabel(
   return 'Unknown'
 }
 
-// Accountflow Section Component
+// Platformflow Section Component
 interface AccountflowSectionProps {
   mappings: AccountflowMapping[]
   onAddMapping: (mapping: AccountflowMapping) => void
@@ -574,6 +574,7 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const [showAddMappingModal, setShowAddMappingModal] = useState(false)
   const [editingMapping, setEditingMapping] = useState<AccountflowMapping | null>(null)
+  const [preselectedAccount, setPreselectedAccount] = useState<AccountPlatform | null>(null)
   
   // Helper to get label for account-to-account mappings
   const getAccountToAccountLabel = (mapping: AccountToAccountMapping, account: AccountPlatform): string => {
@@ -635,28 +636,7 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
     <>
       <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
         <div className="mb-6 pb-4 border-b border-border-strong">
-          <div className="flex items-center justify-between">
-            <Heading level={2}>Accountflow</Heading>
-            <button
-              onClick={() => setShowAddMappingModal(true)}
-              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
-            >
-              <svg
-                className="w-4 h-4 transition-transform group-hover:rotate-90"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              <span>Add Mapping</span>
-            </button>
-          </div>
+          <Heading level={2}>Platformflow</Heading>
         </div>
 
         {/* Account Visualizations */}
@@ -695,17 +675,43 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
               <div key={account} className="space-y-4 pb-4 border-b border-border-strong last:border-b-0">
                 {/* Account Header with Totals */}
                 <div>
-                  <Heading level={3}>{account}</Heading>
-                  <div className="mt-1 flex items-center gap-4">
-                    <TotalText variant="inflow">
-                      {formatCurrency(totalInflow)}
-                    </TotalText>
-                    <TotalText variant="outflow">
-                      {formatCurrency(totalOutflow)}
-                    </TotalText>
-                    <TotalText variant="spare">
-                      {formatCurrency(spare)}
-                    </TotalText>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Heading level={3}>{account}</Heading>
+                      <div className="mt-1 flex items-center gap-4">
+                        <TotalText variant="inflow">
+                          {formatCurrency(totalInflow)}
+                        </TotalText>
+                        <TotalText variant="outflow">
+                          {formatCurrency(totalOutflow)}
+                        </TotalText>
+                        <TotalText variant="spare">
+                          {formatCurrency(spare)}
+                        </TotalText>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setPreselectedAccount(account)
+                        setShowAddMappingModal(true)
+                      }}
+                      className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+                    >
+                      <svg
+                        className="w-4 h-4 transition-transform group-hover:rotate-90"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      <span>Add Mapping</span>
+                    </button>
                   </div>
                 </div>
 
@@ -789,9 +795,11 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
           inflowItems={inflowItems}
           outflowItems={outflowItems}
           editingMapping={editingMapping}
+          preselectedAccount={preselectedAccount}
           onClose={() => {
             setShowAddMappingModal(false)
             setEditingMapping(null)
+            setPreselectedAccount(null)
           }}
           onSubmit={(mapping) => {
             if (editingMapping) {
@@ -801,6 +809,7 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
               onAddMapping(mapping)
               setShowAddMappingModal(false)
             }
+            setPreselectedAccount(null)
           }}
         />
       )}
@@ -1227,11 +1236,12 @@ interface AddMappingModalProps {
   inflowItems: InflowItem[]
   outflowItems: OutflowItem[]
   editingMapping?: AccountflowMapping | null
+  preselectedAccount?: AccountPlatform | null
   onClose: () => void
   onSubmit: (mapping: AccountflowMapping) => void
 }
 
-function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, onSubmit }: AddMappingModalProps) {
+function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselectedAccount, onClose, onSubmit }: AddMappingModalProps) {
   const { baseCurrency, convert } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const [mappingType, setMappingType] = useState<MappingKind>('inflowToAccount')
@@ -1257,7 +1267,7 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
   const inflowGroups: InflowGroupName[] = ['Time', 'Service', 'Worker Bees']
   const outflowGroups: OutflowGroupName[] = ['Fix', 'Variable', 'Shared Variable', 'Investments']
 
-  // Populate form when editing
+  // Populate form when editing or when account is preselected
   useEffect(() => {
     if (editingMapping) {
       setMappingType(editingMapping.kind)
@@ -1293,16 +1303,17 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
       setInflowToAccountMode('group')
       setInflowToAccountGroup('')
       setInflowToAccountItem('')
-      setInflowToAccountTarget('')
-      setAccountToOutflowSource('')
+      // Pre-select account if provided
+      setInflowToAccountTarget(preselectedAccount || '')
+      setAccountToOutflowSource(preselectedAccount || '')
       setAccountToOutflowMode('group')
       setAccountToOutflowGroup('')
       setAccountToOutflowItem('')
-      setAccountToAccountFrom('')
+      setAccountToAccountFrom(preselectedAccount || '')
       setAccountToAccountTo('')
       setAccountToAccountAmount('')
     }
-  }, [editingMapping])
+  }, [editingMapping, preselectedAccount])
 
   // Calculate computed amounts for display
   const getInflowToAccountAmount = (): number => {
@@ -1341,7 +1352,7 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
         return
       }
       if (!inflowToAccountTarget) {
-        setError('Please select a target account.')
+        setError('Please select a target platform.')
         return
       }
 
@@ -1355,7 +1366,7 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
       }
     } else if (mappingType === 'accountToOutflow') {
       if (!accountToOutflowSource) {
-        setError('Please select a source account.')
+        setError('Please select a source platform.')
         return
       }
       if (accountToOutflowMode === 'group' && !accountToOutflowGroup) {
@@ -1377,16 +1388,17 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
       }
     } else {
       // accountToAccount
-      if (!accountToAccountFrom) {
-        setError('Please select a source account.')
+      const fromPlatform = accountToAccountFrom || preselectedAccount
+      if (!fromPlatform) {
+        setError('Please select a source platform.')
         return
       }
       if (!accountToAccountTo) {
-        setError('Please select a target account.')
+        setError('Please select a target platform.')
         return
       }
-      if (accountToAccountFrom === accountToAccountTo) {
-        setError('Source and target accounts must be different.')
+      if (fromPlatform === accountToAccountTo) {
+        setError('Source and target platforms must be different.')
         return
       }
       const parsedAmount = Number(accountToAccountAmount)
@@ -1399,7 +1411,7 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
       mapping = {
         id,
         kind: 'accountToAccount',
-        fromAccount: accountToAccountFrom,
+        fromAccount: fromPlatform,
         toAccount: accountToAccountTo,
         amountChf: parsedAmount,
       }
@@ -1444,16 +1456,23 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
             </label>
             <select
               value={mappingType}
-              onChange={(e) => setMappingType(e.target.value as MappingKind)}
+              onChange={(e) => {
+                const newType = e.target.value as MappingKind
+                setMappingType(newType)
+                // When switching to accountToAccount, set from account to preselected if available
+                if (newType === 'accountToAccount' && preselectedAccount && !accountToAccountFrom) {
+                  setAccountToAccountFrom(preselectedAccount)
+                }
+              }}
               className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
             >
-              <option value="inflowToAccount">Inflow to Account</option>
-              <option value="accountToOutflow">Account to Outflow</option>
-              <option value="accountToAccount">Account to Account Transfer</option>
+              <option value="inflowToAccount">Inflow to Platform</option>
+              <option value="accountToOutflow">Platform to Outflow</option>
+              <option value="accountToAccount">Platform to Platform Transfer</option>
             </select>
           </div>
 
-          {/* Inflow to Account Form */}
+          {/* Inflow to Platform Form */}
           {mappingType === 'inflowToAccount' && (
             <div className="space-y-4">
               <div>
@@ -1534,7 +1553,7 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
 
               <div>
                 <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-target">
-                  Account (target)
+                  Platform (target)
                 </label>
                 <select
                   id="inflow-to-account-target"
@@ -1542,7 +1561,7 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
                   onChange={(e) => setInflowToAccountTarget(e.target.value as AccountPlatform)}
                   className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
                 >
-                  <option value="">Select an account...</option>
+                  <option value="">Select a platform...</option>
                   {accountPlatforms.map((platform) => (
                     <option key={platform} value={platform}>
                       {platform}
@@ -1560,12 +1579,12 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
             </div>
           )}
 
-          {/* Account to Outflow Form */}
+          {/* Platform to Outflow Form */}
           {mappingType === 'accountToOutflow' && (
             <div className="space-y-4">
               <div>
                 <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-source">
-                  Account (source)
+                  Platform (source)
                 </label>
                 <select
                   id="account-to-outflow-source"
@@ -1573,7 +1592,7 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
                   onChange={(e) => setAccountToOutflowSource(e.target.value as AccountPlatform)}
                   className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
                 >
-                  <option value="">Select an account...</option>
+                  <option value="">Select a platform...</option>
                   {accountPlatforms.map((platform) => (
                     <option key={platform} value={platform}>
                       {platform}
@@ -1667,31 +1686,23 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
             </div>
           )}
 
-          {/* Account to Account Transfer Form */}
+          {/* Platform to Platform Transfer Form */}
           {mappingType === 'accountToAccount' && (
             <div className="space-y-4">
-              <div>
-                <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-from">
-                  From Account
-                </label>
-                <select
-                  id="account-to-account-from"
-                  value={accountToAccountFrom}
-                  onChange={(e) => setAccountToAccountFrom(e.target.value as AccountPlatform)}
-                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                >
-                  <option value="">Select an account...</option>
-                  {accountPlatforms.map((platform) => (
-                    <option key={platform} value={platform}>
-                      {platform}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {accountToAccountFrom && (
+                <div>
+                  <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
+                    From Platform
+                  </label>
+                  <div className="text-text-primary text-xs md:text-sm py-2">
+                    {accountToAccountFrom}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-to">
-                  To Account
+                  To Platform
                 </label>
                 <select
                   id="account-to-account-to"
@@ -1699,9 +1710,9 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, o
                   onChange={(e) => setAccountToAccountTo(e.target.value as AccountPlatform)}
                   className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
                 >
-                  <option value="">Select an account...</option>
+                  <option value="">Select a platform...</option>
                   {accountPlatforms
-                    .filter(p => p !== accountToAccountFrom)
+                    .filter(p => p !== (accountToAccountFrom || preselectedAccount))
                     .map((platform) => (
                       <option key={platform} value={platform}>
                         {platform}
@@ -2087,7 +2098,7 @@ function Cashflow() {
           onRemoveItem={handleRemoveOutflowItem}
         />
 
-        {/* Accountflow Section - Full width */}
+        {/* Platformflow Section - Full width */}
         <div>
           <AccountflowSection
             mappings={accountflowMappings}

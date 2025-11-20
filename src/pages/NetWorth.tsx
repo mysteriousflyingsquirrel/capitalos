@@ -352,24 +352,82 @@ interface ItemMenuProps {
 }
 
 function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions }: ItemMenuProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+        setMenuPosition(null)
+      }
+    }
+
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [menuOpen])
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const menuWidth = 180
+      const menuX = rect.left - menuWidth - 8
+      const menuY = rect.top
+      setMenuOpen(true)
+      setMenuPosition({ x: menuX, y: menuY })
+    }
+  }
+
+  const handleShowTransactions = () => {
+    setMenuOpen(false)
+    setMenuPosition(null)
+    onShowTransactions(itemId)
+  }
+
+  const handleRemove = () => {
+    setMenuOpen(false)
+    setMenuPosition(null)
+    onRemoveItem(itemId)
+  }
+
   return (
-    <button
-      ref={buttonRef}
-      onClick={(e) => {
-        e.stopPropagation()
-        if (buttonRef.current) {
-          onShowMenu(itemId, buttonRef.current)
-        }
-      }}
-      className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
-      title="Options"
-    >
-      <svg className="w-4 h-4 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
-      </svg>
-    </button>
+    <>
+      <button
+        ref={buttonRef}
+        onClick={handleClick}
+        className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
+        title="Options"
+      >
+        <svg className="w-4 h-4 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+        </svg>
+      </button>
+      {menuOpen && menuPosition && (
+        <div
+          ref={menuRef}
+          className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card py-2 min-w-[180px]"
+          style={{ left: menuPosition.x, top: menuPosition.y }}
+        >
+          <button
+            onClick={handleShowTransactions}
+            className="w-full text-left px-4 py-2 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+          >
+            Show Transactions
+          </button>
+          <button
+            onClick={handleRemove}
+            className="w-full text-left px-4 py-2 text-danger text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+          >
+            Remove
+          </button>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -479,9 +537,6 @@ function NetWorth() {
   const [transactionItemId, setTransactionItemId] = useState<string | null>(null)
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null)
   const [showTransactionsItemId, setShowTransactionsItemId] = useState<string | null>(null)
-  const [menuOpenItemId, setMenuOpenItemId] = useState<string | null>(null)
-  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
 
   const groupedItems = useMemo(
     () =>
@@ -504,20 +559,6 @@ function NetWorth() {
   )
   const totalNetWorth = convert(totalNetWorthChf, 'CHF')
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpenItemId(null)
-        setMenuPosition(null)
-      }
-    }
-
-    if (menuOpenItemId) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [menuOpenItemId])
 
   const handleAddItem = (
     category: NetWorthCategory,
@@ -607,31 +648,19 @@ function NetWorth() {
   }
 
   const handleShowMenu = (itemId: string, buttonElement: HTMLButtonElement) => {
-    const rect = buttonElement.getBoundingClientRect()
-    const menuWidth = 180 // min-w-[180px]
-    const menuX = rect.left - menuWidth - 8 // 8px gap
-    const menuY = rect.top
-    
-    setMenuOpenItemId(itemId)
-    setMenuPosition({ x: menuX, y: menuY })
+    // This function is kept for interface compatibility but ItemMenu manages its own menu now
   }
 
   const handleRemoveItem = (itemId: string) => {
     if (window.confirm('Are you sure you want to remove this item? All associated transactions will also be removed.')) {
       setNetWorthItems((prev) => prev.filter(i => i.id !== itemId))
       setTransactions((prev) => prev.filter(tx => tx.itemId !== itemId))
-      setMenuOpenItemId(null)
-      setMenuPosition(null)
     }
   }
 
   const handleShowTransactions = (itemId: string) => {
     setShowTransactionsItemId(itemId)
-    setMenuOpenItemId(null)
-    setMenuPosition(null)
   }
-
-  const selectedItem = menuOpenItemId ? netWorthItems.find(i => i.id === menuOpenItemId) : null
 
   return (
     <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
@@ -727,27 +756,6 @@ function NetWorth() {
           )
         })()}
 
-        {/* Context Menu */}
-        {menuOpenItemId && menuPosition && selectedItem && (
-          <div
-            ref={menuRef}
-            className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card py-2 min-w-[180px]"
-            style={{ left: menuPosition.x, top: menuPosition.y }}
-          >
-            <button
-              onClick={() => handleShowTransactions(menuOpenItemId)}
-              className="w-full text-left px-4 py-2 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
-            >
-              Show Transactions
-            </button>
-            <button
-              onClick={() => handleRemoveItem(menuOpenItemId)}
-              className="w-full text-left px-4 py-2 text-danger text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
-            >
-              Remove
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )
