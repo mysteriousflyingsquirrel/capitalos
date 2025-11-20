@@ -235,7 +235,43 @@ function NetWorthCategorySection({
                   </td>
                 </tr>
               ) : (
-                items.map((item) => {
+                // Sort items by balance (high to low)
+                [...items].sort((a, b) => {
+                  // Calculate balance for item a in CHF
+                  let balanceAChf: number
+                  if (category === 'Crypto') {
+                    const coinAmountA = calculateCoinAmount(a.id, transactions)
+                    const tickerA = a.name.trim().toUpperCase()
+                    const currentPriceUsdA = cryptoPrices[tickerA] || 0
+                    if (currentPriceUsdA > 0) {
+                      // Convert USD to CHF for comparison
+                      balanceAChf = convert(coinAmountA * currentPriceUsdA, 'USD')
+                    } else {
+                      balanceAChf = calculateBalanceChf(a.id, transactions, a, cryptoPrices)
+                    }
+                  } else {
+                    balanceAChf = calculateBalanceChf(a.id, transactions, a, cryptoPrices)
+                  }
+
+                  // Calculate balance for item b in CHF
+                  let balanceBChf: number
+                  if (category === 'Crypto') {
+                    const coinAmountB = calculateCoinAmount(b.id, transactions)
+                    const tickerB = b.name.trim().toUpperCase()
+                    const currentPriceUsdB = cryptoPrices[tickerB] || 0
+                    if (currentPriceUsdB > 0) {
+                      // Convert USD to CHF for comparison
+                      balanceBChf = convert(coinAmountB * currentPriceUsdB, 'USD')
+                    } else {
+                      balanceBChf = calculateBalanceChf(b.id, transactions, b, cryptoPrices)
+                    }
+                  } else {
+                    balanceBChf = calculateBalanceChf(b.id, transactions, b, cryptoPrices)
+                  }
+
+                  // Sort high to low
+                  return balanceBChf - balanceAChf
+                }).map((item) => {
                   // For Crypto, calculate balance as coin amount * current price
                   let balanceChf: number
                   if (category === 'Crypto') {

@@ -227,7 +227,7 @@ function GroupedList<T extends Record<string, any>>({
 interface InflowSectionProps {
   items: InflowItem[]
   onAddItem: (group: InflowGroupName, data: { item: string; amountChf: number; currency: string; provider: string }) => void
-  onEditItem: (id: string) => void
+  onEditItem: (id: string, data: { item: string; amountChf: number; currency: string; provider: string }) => void
   onRemoveItem: (id: string) => void
 }
 
@@ -239,6 +239,7 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
   const totalInflowChf = items.reduce((sum, item) => sum + item.amountChf, 0)
   const totalInflow = convert(totalInflowChf, 'CHF')
   const [addItemGroup, setAddItemGroup] = useState<InflowGroupName | null>(null)
+  const [editingItem, setEditingItem] = useState<InflowItem | null>(null)
 
   return (
     <>
@@ -280,7 +281,17 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
             </div>
           )
         }}
-        renderTable={(groupItems) => (
+        renderTable={(groupItems) => {
+          // Sort items: 1st by Provider A-Z, 2nd by amount high-low
+          const sortedItems = [...groupItems].sort((a, b) => {
+            // First priority: Provider A-Z
+            const providerCompare = a.provider.localeCompare(b.provider)
+            if (providerCompare !== 0) return providerCompare
+            // Second priority: Amount high-low
+            return b.amountChf - a.amountChf
+          })
+
+          return (
           <div className="overflow-x-auto">
             <table className="w-full" style={{ tableLayout: 'fixed' }}>
               <colgroup>
@@ -306,14 +317,14 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
                 </tr>
               </thead>
               <tbody>
-                {groupItems.length === 0 ? (
+                {sortedItems.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
                       No items yet. Click "Add Item" to get started.
                     </td>
                   </tr>
                 ) : (
-                  groupItems.map((item) => (
+                  sortedItems.map((item) => (
                     <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
                       <td className="py-2">
                         <div className="text2 truncate">{item.item}</div>
@@ -329,7 +340,7 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
                           <CashflowItemMenu
                             itemId={item.id}
                             itemType="inflow"
-                            onEdit={() => onEditItem(item.id)}
+                            onEdit={() => setEditingItem(item)}
                             onRemove={() => onRemoveItem(item.id)}
                           />
                         </div>
@@ -340,16 +351,26 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
               </tbody>
             </table>
           </div>
-        )}
+          )
+        }}
       />
     </SectionCard>
-    {addItemGroup && (
+    {(addItemGroup || editingItem) && (
       <AddInflowItemModal
-        group={addItemGroup}
-        onClose={() => setAddItemGroup(null)}
-        onSubmit={(data) => {
-          onAddItem(addItemGroup, data)
+        group={editingItem ? editingItem.group : addItemGroup!}
+        editingItem={editingItem}
+        onClose={() => {
           setAddItemGroup(null)
+          setEditingItem(null)
+        }}
+        onSubmit={(data) => {
+          if (editingItem) {
+            onEditItem(editingItem.id, data)
+            setEditingItem(null)
+          } else {
+            onAddItem(addItemGroup!, data)
+            setAddItemGroup(null)
+          }
         }}
       />
     )}
@@ -361,7 +382,7 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
 interface OutflowSectionProps {
   items: OutflowItem[]
   onAddItem: (group: OutflowGroupName, data: { item: string; amountChf: number; currency: string; receiver: string }) => void
-  onEditItem: (id: string) => void
+  onEditItem: (id: string, data: { item: string; amountChf: number; currency: string; receiver: string }) => void
   onRemoveItem: (id: string) => void
 }
 
@@ -373,6 +394,7 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
   const totalOutflowChf = items.reduce((sum, item) => sum + item.amountChf, 0)
   const totalOutflow = convert(totalOutflowChf, 'CHF')
   const [addItemGroup, setAddItemGroup] = useState<OutflowGroupName | null>(null)
+  const [editingItem, setEditingItem] = useState<OutflowItem | null>(null)
 
   return (
     <>
@@ -414,7 +436,17 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
             </div>
           )
         }}
-        renderTable={(groupItems) => (
+        renderTable={(groupItems) => {
+          // Sort items: 1st by Receiver A-Z, 2nd by amount high-low
+          const sortedItems = [...groupItems].sort((a, b) => {
+            // First priority: Receiver A-Z
+            const receiverCompare = a.receiver.localeCompare(b.receiver)
+            if (receiverCompare !== 0) return receiverCompare
+            // Second priority: Amount high-low
+            return b.amountChf - a.amountChf
+          })
+
+          return (
           <div className="overflow-x-auto">
             <table className="w-full" style={{ tableLayout: 'fixed' }}>
               <colgroup>
@@ -440,14 +472,14 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
                 </tr>
               </thead>
               <tbody>
-                {groupItems.length === 0 ? (
+                {sortedItems.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
                       No items yet. Click "Add Item" to get started.
                     </td>
                   </tr>
                 ) : (
-                  groupItems.map((item) => (
+                  sortedItems.map((item) => (
                     <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
                       <td className="py-2">
                         <div className="text2 truncate">{item.item}</div>
@@ -463,7 +495,7 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
                           <CashflowItemMenu
                             itemId={item.id}
                             itemType="outflow"
-                            onEdit={() => onEditItem(item.id)}
+                            onEdit={() => setEditingItem(item)}
                             onRemove={() => onRemoveItem(item.id)}
                           />
                         </div>
@@ -474,16 +506,26 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
               </tbody>
             </table>
           </div>
-        )}
+          )
+        }}
       />
     </SectionCard>
-    {addItemGroup && (
+    {(addItemGroup || editingItem) && (
       <AddOutflowItemModal
-        group={addItemGroup}
-        onClose={() => setAddItemGroup(null)}
-        onSubmit={(data) => {
-          onAddItem(addItemGroup, data)
+        group={editingItem ? editingItem.group : addItemGroup!}
+        editingItem={editingItem}
+        onClose={() => {
           setAddItemGroup(null)
+          setEditingItem(null)
+        }}
+        onSubmit={(data) => {
+          if (editingItem) {
+            onEditItem(editingItem.id, data)
+            setEditingItem(null)
+          } else {
+            onAddItem(addItemGroup!, data)
+            setAddItemGroup(null)
+          }
         }}
       />
     )}
@@ -521,37 +563,72 @@ function getMappingLabel(
 interface AccountflowSectionProps {
   mappings: AccountflowMapping[]
   onAddMapping: (mapping: AccountflowMapping) => void
+  onEditMapping: (mapping: AccountflowMapping) => void
   onRemoveMapping: (id: string) => void
   inflowItems: InflowItem[]
   outflowItems: OutflowItem[]
 }
 
-function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowItems, outflowItems }: AccountflowSectionProps) {
+function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMapping, inflowItems, outflowItems }: AccountflowSectionProps) {
   const { baseCurrency, convert } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const [showAddMappingModal, setShowAddMappingModal] = useState(false)
-
-  // Helper to get inflow mappings for an account
-  const getInflowMappings = (account: AccountPlatform): AccountflowMapping[] => {
-    return mappings.filter(m => {
-      if (m.kind === 'inflowToAccount' && m.account === account) return true
-      if (m.kind === 'accountToAccount' && m.toAccount === account) return true
-      return false
-    })
+  const [editingMapping, setEditingMapping] = useState<AccountflowMapping | null>(null)
+  
+  // Helper to get label for account-to-account mappings
+  const getAccountToAccountLabel = (mapping: AccountToAccountMapping, account: AccountPlatform): string => {
+    if (mapping.toAccount === account) {
+      return `From ${mapping.fromAccount}`
+    } else {
+      return `To ${mapping.toAccount}`
+    }
   }
 
-  // Helper to get outflow mappings for an account
-  const getOutflowMappings = (account: AccountPlatform): AccountflowMapping[] => {
-    return mappings.filter(m => {
-      if (m.kind === 'accountToOutflow' && m.account === account) return true
-      if (m.kind === 'accountToAccount' && m.fromAccount === account) return true
-      return false
-    })
-  }
+  // Helper to get all mappings for an account (both inflow and outflow)
+  const getAccountMappings = (account: AccountPlatform): Array<{
+    mapping: AccountflowMapping
+    type: 'inflow' | 'outflow'
+    label: string
+  }> => {
+    const result: Array<{
+      mapping: AccountflowMapping
+      type: 'inflow' | 'outflow'
+      label: string
+    }> = []
 
-  // Helper to get label for account-to-account on outflow side
-  const getAccountToAccountOutflowLabel = (mapping: AccountToAccountMapping): string => {
-    return `To ${mapping.toAccount}`
+    mappings.forEach(m => {
+      if (m.kind === 'inflowToAccount' && m.account === account) {
+        result.push({
+          mapping: m,
+          type: 'inflow',
+          label: getMappingLabel(m, inflowItems, outflowItems)
+        })
+      } else if (m.kind === 'accountToOutflow' && m.account === account) {
+        result.push({
+          mapping: m,
+          type: 'outflow',
+          label: getMappingLabel(m, inflowItems, outflowItems)
+        })
+      } else if (m.kind === 'accountToAccount') {
+        if (m.toAccount === account) {
+          // This is an inflow to this account
+          result.push({
+            mapping: m,
+            type: 'inflow',
+            label: getAccountToAccountLabel(m, account)
+          })
+        } else if (m.fromAccount === account) {
+          // This is an outflow from this account
+          result.push({
+            mapping: m,
+            type: 'outflow',
+            label: getAccountToAccountLabel(m, account)
+          })
+        }
+      }
+    })
+
+    return result
   }
 
   return (
@@ -585,23 +662,34 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
         {/* Account Visualizations */}
         <div className="space-y-8">
           {accountPlatforms.map((account) => {
-            const inflowMappings = getInflowMappings(account)
-            const outflowMappings = getOutflowMappings(account)
+            const accountMappings = getAccountMappings(account)
 
             // Calculate totals
-            const totalInflowChf = inflowMappings.reduce((sum, m) => {
-              return sum + computeMappingAmount(m, inflowItems, outflowItems)
-            }, 0)
+            const totalInflowChf = accountMappings
+              .filter(m => m.type === 'inflow')
+              .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems), 0)
 
-            const totalOutflowChf = outflowMappings.reduce((sum, m) => {
-              return sum + computeMappingAmount(m, inflowItems, outflowItems)
-            }, 0)
+            const totalOutflowChf = accountMappings
+              .filter(m => m.type === 'outflow')
+              .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems), 0)
 
             const spareChf = totalInflowChf - totalOutflowChf
 
             const totalInflow = convert(totalInflowChf, 'CHF')
             const totalOutflow = convert(totalOutflowChf, 'CHF')
             const spare = convert(spareChf, 'CHF')
+
+            // Sort mappings: 1st priority Inflow first, then Outflow; within each type, sort by amount high-low
+            const sortedMappings = [...accountMappings].sort((a, b) => {
+              // First priority: Inflow items first (type === 'inflow' comes before 'outflow')
+              if (a.type !== b.type) {
+                return a.type === 'inflow' ? -1 : 1
+              }
+              // Second priority: Within same type, sort by amount high-low
+              const amountA = computeMappingAmount(a.mapping, inflowItems, outflowItems)
+              const amountB = computeMappingAmount(b.mapping, inflowItems, outflowItems)
+              return amountB - amountA
+            })
 
             return (
               <div key={account} className="space-y-4 pb-4 border-b border-border-strong last:border-b-0">
@@ -621,71 +709,98 @@ function AccountflowSection({ mappings, onAddMapping, onRemoveMapping, inflowIte
                   </div>
                 </div>
 
-                {/* Two Column Layout: Inflow and Outflow */}
-                <div className="grid grid-cols-2 gap-6">
-                  {/* Inflow Column */}
-                  <div className="space-y-3">
-                    <Heading level={4} className="mb-2">Inflow</Heading>
-                    {inflowMappings.length === 0 ? (
-                      <div className="text-text-muted text-[0.567rem] md:text-xs">No inflow mappings</div>
-                    ) : (
-                      <>
-                        {inflowMappings.map((mapping) => {
-                          const label = getMappingLabel(mapping, inflowItems, outflowItems)
+                {/* Unified Table with Item, Inflow, Outflow, Actions */}
+                {sortedMappings.length === 0 ? (
+                  <div className="text-text-muted text-[0.567rem] md:text-xs">No mappings</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full" style={{ tableLayout: 'fixed' }}>
+                      <colgroup>
+                        <col style={{ width: 'calc((100% - 160px) / 3)' }} />
+                        <col style={{ width: 'calc((100% - 160px) / 3)' }} />
+                        <col style={{ width: 'calc((100% - 160px) / 3)' }} />
+                        <col style={{ width: '80px' }} />
+                      </colgroup>
+                      <thead>
+                        <tr className="border-b border-border-subtle">
+                          <th className="text-left pb-2">
+                            <Heading level={4}>Item</Heading>
+                          </th>
+                          <th className="text-right pb-2">
+                            <Heading level={4}>Inflow</Heading>
+                          </th>
+                          <th className="text-right pb-2">
+                            <Heading level={4}>Outflow</Heading>
+                          </th>
+                          <th className="text-right pb-2">
+                            <Heading level={4}>Actions</Heading>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedMappings.map(({ mapping, type, label }) => {
                           const amountChf = computeMappingAmount(mapping, inflowItems, outflowItems)
                           const amount = convert(amountChf, 'CHF')
+                          
                           return (
-                            <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
-                              <div className="text2 truncate flex-1">{label}</div>
-                              <div className="text-success text2 ml-4 whitespace-nowrap">{formatCurrency(amount)}</div>
-                            </div>
+                            <tr key={mapping.id} className="border-b border-border-subtle last:border-b-0">
+                              <td className="py-2">
+                                <div className="text2 truncate">{label}</div>
+                              </td>
+                              <td className="py-2 text-right">
+                                {type === 'inflow' ? (
+                                  <div className="text-success text2 whitespace-nowrap">{formatNumber(amount, 'ch')}</div>
+                                ) : (
+                                  <div className="text2">—</div>
+                                )}
+                              </td>
+                              <td className="py-2 text-right">
+                                {type === 'outflow' ? (
+                                  <div className="text-danger text2 whitespace-nowrap">{formatNumber(amount, 'ch')}</div>
+                                ) : (
+                                  <div className="text2">—</div>
+                                )}
+                              </td>
+                              <td className="py-2">
+                                <div className="flex items-center justify-end">
+                                  <CashflowItemMenu
+                                    itemId={mapping.id}
+                                    itemType="accountflow"
+                                    onEdit={() => setEditingMapping(mapping)}
+                                    onRemove={() => onRemoveMapping(mapping.id)}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
                           )
                         })}
-                      </>
-                    )}
+                      </tbody>
+                    </table>
                   </div>
-
-                  {/* Outflow Column */}
-                  <div className="space-y-3">
-                    <Heading level={4} className="mb-2">Outflow</Heading>
-                    {outflowMappings.length === 0 ? (
-                      <div className="text-text-muted text-[0.567rem] md:text-xs">No outflow mappings</div>
-                    ) : (
-                      <>
-                        {outflowMappings.map((mapping) => {
-                          let label = ''
-                          if (mapping.kind === 'accountToAccount') {
-                            label = getAccountToAccountOutflowLabel(mapping)
-                          } else {
-                            label = getMappingLabel(mapping, inflowItems, outflowItems)
-                          }
-                          const amountChf = computeMappingAmount(mapping, inflowItems, outflowItems)
-                          const amount = convert(amountChf, 'CHF')
-                          return (
-                            <div key={mapping.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-b-0">
-                              <div className="text2 truncate flex-1">{label}</div>
-                              <div className="text-danger text2 ml-4 whitespace-nowrap">{formatCurrency(amount)}</div>
-                            </div>
-                          )
-                        })}
-                      </>
-                    )}
-                  </div>
-                </div>
+                )}
               </div>
             )
           })}
         </div>
       </div>
 
-      {showAddMappingModal && (
+      {(showAddMappingModal || editingMapping) && (
         <AddMappingModal
           inflowItems={inflowItems}
           outflowItems={outflowItems}
-          onClose={() => setShowAddMappingModal(false)}
-          onSubmit={(mapping) => {
-            onAddMapping(mapping)
+          editingMapping={editingMapping}
+          onClose={() => {
             setShowAddMappingModal(false)
+            setEditingMapping(null)
+          }}
+          onSubmit={(mapping) => {
+            if (editingMapping) {
+              onEditMapping(mapping)
+              setEditingMapping(null)
+            } else {
+              onAddMapping(mapping)
+              setShowAddMappingModal(false)
+            }
           }}
         />
       )}
@@ -784,16 +899,32 @@ function CashflowItemMenu({ itemId, onEdit, onRemove }: CashflowItemMenuProps) {
 // Add Inflow Item Modal
 interface AddInflowItemModalProps {
   group: InflowGroupName
+  editingItem?: InflowItem | null
   onClose: () => void
   onSubmit: (data: { item: string; amountChf: number; currency: string; provider: string }) => void
 }
 
-function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProps) {
+function AddInflowItemModal({ group, editingItem, onClose, onSubmit }: AddInflowItemModalProps) {
   const [item, setItem] = useState('')
   const [inflow, setInflow] = useState('')
   const [currency, setCurrency] = useState('CHF')
   const [provider, setProvider] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  // Populate form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setItem(editingItem.item)
+      setInflow(editingItem.amountChf.toString())
+      setCurrency('CHF') // Default, as currency is not stored in InflowItem
+      setProvider(editingItem.provider)
+    } else {
+      setItem('')
+      setInflow('')
+      setCurrency('CHF')
+      setProvider('')
+    }
+  }, [editingItem])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -831,7 +962,7 @@ function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProp
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
       <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
-          Add Item – {group}
+          {editingItem ? 'Edit Item' : 'Add Item'} – {group}
         </Heading>
 
         {error && (
@@ -919,7 +1050,7 @@ function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProp
               type="submit"
               className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
-              Add Item
+              {editingItem ? 'Save Changes' : 'Add Item'}
             </button>
           </div>
         </form>
@@ -931,16 +1062,32 @@ function AddInflowItemModal({ group, onClose, onSubmit }: AddInflowItemModalProp
 // Add Outflow Item Modal
 interface AddOutflowItemModalProps {
   group: OutflowGroupName
+  editingItem?: OutflowItem | null
   onClose: () => void
   onSubmit: (data: { item: string; amountChf: number; currency: string; receiver: string }) => void
 }
 
-function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalProps) {
+function AddOutflowItemModal({ group, editingItem, onClose, onSubmit }: AddOutflowItemModalProps) {
   const [item, setItem] = useState('')
   const [outflow, setOutflow] = useState('')
   const [currency, setCurrency] = useState('CHF')
   const [receiver, setReceiver] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  // Populate form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setItem(editingItem.item)
+      setOutflow(editingItem.amountChf.toString())
+      setCurrency('CHF') // Default, as currency is not stored in OutflowItem
+      setReceiver(editingItem.receiver)
+    } else {
+      setItem('')
+      setOutflow('')
+      setCurrency('CHF')
+      setReceiver('')
+    }
+  }, [editingItem])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -978,7 +1125,7 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
       <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
-          Add Item – {group}
+          {editingItem ? 'Edit Item' : 'Add Item'} – {group}
         </Heading>
 
         {error && (
@@ -1066,7 +1213,7 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
               type="submit"
               className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
-              Add Item
+              {editingItem ? 'Save Changes' : 'Add Item'}
             </button>
           </div>
         </form>
@@ -1079,11 +1226,12 @@ function AddOutflowItemModal({ group, onClose, onSubmit }: AddOutflowItemModalPr
 interface AddMappingModalProps {
   inflowItems: InflowItem[]
   outflowItems: OutflowItem[]
+  editingMapping?: AccountflowMapping | null
   onClose: () => void
   onSubmit: (mapping: AccountflowMapping) => void
 }
 
-function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMappingModalProps) {
+function AddMappingModal({ inflowItems, outflowItems, editingMapping, onClose, onSubmit }: AddMappingModalProps) {
   const { baseCurrency, convert } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const [mappingType, setMappingType] = useState<MappingKind>('inflowToAccount')
@@ -1108,6 +1256,53 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
 
   const inflowGroups: InflowGroupName[] = ['Time', 'Service', 'Worker Bees']
   const outflowGroups: OutflowGroupName[] = ['Fix', 'Variable', 'Shared Variable', 'Investments']
+
+  // Populate form when editing
+  useEffect(() => {
+    if (editingMapping) {
+      setMappingType(editingMapping.kind)
+      
+      if (editingMapping.kind === 'inflowToAccount') {
+        setInflowToAccountMode(editingMapping.mode)
+        if (editingMapping.mode === 'group') {
+          setInflowToAccountGroup(editingMapping.group || '')
+          setInflowToAccountItem('')
+        } else {
+          setInflowToAccountItem(editingMapping.inflowItemId || '')
+          setInflowToAccountGroup('')
+        }
+        setInflowToAccountTarget(editingMapping.account)
+      } else if (editingMapping.kind === 'accountToOutflow') {
+        setAccountToOutflowSource(editingMapping.account)
+        setAccountToOutflowMode(editingMapping.mode)
+        if (editingMapping.mode === 'group') {
+          setAccountToOutflowGroup(editingMapping.group || '')
+          setAccountToOutflowItem('')
+        } else {
+          setAccountToOutflowItem(editingMapping.outflowItemId || '')
+          setAccountToOutflowGroup('')
+        }
+      } else if (editingMapping.kind === 'accountToAccount') {
+        setAccountToAccountFrom(editingMapping.fromAccount)
+        setAccountToAccountTo(editingMapping.toAccount)
+        setAccountToAccountAmount(editingMapping.amountChf.toString())
+      }
+    } else {
+      // Reset form when not editing
+      setMappingType('inflowToAccount')
+      setInflowToAccountMode('group')
+      setInflowToAccountGroup('')
+      setInflowToAccountItem('')
+      setInflowToAccountTarget('')
+      setAccountToOutflowSource('')
+      setAccountToOutflowMode('group')
+      setAccountToOutflowGroup('')
+      setAccountToOutflowItem('')
+      setAccountToAccountFrom('')
+      setAccountToAccountTo('')
+      setAccountToAccountAmount('')
+    }
+  }, [editingMapping])
 
   // Calculate computed amounts for display
   const getInflowToAccountAmount = (): number => {
@@ -1150,7 +1345,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
         return
       }
 
-      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mapping-${Date.now()}`
+      const id = editingMapping?.id || (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mapping-${Date.now()}`)
       mapping = {
         id,
         kind: 'inflowToAccount',
@@ -1172,7 +1367,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
         return
       }
 
-      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mapping-${Date.now()}`
+      const id = editingMapping?.id || (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mapping-${Date.now()}`)
       mapping = {
         id,
         kind: 'accountToOutflow',
@@ -1200,7 +1395,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
         return
       }
 
-      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mapping-${Date.now()}`
+      const id = editingMapping?.id || (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `mapping-${Date.now()}`)
       mapping = {
         id,
         kind: 'accountToAccount',
@@ -1232,7 +1427,7 @@ function AddMappingModal({ inflowItems, outflowItems, onClose, onSubmit }: AddMa
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
       <div className="w-full max-w-2xl bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
-          Add Mapping
+          {editingMapping ? 'Edit Mapping' : 'Add Mapping'}
         </Heading>
 
         {error && (
@@ -1820,12 +2015,20 @@ function Cashflow() {
     setAccountflowItems(prev => [...prev, newItem])
   }
 
-  const handleEditInflowItem = (id: string) => {
-    console.log('Edit inflow item', id)
+  const handleEditInflowItem = (id: string, data: { item: string; amountChf: number; currency: string; provider: string }) => {
+    setInflowItems(prev => prev.map(item => 
+      item.id === id 
+        ? { ...item, item: data.item, amountChf: data.amountChf, provider: data.provider }
+        : item
+    ))
   }
 
-  const handleEditOutflowItem = (id: string) => {
-    console.log('Edit outflow item', id)
+  const handleEditOutflowItem = (id: string, data: { item: string; amountChf: number; currency: string; receiver: string }) => {
+    setOutflowItems(prev => prev.map(item => 
+      item.id === id 
+        ? { ...item, item: data.item, amountChf: data.amountChf, receiver: data.receiver }
+        : item
+    ))
   }
 
   const handleEditAccountflowItem = (id: string) => {
@@ -1852,6 +2055,10 @@ function Cashflow() {
 
   const handleAddMapping = (mapping: AccountflowMapping) => {
     setAccountflowMappings(prev => [...prev, mapping])
+  }
+
+  const handleEditMapping = (mapping: AccountflowMapping) => {
+    setAccountflowMappings(prev => prev.map(m => m.id === mapping.id ? mapping : m))
   }
 
   const handleRemoveMapping = (id: string) => {
@@ -1885,6 +2092,7 @@ function Cashflow() {
           <AccountflowSection
             mappings={accountflowMappings}
             onAddMapping={handleAddMapping}
+            onEditMapping={handleEditMapping}
             onRemoveMapping={handleRemoveMapping}
             inflowItems={inflowItems}
             outflowItems={outflowItems}
