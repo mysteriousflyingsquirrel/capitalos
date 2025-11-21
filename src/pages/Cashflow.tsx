@@ -678,7 +678,7 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
                   <div className="flex items-center justify-between">
                     <div>
                       <Heading level={3}>{account}</Heading>
-                      <div className="mt-1 flex items-center gap-4">
+                      <div className="mt-1 flex flex-col gap-1">
                         <TotalText variant="inflow">
                           {formatCurrency(totalInflow)}
                         </TotalText>
