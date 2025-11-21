@@ -675,21 +675,8 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
               <div key={account} className="space-y-4 pb-4 border-b border-border-strong last:border-b-0">
                 {/* Account Header with Totals */}
                 <div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Heading level={3}>{account}</Heading>
-                      <div className="mt-1 flex flex-col gap-1">
-                        <TotalText variant="inflow">
-                          {formatCurrency(totalInflow)}
-                        </TotalText>
-                        <TotalText variant="outflow">
-                          {formatCurrency(totalOutflow)}
-                        </TotalText>
-                        <TotalText variant="spare">
-                          {formatCurrency(spare)}
-                        </TotalText>
-                      </div>
-                    </div>
+                  <div className="flex items-center justify-between mb-1">
+                    <Heading level={3}>{account}</Heading>
                     <button
                       onClick={() => {
                         setPreselectedAccount(account)
@@ -712,6 +699,17 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
                       </svg>
                       <span>Add Mapping</span>
                     </button>
+                  </div>
+                  <div className="mt-1 flex flex-col gap-1">
+                    <TotalText variant="inflow">
+                      {formatCurrency(totalInflow)}
+                    </TotalText>
+                    <TotalText variant="outflow">
+                      {formatCurrency(totalOutflow)}
+                    </TotalText>
+                    <TotalText variant="spare">
+                      {formatCurrency(spare)}
+                    </TotalText>
                   </div>
                 </div>
 
