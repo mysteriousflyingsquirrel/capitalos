@@ -35,8 +35,9 @@ import {
 } from '../services/cashflowSnapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
-import { calculateBalanceChf } from './NetWorth'
+import { calculateBalanceChf, calculateCoinAmount } from './NetWorth'
 import type { InflowItem, OutflowItem } from './Cashflow'
+import { fetchCoinPrice } from '../services/coinGeckoService'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -134,6 +135,9 @@ function Dashboard() {
   const [inflowItems, setInflowItems] = useState([])
   const [outflowItems, setOutflowItems] = useState([])
   
+  // Store current crypto prices (ticker -> USD price)
+  const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
+  
   useEffect(() => {
     if (uid) {
       Promise.all([
@@ -149,6 +153,49 @@ function Dashboard() {
       })
     }
   }, [uid])
+
+  // Fetch crypto prices for all crypto items
+  useEffect(() => {
+    const fetchAllCryptoPrices = async () => {
+      const cryptoItems = netWorthItems.filter((item: NetWorthItem) => item.category === 'Crypto')
+      if (cryptoItems.length === 0) return
+
+      const tickers = cryptoItems.map((item: NetWorthItem) => item.name.trim().toUpperCase())
+      const uniqueTickers = [...new Set(tickers)]
+      
+      const pricePromises = uniqueTickers.map(async (ticker) => {
+        try {
+          const price = await fetchCoinPrice(ticker)
+          return { ticker, price: price || null }
+        } catch (error) {
+          return { ticker, price: null }
+        }
+      })
+
+      const results = await Promise.all(pricePromises)
+      const newPrices: Record<string, number> = {}
+      
+      results.forEach(({ ticker, price }) => {
+        if (price !== null) {
+          newPrices[ticker] = price
+        }
+      })
+
+      setCryptoPrices(prev => ({ ...prev, ...newPrices }))
+    }
+
+    if (netWorthItems.length > 0) {
+      fetchAllCryptoPrices()
+      
+      // Set up interval to fetch every hour (3600000 ms)
+      const interval = setInterval(() => {
+        fetchAllCryptoPrices()
+      }, 3600000) // 1 hour
+
+      return () => clearInterval(interval)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [netWorthItems]) // Re-fetch when crypto items change
 
   // Load snapshots from Firestore
   const [snapshots, setSnapshots] = useState<NetWorthSnapshot[]>([])
@@ -201,8 +248,23 @@ function Dashboard() {
 
   // Calculate total net worth from actual data
   const totalNetWorthChf = useMemo(() => {
-    return netWorthItems.reduce((sum, item) => sum + calculateBalanceChf(item.id, transactions), 0)
-  }, [netWorthItems, transactions])
+    return netWorthItems.reduce((sum, item: NetWorthItem) => {
+      if (item.category === 'Crypto') {
+        // For Crypto: use current price * coin amount, convert USD to CHF
+        const coinAmount = calculateCoinAmount(item.id, transactions)
+        const ticker = item.name.trim().toUpperCase()
+        const currentPriceUsd = cryptoPrices[ticker] || 0
+        if (currentPriceUsd > 0) {
+          // Convert USD to CHF for balance
+          return sum + convert(coinAmount * currentPriceUsd, 'USD')
+        }
+        // Fallback to transaction-based calculation if price not available
+        return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+      }
+      // For non-Crypto items, balance is already in CHF
+      return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+    }, 0)
+  }, [netWorthItems, transactions, cryptoPrices, convert])
 
   // Calculate monthly inflow/outflow from cashflow items
   const monthlyInflowChf = useMemo(() => {
@@ -312,8 +374,24 @@ function Dashboard() {
       'Inventory': 0,
     }
 
-    netWorthItems.forEach(item => {
-      const balance = calculateBalanceChf(item.id, transactions)
+    netWorthItems.forEach((item: NetWorthItem) => {
+      let balance: number
+      if (item.category === 'Crypto') {
+        // For Crypto: use current price * coin amount, convert USD to CHF
+        const coinAmount = calculateCoinAmount(item.id, transactions)
+        const ticker = item.name.trim().toUpperCase()
+        const currentPriceUsd = cryptoPrices[ticker] || 0
+        if (currentPriceUsd > 0) {
+          // Convert USD to CHF for balance
+          balance = convert(coinAmount * currentPriceUsd, 'USD')
+        } else {
+          // Fallback to transaction-based calculation if price not available
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+        }
+      } else {
+        // For non-Crypto items, balance is already in CHF
+        balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+      }
       categoryTotals[item.category] += balance
     })
 
@@ -326,7 +404,7 @@ function Dashboard() {
         name,
         value: Math.round((value / total) * 100),
       }))
-  }, [netWorthItems, transactions])
+  }, [netWorthItems, transactions, cryptoPrices, convert])
 
   // Calculate inflow breakdown
   const inflowBreakdownData = useMemo(() => {
@@ -431,8 +509,24 @@ function Dashboard() {
         'Inventory': 0,
       }
 
-      netWorthItems.forEach(item => {
-        const balance = calculateBalanceChf(item.id, transactions)
+      netWorthItems.forEach((item: NetWorthItem) => {
+        let balance: number
+        if (item.category === 'Crypto') {
+          // For Crypto: use current price * coin amount, convert USD to CHF
+          const coinAmount = calculateCoinAmount(item.id, transactions)
+          const ticker = item.name.trim().toUpperCase()
+          const currentPriceUsd = cryptoPrices[ticker] || 0
+          if (currentPriceUsd > 0) {
+            // Convert USD to CHF for balance
+            balance = convert(coinAmount * currentPriceUsd, 'USD')
+          } else {
+            // Fallback to transaction-based calculation if price not available
+            balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+          }
+        } else {
+          // For non-Crypto items, balance is already in CHF
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+        }
         categoryTotals[item.category] += balance
       })
 
@@ -454,7 +548,7 @@ function Dashboard() {
     }
 
     return chartData
-  }, [snapshots, netWorthItems, transactions, totalNetWorthChf, convert, timeFrame])
+  }, [snapshots, netWorthItems, transactions, totalNetWorthChf, cryptoPrices, convert, timeFrame])
 
   // Generate cashflow data from snapshots + current value
   const cashflowData = useMemo(() => {

@@ -330,7 +330,7 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
                         <div className="text2 truncate">{item.item}</div>
                       </td>
                       <td className="py-2 text-right">
-                        <div className="text-success text2 whitespace-nowrap">{formatNumber(convert(item.amountChf, 'CHF'), 'ch')}</div>
+                        <div className="text-success text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
                       </td>
                       <td className="py-2 text-right">
                         <div className="text2 truncate">{item.provider}</div>
@@ -485,7 +485,7 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
                         <div className="text2 truncate">{item.item}</div>
                       </td>
                       <td className="py-2 text-right">
-                        <div className="text-danger text2 whitespace-nowrap">{formatNumber(convert(item.amountChf, 'CHF'), 'ch')}</div>
+                        <div className="text-danger text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
                       </td>
                       <td className="py-2 text-right">
                         <div className="text2 truncate">{item.receiver}</div>
@@ -753,14 +753,14 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
                               </td>
                               <td className="py-2 text-right">
                                 {type === 'inflow' ? (
-                                  <div className="text-success text2 whitespace-nowrap">{formatNumber(amount, 'ch')}</div>
+                                  <div className="text-success text2 whitespace-nowrap">{formatCurrency(amount)}</div>
                                 ) : (
                                   <div className="text2">—</div>
                                 )}
                               </td>
                               <td className="py-2 text-right">
                                 {type === 'outflow' ? (
-                                  <div className="text-danger text2 whitespace-nowrap">{formatNumber(amount, 'ch')}</div>
+                                  <div className="text-danger text2 whitespace-nowrap">{formatCurrency(amount)}</div>
                                 ) : (
                                   <div className="text2">—</div>
                                 )}

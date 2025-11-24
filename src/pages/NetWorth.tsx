@@ -65,7 +65,9 @@ const categoryOrder: NetWorthCategory[] = [
 // formatChf will be replaced with currency-aware formatting in the component
 
 // Helper function to calculate balance from transactions
-// For Crypto items, this should use current price * coin amount instead
+// NOTE: For Crypto items with current prices, this returns USD value (not CHF)
+// Callers must convert USD to CHF using the convert function
+// For Crypto items without current prices, falls back to transaction-based calculation (returns CHF)
 export function calculateBalanceChf(
   itemId: string, 
   transactions: NetWorthTransaction[], 
@@ -78,12 +80,13 @@ export function calculateBalanceChf(
     const ticker = item.name.trim().toUpperCase()
     const currentPrice = currentCryptoPrices[ticker]
     if (currentPrice !== undefined && currentPrice > 0) {
-      // Price is in USD, convert to CHF for balance
-      return coinAmount * currentPrice // We'll convert USD to CHF in the display layer
+      // Price is in USD - returns USD value, caller must convert to CHF
+      return coinAmount * currentPrice
     }
   }
   
-  // For non-Crypto items, use the transaction-based calculation
+  // For non-Crypto items or Crypto without current prices, use transaction-based calculation
+  // Returns CHF (transactions store pricePerItemChf in CHF)
   return transactions
     .filter(tx => tx.itemId === itemId)
     .reduce((sum, tx) => sum + (tx.side === 'buy' ? 1 : -1) * tx.amount * tx.pricePerItemChf, 0)
@@ -306,7 +309,7 @@ function NetWorthCategorySection({
                       )}
                       <td className="py-2 text-right">
                         <div className="text2 whitespace-nowrap">
-                          {formatNumber(balanceConverted, 'ch')}
+                          {formatCurrency(balanceConverted)}
                         </div>
                       </td>
                       <td className="py-2 text-right">
@@ -571,8 +574,23 @@ function NetWorth() {
   )
 
   const totalNetWorthChf = useMemo(
-    () => netWorthItems.reduce((sum, item) => sum + calculateBalanceChf(item.id, transactions), 0),
-    [netWorthItems, transactions]
+    () => netWorthItems.reduce((sum, item) => {
+      if (item.category === 'Crypto') {
+        // For Crypto: use current price * coin amount, convert USD to CHF
+        const coinAmount = calculateCoinAmount(item.id, transactions)
+        const ticker = item.name.trim().toUpperCase()
+        const currentPriceUsd = cryptoPrices[ticker] || 0
+        if (currentPriceUsd > 0) {
+          // Convert USD to CHF for balance
+          return sum + convert(coinAmount * currentPriceUsd, 'USD')
+        }
+        // Fallback to transaction-based calculation if price not available
+        return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+      }
+      // For non-Crypto items, balance is already in CHF
+      return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+    }, 0),
+    [netWorthItems, transactions, cryptoPrices, convert]
   )
   const totalNetWorth = convert(totalNetWorthChf, 'CHF')
 
@@ -683,9 +701,9 @@ function NetWorth() {
     setEditingItemId(itemId)
   }
 
-  const handleSaveEditItem = (itemId: string, newName: string) => {
+  const handleSaveEditItem = (itemId: string, newName: string, currency: string, platform: string) => {
     setNetWorthItems((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, name: newName.trim() } : item))
+      prev.map((item) => (item.id === itemId ? { ...item, name: newName.trim(), currency, platform } : item))
     )
     setEditingItemId(null)
   }
@@ -1119,7 +1137,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
                       id="nw-price-per-coin"
                       type="number"
                       min="0"
-                      step="0.0000000001"
+                      step="any"
                       value={pricePerCoinUsd}
                       onChange={(e) => setPricePerCoinUsd(e.target.value)}
                       className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
@@ -1210,11 +1228,14 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
 interface EditNetWorthItemModalProps {
   item: NetWorthItem
   onClose: () => void
-  onSave: (itemId: string, newName: string) => void
+  onSave: (itemId: string, newName: string, currency: string, platform: string) => void
 }
 
 function EditNetWorthItemModal({ item, onClose, onSave }: EditNetWorthItemModalProps) {
+  const isCrypto = item.category === 'Crypto'
   const [name, setName] = useState(item.name)
+  const [currency, setCurrency] = useState(item.currency)
+  const [platform, setPlatform] = useState(item.platform)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = (e: FormEvent) => {
@@ -1226,7 +1247,7 @@ function EditNetWorthItemModal({ item, onClose, onSave }: EditNetWorthItemModalP
       return
     }
 
-    onSave(item.id, name.trim())
+    onSave(item.id, name.trim(), currency, platform)
     onClose()
   }
 
@@ -1251,19 +1272,84 @@ function EditNetWorthItemModal({ item, onClose, onSave }: EditNetWorthItemModalP
             <div className="text-text-primary text-xs md:text-sm">{item.category}</div>
           </div>
 
-          <div>
-            <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
-              Platform
-            </label>
-            <div className="text-text-primary text-xs md:text-sm">{item.platform}</div>
-          </div>
-
-          <div>
-            <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
-              Currency
-            </label>
-            <div className="text-text-primary text-xs md:text-sm">{item.currency}</div>
-          </div>
+          {isCrypto ? (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="edit-platform"
+              >
+                Platform
+              </label>
+              <select
+                id="edit-platform"
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+              >
+                <option value="Physical">Physical</option>
+                <option value="Raiffeisen">Raiffeisen</option>
+                <option value="Revolut">Revolut</option>
+                <option value="yuh!">yuh!</option>
+                <option value="SAXO">SAXO</option>
+                <option value="Kraken">Kraken</option>
+                <option value="MEXC">MEXC</option>
+                <option value="BingX">BingX</option>
+                <option value="Exodus">Exodus</option>
+                <option value="Trezor">Trezor</option>
+              </select>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label
+                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                  htmlFor="edit-currency"
+                >
+                  Currency
+                </label>
+                <select
+                  id="edit-currency"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="CHF">CHF</option>
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                  <option value="BTC">BTC</option>
+                  <option value="ETH">ETH</option>
+                </select>
+              </div>
+              <div>
+                <label
+                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                  htmlFor="edit-platform"
+                >
+                  Platform
+                </label>
+                <select
+                  id="edit-platform"
+                  value={platform}
+                  onChange={(e) => setPlatform(e.target.value)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="Physical">Physical</option>
+                  <option value="Wallet">Wallet</option>
+                  <option value="Raiffeisen">Raiffeisen</option>
+                  <option value="Revolut">Revolut</option>
+                  <option value="yuh!">yuh!</option>
+                  <option value="SAXO">SAXO</option>
+                  <option value="Kraken">Kraken</option>
+                  <option value="Trezor">Trezor</option>
+                  <option value="Ledger">Ledger</option>
+                  <option value="IBKR">IBKR</option>
+                  <option value="UBS">UBS</option>
+                  <option value="Property">Property</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </>
+          )}
 
           <div>
             <label
@@ -1317,46 +1403,90 @@ const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Account
 type TransactionTab = 'buy' | 'sell'
 
 function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransactionModalProps) {
-  const { baseCurrency, convert } = useCurrency()
+  const { baseCurrency, convert, exchangeRates } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const isEditing = !!transaction
+  const needsPricePerItem = !categoriesWithoutPricePerItem.includes(item.category)
+  const isCrypto = item.category === 'Crypto'
+  
+  // For Crypto transactions being edited, convert stored CHF price back to USD for display
+  const getInitialPrice = () => {
+    if (!transaction || !needsPricePerItem) return ''
+    if (isCrypto) {
+      // Price is stored in CHF, convert back to USD for display
+      // First convert CHF to baseCurrency, then to USD
+      const baseAmount = convert(transaction.pricePerItemChf, 'CHF')
+      // Convert baseCurrency to USD: multiply by USD rate (how many USD per 1 baseCurrency)
+      if (exchangeRates && exchangeRates.rates['USD']) {
+        const usdAmount = baseAmount * exchangeRates.rates['USD']
+        return usdAmount.toString()
+      }
+      // Fallback: if no exchange rates, assume 1:1 (shouldn't happen in practice)
+      return transaction.pricePerItemChf.toString()
+    }
+    return transaction.pricePerItemChf.toString()
+  }
+  
   const [activeTab, setActiveTab] = useState<TransactionTab>(transaction?.side || 'buy')
   const [amount, setAmount] = useState(transaction?.amount.toString() || '')
-  const [pricePerItemChf, setPricePerItemChf] = useState(transaction?.pricePerItemChf.toString() || '')
+  const [pricePerItemChf, setPricePerItemChf] = useState(getInitialPrice())
   const [date, setDate] = useState(transaction?.date || new Date().toISOString().split('T')[0])
   const [error, setError] = useState<string | null>(null)
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
 
-  const needsPricePerItem = !categoriesWithoutPricePerItem.includes(item.category)
-  const isCrypto = item.category === 'Crypto'
-
-  // Fetch coin price when modal opens for Crypto items (only if not editing and no price set)
+  // Fetch coin price when modal opens for Crypto items (both for new transactions and when editing)
   useEffect(() => {
-    if (isCrypto && needsPricePerItem && !isEditing && !pricePerItemChf && item.name) {
-      const ticker = item.name.trim().toUpperCase()
-      setIsLoadingPrice(true)
-      setPriceError(null)
+    if (isCrypto && needsPricePerItem && item.name) {
+      // For editing, always fetch fresh price from API (in USD)
+      // For new transactions, fetch if no price is set
+      if (isEditing || !pricePerItemChf) {
+        const ticker = item.name.trim().toUpperCase()
+        setIsLoadingPrice(true)
+        setPriceError(null)
 
-      fetchCoinPrice(ticker)
-        .then((price) => {
-          if (price !== null) {
-            // Set the USD price directly (for crypto, we store USD prices)
-            setPricePerItemChf(price.toString())
-            setPriceError(null)
-          } else {
-            setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
-          }
-        })
-        .catch((err) => {
-          setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
-        })
-        .finally(() => {
-          setIsLoadingPrice(false)
-        })
+        fetchCoinPrice(ticker)
+          .then((price) => {
+            if (price !== null) {
+              // Set the USD price directly from API (always in USD for crypto)
+              setPricePerItemChf(price.toString())
+              setPriceError(null)
+            } else {
+              // If API fails and we're editing, fall back to converting from stored CHF
+              if (isEditing && transaction) {
+                const baseAmount = convert(transaction.pricePerItemChf, 'CHF')
+                if (exchangeRates && exchangeRates.rates['USD']) {
+                  const usdAmount = baseAmount * exchangeRates.rates['USD']
+                  setPricePerItemChf(usdAmount.toString())
+                } else {
+                  setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
+                }
+              } else {
+                setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
+              }
+            }
+          })
+          .catch((err) => {
+            // If API fails and we're editing, fall back to converting from stored CHF
+            if (isEditing && transaction) {
+              const baseAmount = convert(transaction.pricePerItemChf, 'CHF')
+              if (exchangeRates && exchangeRates.rates['USD']) {
+                const usdAmount = baseAmount * exchangeRates.rates['USD']
+                setPricePerItemChf(usdAmount.toString())
+              } else {
+                setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
+              }
+            } else {
+              setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
+            }
+          })
+          .finally(() => {
+            setIsLoadingPrice(false)
+          })
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Only run once on mount when modal opens
+  }, [isCrypto, needsPricePerItem, item.name, isEditing]) // Run when modal opens or when editing
 
   const totalChf = useMemo(() => {
     const parsedAmount = Number(amount)
@@ -1514,7 +1644,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
                 id="tx-price"
                 type="number"
                 min="0"
-                step={isCrypto ? "0.0000000001" : "0.01"}
+                step={isCrypto ? "any" : "0.01"}
                 value={pricePerItemChf}
                 onChange={(e) => setPricePerItemChf(e.target.value)}
                 className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
@@ -1593,12 +1723,13 @@ interface ShowTransactionsModalProps {
 }
 
 function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose, onEdit, onDelete }: ShowTransactionsModalProps) {
-  const { baseCurrency, convert } = useCurrency()
+  const { baseCurrency, convert, exchangeRates } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const isCrypto = item.category === 'Crypto'
   
   // Calculate balance - for Crypto use current price * coin amount
   let balanceChf: number
-  if (item.category === 'Crypto') {
+  if (isCrypto) {
     const coinAmount = calculateCoinAmount(item.id, transactions)
     const ticker = item.name.trim().toUpperCase()
     const currentPriceUsd = cryptoPrices[ticker] || 0
@@ -1642,7 +1773,7 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose,
                   <th className="text-left py-2 px-3 text2 font-bold">Side</th>
                   <th className="text-left py-2 px-3 text2 font-bold">Currency</th>
                   <th className="text-right py-2 px-3 text2 font-bold">Amount</th>
-                  <th className="text-right py-2 px-3 text2 font-bold">Price per item</th>
+                  <th className="text-right py-2 px-3 text2 font-bold">{isCrypto ? 'Price per item (USD)' : 'Price per item'}</th>
                   <th className="text-right py-2 px-3 text2 font-bold">Total</th>
                   <th className="text-left py-2 px-3 text2 font-bold">Actions</th>
                 </tr>
@@ -1651,7 +1782,24 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose,
                 {sortedTransactions.map((tx) => {
                   const totalChf = tx.amount * tx.pricePerItemChf
                   const totalConverted = convert(totalChf, 'CHF')
-                  const priceConverted = convert(tx.pricePerItemChf, 'CHF')
+                  
+                  // For Crypto, convert stored CHF price back to USD for display
+                  let priceDisplay: string
+                  if (isCrypto) {
+                    // Convert CHF to baseCurrency, then to USD
+                    const baseAmount = convert(tx.pricePerItemChf, 'CHF')
+                    if (exchangeRates && exchangeRates.rates['USD']) {
+                      const usdPrice = baseAmount * exchangeRates.rates['USD']
+                      priceDisplay = formatMoney(usdPrice, 'USD', 'ch')
+                    } else {
+                      // Fallback if exchange rates not available
+                      priceDisplay = formatCurrency(convert(tx.pricePerItemChf, 'CHF'))
+                    }
+                  } else {
+                    const priceConverted = convert(tx.pricePerItemChf, 'CHF')
+                    priceDisplay = formatCurrency(priceConverted)
+                  }
+                  
                   const sign = tx.side === 'buy' ? '+' : '-'
                   return (
                     <tr key={tx.id} className="border-b border-border-subtle">
@@ -1663,7 +1811,7 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose,
                       </td>
                       <td className="py-2 px-3 text2">{tx.currency}</td>
                       <td className="py-2 px-3 text2 text-right">{tx.amount}</td>
-                      <td className="py-2 px-3 text2 text-right">{formatCurrency(priceConverted)}</td>
+                      <td className="py-2 px-3 text2 text-right">{priceDisplay}</td>
                       <td className="py-2 px-3 text2 text-right">
                         <span className={tx.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
                           {sign}{formatCurrency(totalConverted)}
