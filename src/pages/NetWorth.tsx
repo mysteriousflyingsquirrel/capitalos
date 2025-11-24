@@ -112,6 +112,7 @@ interface NetWorthCategorySectionProps {
   onShowMenu: (itemId: string, buttonElement: HTMLButtonElement) => void
   onRemoveItem: (itemId: string) => void
   onShowTransactions: (itemId: string) => void
+  onEditItem: (itemId: string) => void
 }
 
 // Helper function to format coin amount
@@ -130,6 +131,7 @@ function NetWorthCategorySection({
   onShowMenu,
   onRemoveItem,
   onShowTransactions,
+  onEditItem,
 }: NetWorthCategorySectionProps) {
   const { baseCurrency, convert } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
@@ -328,6 +330,7 @@ function NetWorthCategorySection({
                             onShowMenu={onShowMenu}
                             onRemoveItem={onRemoveItem}
                             onShowTransactions={onShowTransactions}
+                            onEditItem={onEditItem}
                           />
                         </div>
                       </td>
@@ -349,9 +352,10 @@ interface ItemMenuProps {
   onShowMenu: (itemId: string, buttonElement: HTMLButtonElement) => void
   onRemoveItem: (itemId: string) => void
   onShowTransactions: (itemId: string) => void
+  onEditItem: (itemId: string) => void
 }
 
-function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions }: ItemMenuProps) {
+function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions, onEditItem }: ItemMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -395,6 +399,12 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions }: Item
     onRemoveItem(itemId)
   }
 
+  const handleEdit = () => {
+    setMenuOpen(false)
+    setMenuPosition(null)
+    onEditItem(itemId)
+  }
+
   return (
     <>
       <button
@@ -413,6 +423,12 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions }: Item
           className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card py-2 min-w-[180px]"
           style={{ left: menuPosition.x, top: menuPosition.y }}
         >
+          <button
+            onClick={handleEdit}
+            className="w-full text-left px-4 py-2 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+          >
+            Edit
+          </button>
           <button
             onClick={handleShowTransactions}
             className="w-full text-left px-4 py-2 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
@@ -536,6 +552,7 @@ function NetWorth() {
   const [activeCategory, setActiveCategory] = useState<NetWorthCategory | null>(null)
   const [transactionItemId, setTransactionItemId] = useState<string | null>(null)
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null)
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [showTransactionsItemId, setShowTransactionsItemId] = useState<string | null>(null)
 
   const groupedItems = useMemo(
@@ -662,6 +679,17 @@ function NetWorth() {
     setShowTransactionsItemId(itemId)
   }
 
+  const handleEditItem = (itemId: string) => {
+    setEditingItemId(itemId)
+  }
+
+  const handleSaveEditItem = (itemId: string, newName: string) => {
+    setNetWorthItems((prev) =>
+      prev.map((item) => (item.id === itemId ? { ...item, name: newName.trim() } : item))
+    )
+    setEditingItemId(null)
+  }
+
   return (
     <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -697,6 +725,7 @@ function NetWorth() {
                 onShowMenu={handleShowMenu}
                 onRemoveItem={handleRemoveItem}
                 onShowTransactions={handleShowTransactions}
+                onEditItem={handleEditItem}
               />
             )
           })}
@@ -735,6 +764,15 @@ function NetWorth() {
             onClose={() => setShowTransactionsItemId(null)}
             onEdit={handleEditTransaction}
             onDelete={handleDeleteTransaction}
+          />
+        )}
+
+        {/* Edit Item Modal */}
+        {editingItemId && (
+          <EditNetWorthItemModal
+            item={netWorthItems.find(i => i.id === editingItemId)!}
+            onClose={() => setEditingItemId(null)}
+            onSave={handleSaveEditItem}
           />
         )}
 
@@ -795,7 +833,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
     if (!isCrypto) return 0
     const parsedAmount = Number(amount)
     const parsedPrice = Number(pricePerCoinUsd)
-    if (isNaN(parsedAmount) || isNaN(parsedPrice) || parsedAmount <= 0 || parsedPrice <= 0) {
+    if (isNaN(parsedAmount) || isNaN(parsedPrice) || parsedPrice <= 0) {
       return 0
     }
     return parsedAmount * parsedPrice
@@ -844,8 +882,8 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
     // Validate transaction fields if needed
     if (needsTransaction) {
       const parsedAmount = Number(amount)
-      if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-        setError('Please enter a valid amount greater than 0.')
+      if (!amount || Number.isNaN(parsedAmount)) {
+        setError('Please enter a valid amount.')
         return
       }
       if (isCrypto) {
@@ -1057,7 +1095,6 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
                 <input
                   id="nw-initial-amount"
                   type="number"
-                  min="0"
                   step={isCrypto ? "0.00000001" : "0.01"}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
@@ -1169,6 +1206,103 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
   )
 }
 
+// Edit Net Worth Item Modal
+interface EditNetWorthItemModalProps {
+  item: NetWorthItem
+  onClose: () => void
+  onSave: (itemId: string, newName: string) => void
+}
+
+function EditNetWorthItemModal({ item, onClose, onSave }: EditNetWorthItemModalProps) {
+  const [name, setName] = useState(item.name)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    if (!name.trim()) {
+      setError('Please enter an item name.')
+      return
+    }
+
+    onSave(item.id, name.trim())
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
+      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative" onClick={(e) => e.stopPropagation()}>
+        <Heading level={2} className="mb-4">
+          Edit Item
+        </Heading>
+
+        {error && (
+          <div className="mb-3 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
+              Category
+            </label>
+            <div className="text-text-primary text-xs md:text-sm">{item.category}</div>
+          </div>
+
+          <div>
+            <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
+              Platform
+            </label>
+            <div className="text-text-primary text-xs md:text-sm">{item.platform}</div>
+          </div>
+
+          <div>
+            <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
+              Currency
+            </label>
+            <div className="text-text-primary text-xs md:text-sm">{item.currency}</div>
+          </div>
+
+          <div>
+            <label
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+              htmlFor="edit-item-name"
+            >
+              Item Name
+            </label>
+            <input
+              id="edit-item-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+              autoFocus
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-bg-surface-2 border border-border-subtle text-text-primary hover:bg-bg-surface-3 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // Add Transaction Modal
 interface AddTransactionModalProps {
   item: NetWorthItem
@@ -1226,7 +1360,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
 
   const totalChf = useMemo(() => {
     const parsedAmount = Number(amount)
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    if (isNaN(parsedAmount)) {
       return 0
     }
     if (needsPricePerItem) {
@@ -1248,8 +1382,8 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
     const parsedAmount = Number(amount)
     const parsedPrice = Number(pricePerItemChf)
 
-    if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      setError('Please enter a valid amount greater than 0.')
+    if (!amount || Number.isNaN(parsedAmount)) {
+      setError('Please enter a valid amount.')
       return
     }
     if (needsPricePerItem) {
@@ -1357,7 +1491,6 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
             <input
               id="tx-amount"
               type="number"
-              min="0"
               step={isCrypto ? "0.00000001" : "0.01"}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}

@@ -1349,8 +1349,9 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
         setError('Please select an inflow item.')
         return
       }
-      if (!inflowToAccountTarget) {
-        setError('Please select a target platform.')
+      const targetPlatform = editingMapping ? inflowToAccountTarget : (preselectedAccount || inflowToAccountTarget)
+      if (!targetPlatform) {
+        setError('Target platform is required.')
         return
       }
 
@@ -1360,11 +1361,12 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
         kind: 'inflowToAccount',
         mode: inflowToAccountMode,
         ...(inflowToAccountMode === 'group' ? { group: inflowToAccountGroup } : { inflowItemId: inflowToAccountItem }),
-        account: inflowToAccountTarget,
+        account: targetPlatform,
       }
     } else if (mappingType === 'accountToOutflow') {
-      if (!accountToOutflowSource) {
-        setError('Please select a source platform.')
+      const sourcePlatform = editingMapping ? accountToOutflowSource : (preselectedAccount || accountToOutflowSource)
+      if (!sourcePlatform) {
+        setError('Source platform is required.')
         return
       }
       if (accountToOutflowMode === 'group' && !accountToOutflowGroup) {
@@ -1382,13 +1384,13 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
         kind: 'accountToOutflow',
         mode: accountToOutflowMode,
         ...(accountToOutflowMode === 'group' ? { group: accountToOutflowGroup } : { outflowItemId: accountToOutflowItem }),
-        account: accountToOutflowSource,
+        account: sourcePlatform,
       }
     } else {
       // accountToAccount
-      const fromPlatform = accountToAccountFrom || preselectedAccount
+      const fromPlatform = editingMapping ? accountToAccountFrom : (preselectedAccount || accountToAccountFrom)
       if (!fromPlatform) {
-        setError('Please select a source platform.')
+        setError('Source platform is required.')
         return
       }
       if (!accountToAccountTo) {
@@ -1540,7 +1542,15 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
                     className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
                   >
                     <option value="">Select an item...</option>
-                    {inflowItems.map((item) => (
+                    {[...inflowItems].sort((a, b) => {
+                      const indexA = inflowGroups.indexOf(a.group)
+                      const indexB = inflowGroups.indexOf(b.group)
+                      if (indexA !== indexB) {
+                        return indexA - indexB
+                      }
+                      // If same group, sort by item name
+                      return a.item.localeCompare(b.item)
+                    }).map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.item} ({item.group})
                       </option>
@@ -1548,25 +1558,6 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
                   </select>
                 </div>
               )}
-
-              <div>
-                <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-target">
-                  Platform (target)
-                </label>
-                <select
-                  id="inflow-to-account-target"
-                  value={inflowToAccountTarget}
-                  onChange={(e) => setInflowToAccountTarget(e.target.value as AccountPlatform)}
-                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                >
-                  <option value="">Select a platform...</option>
-                  {accountPlatforms.map((platform) => (
-                    <option key={platform} value={platform}>
-                      {platform}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
               {(inflowToAccountGroup || inflowToAccountItem) && (
                 <div className="bg-bg-surface-2 rounded-input px-3 py-2">
@@ -1580,25 +1571,6 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
           {/* Platform to Outflow Form */}
           {mappingType === 'accountToOutflow' && (
             <div className="space-y-4">
-              <div>
-                <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-source">
-                  Platform (source)
-                </label>
-                <select
-                  id="account-to-outflow-source"
-                  value={accountToOutflowSource}
-                  onChange={(e) => setAccountToOutflowSource(e.target.value as AccountPlatform)}
-                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                >
-                  <option value="">Select a platform...</option>
-                  {accountPlatforms.map((platform) => (
-                    <option key={platform} value={platform}>
-                      {platform}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               <div>
                 <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
                   Mode
@@ -1666,7 +1638,15 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
                     className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
                   >
                     <option value="">Select an item...</option>
-                    {outflowItems.map((item) => (
+                    {[...outflowItems].sort((a, b) => {
+                      const indexA = outflowGroups.indexOf(a.group)
+                      const indexB = outflowGroups.indexOf(b.group)
+                      if (indexA !== indexB) {
+                        return indexA - indexB
+                      }
+                      // If same group, sort by item name
+                      return a.item.localeCompare(b.item)
+                    }).map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.item} ({item.group})
                       </option>
@@ -1687,17 +1667,6 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
           {/* Platform to Platform Transfer Form */}
           {mappingType === 'accountToAccount' && (
             <div className="space-y-4">
-              {accountToAccountFrom && (
-                <div>
-                  <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
-                    From Platform
-                  </label>
-                  <div className="text-text-primary text-xs md:text-sm py-2">
-                    {accountToAccountFrom}
-                  </div>
-                </div>
-              )}
-
               <div>
                 <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-to">
                   To Platform
@@ -2071,7 +2040,9 @@ function Cashflow() {
   }
 
   const handleRemoveMapping = (id: string) => {
-    setAccountflowMappings(prev => prev.filter(m => m.id !== id))
+    if (window.confirm('Are you sure you want to remove this mapping?')) {
+      setAccountflowMappings(prev => prev.filter(m => m.id !== id))
+    }
   }
 
   return (
