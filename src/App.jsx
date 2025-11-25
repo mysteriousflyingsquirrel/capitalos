@@ -8,6 +8,7 @@ import Settings from './pages/Settings'
 import Login from './pages/Login'
 import { CurrencyProvider } from './contexts/CurrencyContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { IncognitoProvider } from './contexts/IncognitoContext'
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth()
@@ -41,9 +42,11 @@ function App() {
   return (
     <AuthProvider>
       <CurrencyProvider>
-        <Router>
-          <ProtectedRoutes />
-        </Router>
+        <IncognitoProvider>
+          <Router>
+            <ProtectedRoutes />
+          </Router>
+        </IncognitoProvider>
       </CurrencyProvider>
     </AuthProvider>
   )

@@ -4,6 +4,7 @@ import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useIncognito } from '../contexts/IncognitoContext'
 import { formatMoney, formatNumber } from '../lib/currency'
 import {
   saveCashflowInflowItems,
@@ -139,7 +140,8 @@ interface SectionCardProps {
 
 function SectionCard({ title, children, total, totalColor = 'success' }: SectionCardProps) {
   const { baseCurrency } = useCurrency()
-  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const { isIncognito } = useIncognito()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   
   return (
     <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
@@ -233,7 +235,8 @@ interface InflowSectionProps {
 
 function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSectionProps) {
   const { baseCurrency, convert } = useCurrency()
-  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const { isIncognito } = useIncognito()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   
   const inflowGroups: InflowGroupName[] = ['Time', 'Service', 'Worker Bees']
   const totalInflowChf = items.reduce((sum, item) => sum + item.amountChf, 0)
@@ -388,7 +391,8 @@ interface OutflowSectionProps {
 
 function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowSectionProps) {
   const { baseCurrency, convert } = useCurrency()
-  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const { isIncognito } = useIncognito()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   
   const outflowGroups: OutflowGroupName[] = ['Fix', 'Variable', 'Shared Variable', 'Investments']
   const totalOutflowChf = items.reduce((sum, item) => sum + item.amountChf, 0)
@@ -571,7 +575,8 @@ interface AccountflowSectionProps {
 
 function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMapping, inflowItems, outflowItems }: AccountflowSectionProps) {
   const { baseCurrency, convert } = useCurrency()
-  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const { isIncognito } = useIncognito()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   const [showAddMappingModal, setShowAddMappingModal] = useState(false)
   const [editingMapping, setEditingMapping] = useState<AccountflowMapping | null>(null)
   const [preselectedAccount, setPreselectedAccount] = useState<AccountPlatform | null>(null)
@@ -1241,7 +1246,8 @@ interface AddMappingModalProps {
 
 function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselectedAccount, onClose, onSubmit }: AddMappingModalProps) {
   const { baseCurrency, convert } = useCurrency()
-  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const { isIncognito } = useIncognito()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   const [mappingType, setMappingType] = useState<MappingKind>('inflowToAccount')
   const [error, setError] = useState<string | null>(null)
 
@@ -1891,7 +1897,8 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
 // Main Cashflow Component
 function Cashflow() {
   const { baseCurrency, convert } = useCurrency()
-  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const { isIncognito } = useIncognito()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   const { uid } = useAuth()
   const [inflowItems, setInflowItems] = useState<InflowItem[]>([])
   const [outflowItems, setOutflowItems] = useState<OutflowItem[]>([])

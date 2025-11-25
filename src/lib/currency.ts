@@ -6,8 +6,13 @@ export const supportedCurrencies: CurrencyCode[] = ['CHF', 'EUR', 'USD']
 export function formatMoney(
   amount: number,
   currency: CurrencyCode,
-  numberFormat: 'ch' | 'us' | 'de' = 'ch'
+  numberFormat: 'ch' | 'us' | 'de' = 'ch',
+  options?: { incognito?: boolean }
 ): string {
+  if (options?.incognito) {
+    return '****'
+  }
+
   const localeMap: Record<typeof numberFormat, string> = {
     ch: 'de-CH',
     us: 'en-US',
@@ -31,7 +36,15 @@ export function formatChf(amount: number): string {
 }
 
 // Format number without currency (for table displays)
-export function formatNumber(amount: number, numberFormat: 'ch' | 'us' | 'de' = 'ch'): string {
+export function formatNumber(
+  amount: number,
+  numberFormat: 'ch' | 'us' | 'de' = 'ch',
+  options?: { incognito?: boolean }
+): string {
+  if (options?.incognito) {
+    return '****'
+  }
+
   const localeMap: Record<typeof numberFormat, string> = {
     ch: 'de-CH',
     us: 'en-US',

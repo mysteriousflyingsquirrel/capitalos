@@ -1,6 +1,8 @@
 import { Link, useLocation } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useIncognito } from '../contexts/IncognitoContext'
+import { IncognitoToggle } from './IncognitoToggle'
 import logoIcon from '../icons/capitalos_logo.png'
 import dashboardIcon from '../icons/dashboard_icon.svg'
 import netWorthIcon from '../icons/networth_icon.svg'
@@ -25,6 +27,22 @@ const navigation: NavigationItem[] = [
 function Sidebar() {
   const location = useLocation()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const { toggleIncognito } = useIncognito()
+
+  // Keyboard shortcut: Shift + I to toggle incognito
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.shiftKey && event.key === 'I') {
+        event.preventDefault()
+        toggleIncognito()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [toggleIncognito])
   const { signOut, email } = useAuth()
 
   return (
@@ -81,7 +99,7 @@ function Sidebar() {
       >
         {/* Logo */}
         <div className="py-3 px-4 border-b border-border-subtle">
-          <div className="flex items-center justify-start gap-3">
+          <div className="flex items-center justify-start gap-3 mb-3">
             <img 
               src={logoIcon} 
               alt="Capitalos" 
@@ -96,6 +114,7 @@ function Sidebar() {
               </span>
             </div>
           </div>
+          <IncognitoToggle />
         </div>
 
         {/* Navigation */}

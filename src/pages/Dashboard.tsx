@@ -16,6 +16,7 @@ import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useIncognito } from '../contexts/IncognitoContext'
 import { formatMoney } from '../lib/currency'
 import type { CurrencyCode } from '../lib/currency'
 import {
@@ -350,10 +351,12 @@ function Dashboard() {
   const ytdPnLConverted = convert(ytdPnLChf, 'CHF')
 
   // Format currency helper
-  const formatCurrencyValue = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const { isIncognito } = useIncognito()
+  const formatCurrencyValue = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
 
   // Format for chart ticks
   const formatCurrencyTick = (value: number) => {
+    if (isIncognito) return '****'
     const converted = convert(value, 'CHF')
     if (converted >= 1000) {
       return `${(converted / 1000).toFixed(0)}'k`
@@ -652,7 +655,7 @@ function Dashboard() {
                     {formatCurrencyValue(monthlyPnLConverted)}
                   </TotalText>
                   <span className={`text-xs md:text-sm ${monthlyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                    ({monthlyPnLPercentage >= 0 ? '+' : ''}{monthlyPnLPercentage.toFixed(2)}%)
+                    {isIncognito ? '(****)' : `(${monthlyPnLPercentage >= 0 ? '+' : ''}${monthlyPnLPercentage.toFixed(2)}%)`}
                   </span>
                 </div>
               </div>
@@ -663,7 +666,7 @@ function Dashboard() {
                     {formatCurrencyValue(ytdPnLConverted)}
                   </TotalText>
                   <span className={`text-xs md:text-sm ${ytdPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                    ({ytdPnLPercentage >= 0 ? '+' : ''}{ytdPnLPercentage.toFixed(2)}%)
+                    {isIncognito ? '(****)' : `(${ytdPnLPercentage >= 0 ? '+' : ''}${ytdPnLPercentage.toFixed(2)}%)`}
                   </span>
                 </div>
               </div>
@@ -849,13 +852,14 @@ function Dashboard() {
                     fontSize: '0.648rem',
                     fontWeight: '400',
                   }}
-                  formatter={(value: number) => `${value}%`}
+                  formatter={(value: number) => isIncognito ? '****' : `${value}%`}
                 />
                 <Legend
                   wrapperStyle={{ color: '#8B8F99', fontSize: '0.648rem', fontWeight: '400' }}
                   iconType="circle"
                   className="text2"
                   formatter={(value, entry) => {
+                    if (isIncognito) return `**** in ${value}`
                     const total = assetAllocationData.reduce((sum, item) => sum + item.value, 0)
                     const item = assetAllocationData.find(item => item.name === value)
                     const percent = item ? ((item.value / total) * 100).toFixed(0) : '0'
@@ -897,7 +901,7 @@ function Dashboard() {
                     fontSize: '0.648rem',
                     fontWeight: '400',
                   }}
-                  formatter={(value: number) => `${value}%`}
+                  formatter={(value: number) => isIncognito ? '****' : `${value}%`}
                 />
                 <Legend
                   wrapperStyle={{ color: '#8B8F99', fontSize: '0.648rem', fontWeight: '400' }}
@@ -945,7 +949,7 @@ function Dashboard() {
                     fontSize: '0.648rem',
                     fontWeight: '400',
                   }}
-                  formatter={(value: number) => `${value}%`}
+                  formatter={(value: number) => isIncognito ? '****' : `${value}%`}
                 />
                 <Legend
                   wrapperStyle={{ color: '#8B8F99', fontSize: '0.648rem', fontWeight: '400' }}

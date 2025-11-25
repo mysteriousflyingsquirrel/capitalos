@@ -3,6 +3,7 @@ import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useIncognito } from '../contexts/IncognitoContext'
 import { formatMoney, formatNumber } from '../lib/currency'
 import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
@@ -119,7 +120,8 @@ interface NetWorthCategorySectionProps {
 }
 
 // Helper function to format coin amount
-function formatCoinAmount(amount: number): string {
+function formatCoinAmount(amount: number, isIncognito: boolean = false): string {
+  if (isIncognito) return '****'
   // Format with up to 8 decimal places, removing trailing zeros
   return amount.toFixed(8).replace(/\.?0+$/, '')
 }
@@ -137,8 +139,9 @@ function NetWorthCategorySection({
   onEditItem,
 }: NetWorthCategorySectionProps) {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
-  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
-  const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch')
+  const { isIncognito } = useIncognito()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
+  const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch', { incognito: isIncognito })
   
   // Calculate subtotal - Crypto always in USD, others use baseCurrency
   const subtotal = items.reduce((sum, item) => {
@@ -327,7 +330,7 @@ function NetWorthCategorySection({
                       {category === 'Crypto' && (
                         <td className="py-2 text-right">
                           <div className="text2 whitespace-nowrap">
-                            {formatCoinAmount(coinAmount)}
+                            {formatCoinAmount(coinAmount, isIncognito)}
                           </div>
                         </td>
                       )}
@@ -477,7 +480,8 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions, onEdit
 function NetWorth() {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { uid } = useAuth()
-  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const { isIncognito } = useIncognito()
+  const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   
   // Load data from Firestore on mount
   const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>([])
@@ -857,6 +861,7 @@ interface AddNetWorthItemModalProps {
 
 function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }: AddNetWorthItemModalProps) {
   const { convert } = useCurrency()
+  const { isIncognito } = useIncognito()
   const [name, setName] = useState('')
   const [currency, setCurrency] = useState('CHF')
   const [platform, setPlatform] = useState('Physical')
