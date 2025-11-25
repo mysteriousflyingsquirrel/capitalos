@@ -4,7 +4,7 @@ import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, formatNumber } from '../lib/currency'
-import { formatDate } from '../lib/dateFormat'
+import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import { fetchCoinPrice } from '../services/coinGeckoService'
 import {
@@ -869,7 +869,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
   const [amount, setAmount] = useState('')
   const [pricePerCoinUsd, setPricePerCoinUsd] = useState('')
   const [pricePerItemChf, setPricePerItemChf] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(getCurrentDateFormatted())
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
   
@@ -946,7 +946,13 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
         }
       }
       if (!date) {
-        setError('Please select a date.')
+        setError('Please enter a date in DD/MM/YYYY format.')
+        return
+      }
+      // Validate date format
+      const parsedDate = parseDateInput(date)
+      if (!parsedDate) {
+        setError('Please enter a valid date in DD/MM/YYYY format.')
         return
       }
     }
@@ -963,6 +969,8 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
     // If transaction is needed and we have an itemId, create the transaction
     // Save transaction BEFORE resetting form values (same as other categories)
     if (needsTransaction && onSaveTransaction && newItemId) {
+      // Parse date from DD/MM/YYYY to YYYY-MM-DD for storage
+      const parsedDate = parseDateInput(date)
       if (isCrypto) {
         // For Crypto: convert USD price to CHF for storage
         const pricePerCoinUsdNum = Number(pricePerCoinUsd)
@@ -972,25 +980,27 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
           currency: 'USD', // Store as USD for crypto
           amount: Number(amount),
           pricePerItemChf: pricePerCoinChf, // Converted to CHF for storage
-          date,
+          date: parsedDate,
         })
       } else if (needsPricePerItemInTransaction) {
         // For Funds, Stocks, Commodities: use entered price per item
+        const parsedDate = parseDateInput(date)
         onSaveTransaction(newItemId, {
           side: 'buy',
           currency,
           amount: Number(amount),
           pricePerItemChf: Number(pricePerItemChf),
-          date,
+          date: parsedDate,
         })
       } else {
         // For other categories without price per item, use 1
+        const parsedDate = parseDateInput(date)
         onSaveTransaction(newItemId, {
           side: 'buy',
           currency,
           amount: Number(amount),
           pricePerItemChf: 1,
-          date,
+          date: parsedDate,
         })
       }
     }
@@ -1002,7 +1012,7 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
     setAmount('')
     setPricePerCoinUsd('')
     setPricePerItemChf('')
-    setDate(new Date().toISOString().split('T')[0])
+    setDate(getCurrentDateFormatted())
     setPriceError(null)
     setIsLoadingPrice(false)
     
@@ -1221,9 +1231,10 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
                 </label>
                 <input
                   id="nw-initial-date"
-                  type="date"
+                  type="text"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
+                  placeholder="DD/MM/YYYY"
                   className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
                 />
               </div>
@@ -1457,7 +1468,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
   const [activeTab, setActiveTab] = useState<TransactionTab>(transaction?.side || 'buy')
   const [amount, setAmount] = useState(transaction?.amount.toString() || '')
   const [pricePerItemChf, setPricePerItemChf] = useState(getInitialPrice())
-  const [date, setDate] = useState(transaction?.date || new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(transaction?.date ? formatDateInput(transaction.date) : getCurrentDateFormatted())
   const [error, setError] = useState<string | null>(null)
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
@@ -1550,7 +1561,14 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
       }
     }
     if (!date) {
-      setError('Please select a date.')
+      setError('Please enter a date in DD/MM/YYYY format.')
+      return
+    }
+    
+    // Parse date from DD/MM/YYYY to YYYY-MM-DD for storage
+    const parsedDate = parseDateInput(date)
+    if (!parsedDate) {
+      setError('Please enter a valid date in DD/MM/YYYY format.')
       return
     }
 
@@ -1563,7 +1581,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
         currency: 'USD', // Store as USD for crypto
         amount: parsedAmount,
         pricePerItemChf: pricePerCoinChf, // Converted to CHF for storage
-        date,
+        date: parsedDate,
       })
     } else {
       onSave({
@@ -1572,13 +1590,13 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
         currency: item.currency,
         amount: parsedAmount,
         pricePerItemChf: needsPricePerItem ? parsedPrice : 1, // For categories without price per item, use 1 (amount = total value)
-        date,
+        date: parsedDate,
       })
     }
 
     setAmount('')
     setPricePerItemChf('')
-    setDate(new Date().toISOString().split('T')[0])
+    setDate(getCurrentDateFormatted())
     onClose()
   }
 
@@ -1711,9 +1729,10 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
             </label>
             <input
               id="tx-date"
-              type="date"
+              type="text"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              placeholder="DD/MM/YYYY"
               className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
             />
           </div>
