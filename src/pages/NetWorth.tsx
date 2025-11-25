@@ -136,37 +136,55 @@ function NetWorthCategorySection({
   onShowTransactions,
   onEditItem,
 }: NetWorthCategorySectionProps) {
-  const { baseCurrency, convert } = useCurrency()
+  const { baseCurrency, convert, exchangeRates } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch')
   
-  // Calculate subtotal in CHF, then convert to baseCurrency
-  const subtotalChf = items.reduce((sum, item) => {
+  // Calculate subtotal - Crypto always in USD, others use baseCurrency
+  const subtotal = items.reduce((sum, item) => {
     if (category === 'Crypto') {
-      // For Crypto: coin amount * current price
+      // For Crypto: coin amount * current price (always in USD)
       const coinAmount = calculateCoinAmount(item.id, transactions)
       const ticker = item.name.trim().toUpperCase()
       const currentPriceUsd = cryptoPrices[ticker] || 0
       if (currentPriceUsd > 0) {
-        // Convert USD to CHF for balance
-        return sum + convert(coinAmount * currentPriceUsd, 'USD')
+        // Crypto is always USD, no conversion
+        return sum + (coinAmount * currentPriceUsd)
       }
       // Fallback to transaction-based if price not available
-      return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+      // For crypto fallback, reconstruct USD from stored value
+      const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+      // This is stored in CHF but represents USD originally, so convert back
+      return sum + convert(balanceChf, 'CHF') * (exchangeRates?.rates['USD'] || 1)
     }
-    return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+    // For non-Crypto, balance is already in CHF, convert to baseCurrency
+    return sum + convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices), 'CHF')
   }, 0)
-  const subtotal = convert(subtotalChf, 'CHF')
+  
+  // For Crypto, also calculate the subtotal in baseCurrency
+  const subtotalInBaseCurrency = category === 'Crypto' ? convert(subtotal, 'USD') : subtotal
 
   return (
     <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-      <div className="mb-6 pb-4 border-b border-border-strong">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <Heading level={2}>{category}</Heading>
-            <TotalText variant={subtotal >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
-              {formatCurrency(subtotal)}
-            </TotalText>
-          </div>
+            <div className="mb-6 pb-4 border-b border-border-strong">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Heading level={2}>{category}</Heading>
+                  {category === 'Crypto' ? (
+                    <>
+                      <TotalText variant={subtotalInBaseCurrency >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
+                        {formatCurrency(subtotalInBaseCurrency)}
+                      </TotalText>
+                      <TotalText variant={subtotal >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
+                        {formatUsd(subtotal)}
+                      </TotalText>
+                    </>
+                  ) : (
+                    <TotalText variant={subtotal >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
+                      {formatCurrency(subtotal)}
+                    </TotalText>
+                  )}
+                </div>
           <button
             onClick={onAddClick}
             className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
@@ -196,10 +214,10 @@ function NetWorthCategorySection({
             <colgroup>
               {category === 'Crypto' ? (
                 <>
-                  <col style={{ width: 'calc((100% - 80px) / 4)' }} />
-                  <col style={{ width: 'calc((100% - 80px) / 4)' }} />
-                  <col style={{ width: 'calc((100% - 80px) / 4)' }} />
-                  <col style={{ width: 'calc((100% - 80px) / 4)' }} />
+                  <col style={{ width: '70px' }} />
+                  <col style={{ width: 'calc((100% - 150px) / 3)' }} />
+                  <col style={{ width: 'calc((100% - 150px) / 3)' }} />
+                  <col style={{ width: 'calc((100% - 150px) / 3)' }} />
                   <col style={{ width: '80px' }} />
                 </>
               ) : (
@@ -242,58 +260,64 @@ function NetWorthCategorySection({
               ) : (
                 // Sort items by balance (high to low)
                 [...items].sort((a, b) => {
-                  // Calculate balance for item a in CHF
-                  let balanceAChf: number
+                  // Calculate balance for item a - Crypto always in USD, others in baseCurrency
+                  let balanceA: number
                   if (category === 'Crypto') {
                     const coinAmountA = calculateCoinAmount(a.id, transactions)
                     const tickerA = a.name.trim().toUpperCase()
                     const currentPriceUsdA = cryptoPrices[tickerA] || 0
                     if (currentPriceUsdA > 0) {
-                      // Convert USD to CHF for comparison
-                      balanceAChf = convert(coinAmountA * currentPriceUsdA, 'USD')
+                      // Crypto is always USD, no conversion
+                      balanceA = coinAmountA * currentPriceUsdA
                     } else {
-                      balanceAChf = calculateBalanceChf(a.id, transactions, a, cryptoPrices)
+                      // Fallback: reconstruct USD from stored value
+                      const balanceChf = calculateBalanceChf(a.id, transactions, a, cryptoPrices)
+                      const { exchangeRates: rates } = useCurrency()
+                      balanceA = convert(balanceChf, 'CHF') * (rates?.rates['USD'] || 1)
                     }
                   } else {
-                    balanceAChf = calculateBalanceChf(a.id, transactions, a, cryptoPrices)
+                    balanceA = convert(calculateBalanceChf(a.id, transactions, a, cryptoPrices), 'CHF')
                   }
 
-                  // Calculate balance for item b in CHF
-                  let balanceBChf: number
+                  // Calculate balance for item b - Crypto always in USD, others in baseCurrency
+                  let balanceB: number
                   if (category === 'Crypto') {
                     const coinAmountB = calculateCoinAmount(b.id, transactions)
                     const tickerB = b.name.trim().toUpperCase()
                     const currentPriceUsdB = cryptoPrices[tickerB] || 0
                     if (currentPriceUsdB > 0) {
-                      // Convert USD to CHF for comparison
-                      balanceBChf = convert(coinAmountB * currentPriceUsdB, 'USD')
+                      // Crypto is always USD, no conversion
+                      balanceB = coinAmountB * currentPriceUsdB
                     } else {
-                      balanceBChf = calculateBalanceChf(b.id, transactions, b, cryptoPrices)
+                      // Fallback: reconstruct USD from stored value
+                      const balanceChf = calculateBalanceChf(b.id, transactions, b, cryptoPrices)
+                      const { exchangeRates: rates } = useCurrency()
+                      balanceB = convert(balanceChf, 'CHF') * (rates?.rates['USD'] || 1)
                     }
                   } else {
-                    balanceBChf = calculateBalanceChf(b.id, transactions, b, cryptoPrices)
+                    balanceB = convert(calculateBalanceChf(b.id, transactions, b, cryptoPrices), 'CHF')
                   }
 
                   // Sort high to low
-                  return balanceBChf - balanceAChf
+                  return balanceB - balanceA
                 }).map((item) => {
-                  // For Crypto, calculate balance as coin amount * current price
-                  let balanceChf: number
+                  // For Crypto, calculate balance as coin amount * current price (always USD)
+                  let balanceConverted: number
                   if (category === 'Crypto') {
                     const coinAmount = calculateCoinAmount(item.id, transactions)
                     const ticker = item.name.trim().toUpperCase()
                     const currentPriceUsd = cryptoPrices[ticker] || 0
                     if (currentPriceUsd > 0) {
-                      // Convert USD to CHF for balance
-                      balanceChf = convert(coinAmount * currentPriceUsd, 'USD')
+                      // Crypto is always USD, no conversion
+                      balanceConverted = coinAmount * currentPriceUsd
                     } else {
-                      // Fallback to transaction-based calculation if price not available
-                      balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+                      // Fallback: reconstruct USD from stored value
+                      const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+                      balanceConverted = convert(balanceChf, 'CHF') * (exchangeRates?.rates['USD'] || 1)
                     }
                   } else {
-                    balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+                    balanceConverted = convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices), 'CHF')
                   }
-                  const balanceConverted = convert(balanceChf, 'CHF')
                   const coinAmount = category === 'Crypto' ? calculateCoinAmount(item.id, transactions) : 0
                   return (
                     <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
@@ -309,7 +333,7 @@ function NetWorthCategorySection({
                       )}
                       <td className="py-2 text-right">
                         <div className="text2 whitespace-nowrap">
-                          {formatCurrency(balanceConverted)}
+                          {category === 'Crypto' ? formatUsd(balanceConverted) : formatCurrency(balanceConverted)}
                         </div>
                       </td>
                       <td className="py-2 text-right">
@@ -451,7 +475,7 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions, onEdit
 }
 
 function NetWorth() {
-  const { baseCurrency, convert } = useCurrency()
+  const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { uid } = useAuth()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   
@@ -573,26 +597,29 @@ function NetWorth() {
     [netWorthItems]
   )
 
-  const totalNetWorthChf = useMemo(
+  const totalNetWorth = useMemo(
     () => netWorthItems.reduce((sum, item) => {
       if (item.category === 'Crypto') {
-        // For Crypto: use current price * coin amount, convert USD to CHF
+        // For Crypto: use current price * coin amount (always in USD)
+        // But convert to baseCurrency for the total
         const coinAmount = calculateCoinAmount(item.id, transactions)
         const ticker = item.name.trim().toUpperCase()
         const currentPriceUsd = cryptoPrices[ticker] || 0
         if (currentPriceUsd > 0) {
-          // Convert USD to CHF for balance
-          return sum + convert(coinAmount * currentPriceUsd, 'USD')
+          // Crypto is in USD, convert to baseCurrency for total
+          const cryptoValueUsd = coinAmount * currentPriceUsd
+          return sum + convert(cryptoValueUsd, 'USD')
         }
-        // Fallback to transaction-based calculation if price not available
-        return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+        // Fallback: reconstruct USD from stored value, then convert to baseCurrency
+        const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+        const cryptoValueUsd = convert(balanceChf, 'CHF') * (exchangeRates?.rates['USD'] || 1)
+        return sum + convert(cryptoValueUsd, 'USD')
       }
-      // For non-Crypto items, balance is already in CHF
-      return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+      // For non-Crypto items, balance is already in CHF, convert to baseCurrency
+      return sum + convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices), 'CHF')
     }, 0),
-    [netWorthItems, transactions, cryptoPrices, convert]
+    [netWorthItems, transactions, cryptoPrices, convert, exchangeRates]
   )
-  const totalNetWorth = convert(totalNetWorthChf, 'CHF')
 
 
   const handleAddItem = (
@@ -1725,25 +1752,27 @@ interface ShowTransactionsModalProps {
 function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose, onEdit, onDelete }: ShowTransactionsModalProps) {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch')
   const isCrypto = item.category === 'Crypto'
   
-  // Calculate balance - for Crypto use current price * coin amount
-  let balanceChf: number
+  // Calculate balance - Crypto always in USD, others in baseCurrency
+  let balanceConverted: number
   if (isCrypto) {
     const coinAmount = calculateCoinAmount(item.id, transactions)
     const ticker = item.name.trim().toUpperCase()
     const currentPriceUsd = cryptoPrices[ticker] || 0
     if (currentPriceUsd > 0) {
-      // Convert USD to CHF for balance
-      balanceChf = convert(coinAmount * currentPriceUsd, 'USD')
+      // Crypto is always USD, no conversion
+      balanceConverted = coinAmount * currentPriceUsd
     } else {
-      // Fallback to transaction-based calculation if price not available
-      balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+      // Fallback: reconstruct USD from stored value
+      const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+      balanceConverted = convert(balanceChf, 'CHF') * (exchangeRates?.rates['USD'] || 1)
     }
   } else {
-    balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+    // For non-Crypto, balance is already in CHF, convert to baseCurrency
+    balanceConverted = convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices), 'CHF')
   }
-  const balanceConverted = convert(balanceChf, 'CHF')
   const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
@@ -1756,7 +1785,7 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose,
         {/* Balance */}
         <div className="mb-6 p-4 bg-bg-surface-2 rounded-input">
           <div className="text-text-secondary text-[0.567rem] md:text-xs mb-1">Balance</div>
-          <TotalText variant="neutral">{formatCurrency(balanceConverted)}</TotalText>
+          <TotalText variant="neutral">{isCrypto ? formatUsd(balanceConverted) : formatCurrency(balanceConverted)}</TotalText>
         </div>
 
         {/* Transactions Table */}
@@ -1780,22 +1809,35 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose,
               </thead>
               <tbody>
                 {sortedTransactions.map((tx) => {
-                  const totalChf = tx.amount * tx.pricePerItemChf
-                  const totalConverted = convert(totalChf, 'CHF')
-                  
-                  // For Crypto, convert stored CHF price back to USD for display
+                  // Crypto transactions are always in USD, others use baseCurrency
+                  let totalConverted: number
                   let priceDisplay: string
+                  
                   if (isCrypto) {
-                    // Convert CHF to baseCurrency, then to USD
-                    const baseAmount = convert(tx.pricePerItemChf, 'CHF')
+                    // Reconstruct original USD price from stored value
+                    // When saving: convert(usdPrice, 'USD') converts FROM USD TO baseCurrency_at_save_time
+                    // To reverse: usdPrice = stored * rates['USD']_at_save_time
+                    // We approximate by treating stored as current baseCurrency, then convert to USD
+                    let usdPrice: number
                     if (exchangeRates && exchangeRates.rates['USD']) {
-                      const usdPrice = baseAmount * exchangeRates.rates['USD']
-                      priceDisplay = formatMoney(usdPrice, 'USD', 'ch')
+                      // The stored value is in baseCurrency_at_save_time
+                      // We approximate by treating it as current baseCurrency
+                      // Then: USD = stored * rates['USD'] (where rates['USD'] is USD per 1 baseCurrency)
+                      usdPrice = tx.pricePerItemChf * exchangeRates.rates['USD']
                     } else {
-                      // Fallback if exchange rates not available
-                      priceDisplay = formatCurrency(convert(tx.pricePerItemChf, 'CHF'))
+                      // Fallback: assume stored value is already USD
+                      usdPrice = tx.pricePerItemChf
                     }
+                    
+                    // Calculate total in USD (Crypto is always USD)
+                    totalConverted = tx.amount * usdPrice
+                    
+                    // Display price in USD
+                    priceDisplay = formatUsd(usdPrice)
                   } else {
+                    // For non-Crypto, pricePerItemChf is already in CHF, convert to baseCurrency
+                    const totalChf = tx.amount * tx.pricePerItemChf
+                    totalConverted = convert(totalChf, 'CHF')
                     const priceConverted = convert(tx.pricePerItemChf, 'CHF')
                     priceDisplay = formatCurrency(priceConverted)
                   }
@@ -1814,7 +1856,7 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose,
                       <td className="py-2 px-3 text2 text-right">{priceDisplay}</td>
                       <td className="py-2 px-3 text2 text-right">
                         <span className={tx.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
-                          {sign}{formatCurrency(totalConverted)}
+                          {sign}{isCrypto ? formatUsd(totalConverted) : formatCurrency(totalConverted)}
                         </span>
                       </td>
                       <td className="py-2 px-3 text2">
