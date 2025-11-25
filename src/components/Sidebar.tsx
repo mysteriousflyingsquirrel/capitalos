@@ -80,15 +80,22 @@ function Sidebar() {
         `}
       >
         {/* Logo */}
-        <div className="flex items-center justify-start gap-3 py-3 px-4 border-b border-border-subtle">
-          <img 
-            src={logoIcon} 
-            alt="Capitalos" 
-            className="h-[4.5rem] w-auto" 
-          />
-          <span className="text-white font-bold text-xl tracking-wide">
-            CAPITALOS
-          </span>
+        <div className="py-3 px-4 border-b border-border-subtle">
+          <div className="flex items-center justify-start gap-3">
+            <img 
+              src={logoIcon} 
+              alt="Capitalos" 
+              className="h-[4.5rem] w-auto" 
+            />
+            <div className="flex flex-col">
+              <span className="text-white font-bold text-xl tracking-wide">
+                CAPITALOS
+              </span>
+              <span className="text-text-secondary text-xs italic">
+                no money, no funny
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Navigation */}
