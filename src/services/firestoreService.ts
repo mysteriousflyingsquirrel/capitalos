@@ -194,6 +194,21 @@ export async function loadCashflowAccountflowMappings<T>(uid: string): Promise<T
   return loadDocuments<T>(uid, 'cashflowAccountflowMappings')
 }
 
+// Platform storage
+export interface Platform {
+  id: string
+  name: string
+  order: number
+}
+
+export async function savePlatforms(uid: string, platforms: Platform[]): Promise<void> {
+  await saveDocuments(uid, 'platforms', platforms)
+}
+
+export async function loadPlatforms(uid: string): Promise<Platform[]> {
+  return loadDocuments<Platform>(uid, 'platforms')
+}
+
 // Settings storage
 export async function saveUserSettings(
   uid: string,
@@ -282,10 +297,21 @@ export async function clearAllUserData(uid: string): Promise<void> {
     'cashflowAccountflowMappings',
     'snapshots',
     'cashflowSnapshots',
+    'platforms',
   ]
 
-  await Promise.all(
-    collections.map((collectionName) => deleteAllDocuments(uid, collectionName))
-  )
+  await Promise.all([
+    ...collections.map((collectionName) => deleteAllDocuments(uid, collectionName)),
+    // Delete settings document (it's a single document, not a collection)
+    (async () => {
+      const settingsDocRef = doc(db, `users/${uid}/settings/user`)
+      try {
+        await deleteDoc(settingsDocRef)
+      } catch (error) {
+        // Ignore if document doesn't exist
+        console.warn('Settings document does not exist or already deleted:', error)
+      }
+    })(),
+  ])
 }
 

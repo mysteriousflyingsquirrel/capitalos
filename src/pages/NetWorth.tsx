@@ -13,6 +13,8 @@ import {
   loadNetWorthItems,
   saveNetWorthTransactions,
   loadNetWorthTransactions,
+  loadPlatforms,
+  type Platform,
 } from '../services/storageService'
 
 // TypeScript types
@@ -159,6 +161,7 @@ function NetWorthCategorySection({
   items,
   transactions,
   cryptoPrices = {},
+  platforms,
   onAddClick,
   onAddTransaction,
   onShowMenu,
@@ -368,8 +371,22 @@ function NetWorthCategorySection({
                         </div>
                       </td>
                       <td className="py-2 text-right">
-                        <div className="text2 truncate">
-                          {item.platform}
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text2 truncate">{item.platform}</span>
+                          {platforms.length > 0 && !platforms.some(p => p.name === item.platform) && (
+                            <svg
+                              className="w-4 h-4 text-warning flex-shrink-0"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                              title="Platform has been removed. Please update this item."
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          )}
                         </div>
                       </td>
                       <td className="py-2">
@@ -514,6 +531,7 @@ function NetWorth() {
   // Load data from Firestore on mount
   const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>([])
   const [transactions, setTransactions] = useState<NetWorthTransaction[]>([])
+  const [platforms, setPlatforms] = useState<Platform[]>([])
   const [dataLoading, setDataLoading] = useState(true)
 
   // Store current crypto prices (ticker -> USD price)
@@ -532,12 +550,32 @@ function NetWorth() {
     const loadData = async () => {
       setDataLoading(true)
       try {
-        const [items, txs] = await Promise.all([
+        const defaultPlatforms: Platform[] = [
+          { id: 'physical', name: 'Physical', order: 0 },
+          { id: 'raiffeisen', name: 'Raiffeisen', order: 0 },
+          { id: 'revolut', name: 'Revolut', order: 0 },
+          { id: 'yuh', name: 'yuh!', order: 0 },
+          { id: 'saxo', name: 'SAXO', order: 0 },
+          { id: 'kraken', name: 'Kraken', order: 0 },
+          { id: 'mexc', name: 'MEXC', order: 0 },
+          { id: 'bingx', name: 'BingX', order: 0 },
+          { id: 'exodus', name: 'Exodus', order: 0 },
+          { id: 'trezor', name: 'Trezor', order: 0 },
+          { id: 'ledger', name: 'Ledger', order: 0 },
+          { id: 'ibkr', name: 'IBKR', order: 0 },
+          { id: 'ubs', name: 'UBS', order: 0 },
+          { id: 'property', name: 'Property', order: 0 },
+          { id: 'wallet', name: 'Wallet', order: 0 },
+          { id: 'other', name: 'Other', order: 0 },
+        ]
+        const [items, txs, loadedPlatforms] = await Promise.all([
           loadNetWorthItems(mockNetWorthItems, uid),
           loadNetWorthTransactions(initialMockTransactions, uid),
+          loadPlatforms(defaultPlatforms, uid),
         ])
         setNetWorthItems(items)
         setTransactions(txs)
+        setPlatforms(loadedPlatforms)
       } catch (error) {
         console.error('Failed to load data:', error)
       } finally {
@@ -797,6 +835,7 @@ function NetWorth() {
                 items={items}
                 transactions={transactions}
                 cryptoPrices={cryptoPrices}
+                platforms={platforms}
                 onAddClick={() => setActiveCategory(category)}
                 onAddTransaction={handleAddTransaction}
                 onShowMenu={handleShowMenu}
@@ -812,6 +851,7 @@ function NetWorth() {
         {activeCategory && (
           <AddNetWorthItemModal
             category={activeCategory}
+            platforms={platforms}
             onClose={() => setActiveCategory(null)}
             onSubmit={handleAddItem}
             onSaveTransaction={(itemId, transaction) => {
@@ -838,6 +878,7 @@ function NetWorth() {
             item={netWorthItems.find(i => i.id === showTransactionsItemId)!}
             transactions={transactions.filter(tx => tx.itemId === showTransactionsItemId)}
             cryptoPrices={cryptoPrices}
+            platforms={platforms}
             onClose={() => setShowTransactionsItemId(null)}
             onEdit={handleEditTransaction}
             onDelete={handleDeleteTransaction}
@@ -848,6 +889,7 @@ function NetWorth() {
         {editingItemId && (
           <EditNetWorthItemModal
             item={netWorthItems.find(i => i.id === editingItemId)!}
+            platforms={platforms}
             onClose={() => setEditingItemId(null)}
             onSave={handleSaveEditItem}
           />
@@ -879,6 +921,7 @@ function NetWorth() {
 // Add Item Modal
 interface AddNetWorthItemModalProps {
   category: NetWorthCategory
+  platforms: Platform[]
   onClose: () => void
   onSubmit: (
     category: NetWorthCategory,
@@ -887,7 +930,7 @@ interface AddNetWorthItemModalProps {
   onSaveTransaction?: (itemId: string, transaction: Omit<NetWorthTransaction, 'id' | 'itemId'>) => void
 }
 
-function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }: AddNetWorthItemModalProps) {
+function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTransaction }: AddNetWorthItemModalProps) {
   const { convert } = useCurrency()
   const [name, setName] = useState('')
   const [amount, setAmount] = useState('')
@@ -1043,22 +1086,15 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
               onChange={(e) => setPlatform(e.target.value)}
               className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
             >
-              <option value="Physical">Physical</option>
-              <option value="Wallet">Wallet</option>
-              <option value="Raiffeisen">Raiffeisen</option>
-              <option value="Revolut">Revolut</option>
-              <option value="yuh!">yuh!</option>
-              <option value="SAXO">SAXO</option>
-              <option value="Kraken">Kraken</option>
-              <option value="MEXC">MEXC</option>
-              <option value="BingX">BingX</option>
-              <option value="Exodus">Exodus</option>
-              <option value="Trezor">Trezor</option>
-              <option value="Ledger">Ledger</option>
-              <option value="IBKR">IBKR</option>
-              <option value="UBS">UBS</option>
-              <option value="Property">Property</option>
-              <option value="Other">Other</option>
+              {platforms.length > 0 ? (
+                platforms.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))
+              ) : (
+                <option value="Physical">Physical</option>
+              )}
             </select>
           </div>
 
@@ -1103,11 +1139,12 @@ function AddNetWorthItemModal({ category, onClose, onSubmit, onSaveTransaction }
 // Edit Net Worth Item Modal
 interface EditNetWorthItemModalProps {
   item: NetWorthItem
+  platforms: Platform[]
   onClose: () => void
   onSave: (itemId: string, newName: string, currency: string, platform: string) => void
 }
 
-function EditNetWorthItemModal({ item, onClose, onSave }: EditNetWorthItemModalProps) {
+function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWorthItemModalProps) {
   const isCrypto = item.category === 'Crypto'
   const [name, setName] = useState(item.name)
   const [currency, setCurrency] = useState(item.currency)
@@ -1162,16 +1199,11 @@ function EditNetWorthItemModal({ item, onClose, onSave }: EditNetWorthItemModalP
                 onChange={(e) => setPlatform(e.target.value)}
                 className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
               >
-                <option value="Physical">Physical</option>
-                <option value="Raiffeisen">Raiffeisen</option>
-                <option value="Revolut">Revolut</option>
-                <option value="yuh!">yuh!</option>
-                <option value="SAXO">SAXO</option>
-                <option value="Kraken">Kraken</option>
-                <option value="MEXC">MEXC</option>
-                <option value="BingX">BingX</option>
-                <option value="Exodus">Exodus</option>
-                <option value="Trezor">Trezor</option>
+                {platforms.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
             </div>
           ) : (
@@ -1207,19 +1239,11 @@ function EditNetWorthItemModal({ item, onClose, onSave }: EditNetWorthItemModalP
                   onChange={(e) => setPlatform(e.target.value)}
                   className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
                 >
-                  <option value="Physical">Physical</option>
-                  <option value="Wallet">Wallet</option>
-                  <option value="Raiffeisen">Raiffeisen</option>
-                  <option value="Revolut">Revolut</option>
-                  <option value="yuh!">yuh!</option>
-                  <option value="SAXO">SAXO</option>
-                  <option value="Kraken">Kraken</option>
-                  <option value="Trezor">Trezor</option>
-                  <option value="Ledger">Ledger</option>
-                  <option value="IBKR">IBKR</option>
-                  <option value="UBS">UBS</option>
-                  <option value="Property">Property</option>
-                  <option value="Other">Other</option>
+                  {platforms.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </>
@@ -1635,12 +1659,13 @@ interface ShowTransactionsModalProps {
   item: NetWorthItem
   transactions: NetWorthTransaction[]
   cryptoPrices?: Record<string, number>
+  platforms: Platform[]
   onClose: () => void
   onEdit: (transactionId: string) => void
   onDelete: (transactionId: string) => void
 }
 
-function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, onClose, onEdit, onDelete }: ShowTransactionsModalProps) {
+function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platforms, onClose, onEdit, onDelete }: ShowTransactionsModalProps) {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch')

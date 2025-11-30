@@ -13,6 +13,9 @@ import {
   loadCashflowOutflowItems,
   saveCashflowAccountflowMappings,
   loadCashflowAccountflowMappings,
+  savePlatforms,
+  loadPlatforms,
+  type Platform,
 } from '../services/storageService'
 
 type InflowGroupName = 'Time' | 'Service' | 'Worker Bees'
@@ -39,9 +42,7 @@ interface OutflowItem {
   group: OutflowGroupName
 }
 
-type AccountPlatform = 'Physical' | 'Raiffeisen' | 'Revolut' | 'yuh!' | 'SAXO' | 'Kraken' | 'MEXC' | 'BingX' | 'Exodus' | 'Trezor'
-
-const accountPlatforms: AccountPlatform[] = ['Raiffeisen', 'Revolut', 'yuh!', 'SAXO', 'Kraken', 'MEXC', 'BingX', 'Exodus', 'Trezor']
+type AccountPlatform = string // Now dynamic from stored platforms
 
 interface AccountflowItem {
   id: string
@@ -629,6 +630,7 @@ function getMappingLabel(
 // Platformflow Section Component
 interface AccountflowSectionProps {
   mappings: AccountflowMapping[]
+  platforms: Platform[]
   onAddMapping: (mapping: AccountflowMapping) => void
   onEditMapping: (mapping: AccountflowMapping) => void
   onRemoveMapping: (id: string) => void
@@ -636,13 +638,14 @@ interface AccountflowSectionProps {
   outflowItems: OutflowItem[]
 }
 
-function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMapping, inflowItems, outflowItems }: AccountflowSectionProps) {
+function AccountflowSection({ mappings, platforms, onAddMapping, onEditMapping, onRemoveMapping, inflowItems, outflowItems }: AccountflowSectionProps) {
   const { baseCurrency, convert } = useCurrency()
   const { isIncognito } = useIncognito()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   const [showAddMappingModal, setShowAddMappingModal] = useState(false)
   const [editingMapping, setEditingMapping] = useState<AccountflowMapping | null>(null)
   const [preselectedAccount, setPreselectedAccount] = useState<AccountPlatform | null>(null)
+  const [showEmptyPlatforms, setShowEmptyPlatforms] = useState(false)
   
   // Helper to get label for account-to-account mappings
   const getAccountToAccountLabel = (mapping: AccountToAccountMapping, account: AccountPlatform): string => {
@@ -700,6 +703,175 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
     return result
   }
 
+  // Helper function to render a platform card
+  const renderPlatformCard = (platform: Platform) => {
+    const account = platform.name as AccountPlatform
+    const accountMappings = getAccountMappings(account)
+
+    // Calculate totals
+    const totalInflowChf = accountMappings
+      .filter(m => m.type === 'inflow')
+      .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems, convert), 0)
+
+    const totalOutflowChf = accountMappings
+      .filter(m => m.type === 'outflow')
+      .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems, convert), 0)
+
+    const spareChf = totalInflowChf - totalOutflowChf
+
+    const totalInflow = convert(totalInflowChf, 'CHF')
+    const totalOutflow = convert(totalOutflowChf, 'CHF')
+    const spare = convert(spareChf, 'CHF')
+
+    // Sort mappings: 1st priority Inflow first, then Outflow; within each type, sort by amount high-low
+    const sortedMappings = [...accountMappings].sort((a, b) => {
+      // First priority: Inflow items first (type === 'inflow' comes before 'outflow')
+      if (a.type !== b.type) {
+        return a.type === 'inflow' ? -1 : 1
+      }
+      // Second priority: Within same type, sort by amount high-low
+      const amountA = computeMappingAmount(a.mapping, inflowItems, outflowItems, convert)
+      const amountB = computeMappingAmount(b.mapping, inflowItems, outflowItems, convert)
+      return amountB - amountA
+    })
+
+    return (
+      <div key={account} className="space-y-4 pb-4 border-b border-border-strong last:border-b-0">
+        {/* Account Header with Totals */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <Heading level={3}>{account}</Heading>
+            <button
+              onClick={() => {
+                setPreselectedAccount(account)
+                setShowAddMappingModal(true)
+              }}
+              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+            >
+              <svg
+                className="w-4 h-4 transition-transform group-hover:rotate-90"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span>Add Mapping</span>
+            </button>
+          </div>
+          <div className="mt-1 flex flex-col gap-1">
+            <TotalText variant="inflow">
+              {formatCurrency(totalInflow)}
+            </TotalText>
+            <TotalText variant="outflow">
+              {formatCurrency(totalOutflow)}
+            </TotalText>
+            <TotalText variant="spare">
+              {formatCurrency(spare)}
+            </TotalText>
+          </div>
+        </div>
+
+        {/* Unified Table with Item, Inflow, Outflow, Actions */}
+        {sortedMappings.length === 0 ? (
+          <div className="text-text-muted text-[0.567rem] md:text-xs">No mappings</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: 'calc((100% - 160px) / 3)' }} />
+                <col style={{ width: 'calc((100% - 160px) / 3)' }} />
+                <col style={{ width: 'calc((100% - 160px) / 3)' }} />
+                <col style={{ width: '80px' }} />
+              </colgroup>
+              <thead>
+                <tr className="border-b border-border-subtle">
+                  <th className="text-left pb-2">
+                    <Heading level={4}>Item</Heading>
+                  </th>
+                  <th className="text-right pb-2">
+                    <Heading level={4}>Inflow</Heading>
+                  </th>
+                  <th className="text-right pb-2">
+                    <Heading level={4}>Outflow</Heading>
+                  </th>
+                  <th className="text-right pb-2">
+                    <Heading level={4}>Actions</Heading>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedMappings.map(({ mapping, type, label }) => {
+                  const amountChf = computeMappingAmount(mapping, inflowItems, outflowItems, convert)
+                  const amount = convert(amountChf, 'CHF')
+                  
+                  return (
+                    <tr key={mapping.id} className="border-b border-border-subtle last:border-b-0">
+                      <td className="py-2">
+                        <div className="text2 truncate">{label}</div>
+                      </td>
+                      <td className="py-2 text-right">
+                        {type === 'inflow' ? (
+                          <div className="text-success text2 whitespace-nowrap">{formatCurrency(amount)}</div>
+                        ) : (
+                          <div className="text2">—</div>
+                        )}
+                      </td>
+                      <td className="py-2 text-right">
+                        {type === 'outflow' ? (
+                          <div className="text-danger text2 whitespace-nowrap">{formatCurrency(amount)}</div>
+                        ) : (
+                          <div className="text2">—</div>
+                        )}
+                      </td>
+                      <td className="py-2">
+                        <div className="flex items-center justify-end">
+                          <CashflowItemMenu
+                            itemId={mapping.id}
+                            itemType="accountflow"
+                            onEdit={() => setEditingMapping(mapping)}
+                            onRemove={() => onRemoveMapping(mapping.id)}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Separate platforms into those with mappings and those without
+  const platformsWithMappings: Array<{ platform: Platform; inflow: number }> = []
+  const platformsWithoutMappings: Platform[] = []
+
+  platforms.forEach(platform => {
+    const account = platform.name as AccountPlatform
+    const accountMappings = getAccountMappings(account)
+    
+    if (accountMappings.length > 0) {
+      // Calculate total inflow for sorting
+      const totalInflowChf = accountMappings
+        .filter(m => m.type === 'inflow')
+        .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems, convert), 0)
+      platformsWithMappings.push({ platform, inflow: totalInflowChf })
+    } else {
+      platformsWithoutMappings.push(platform)
+    }
+  })
+
+  // Sort platforms with mappings by highest inflow first
+  platformsWithMappings.sort((a, b) => b.inflow - a.inflow)
+
   return (
     <>
       <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
@@ -709,51 +881,21 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
 
         {/* Account Visualizations */}
         <div className="space-y-8">
-          {accountPlatforms.map((account) => {
-            const accountMappings = getAccountMappings(account)
+          {platforms.length > 0 ? (
+            <>
+              {/* Platforms with mappings - sorted by highest inflow */}
+              {platformsWithMappings.map(({ platform }) => renderPlatformCard(platform))}
 
-            // Calculate totals
-            const totalInflowChf = accountMappings
-              .filter(m => m.type === 'inflow')
-              .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems, convert), 0)
-
-            const totalOutflowChf = accountMappings
-              .filter(m => m.type === 'outflow')
-              .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems, convert), 0)
-
-            const spareChf = totalInflowChf - totalOutflowChf
-
-            const totalInflow = convert(totalInflowChf, 'CHF')
-            const totalOutflow = convert(totalOutflowChf, 'CHF')
-            const spare = convert(spareChf, 'CHF')
-
-            // Sort mappings: 1st priority Inflow first, then Outflow; within each type, sort by amount high-low
-            const sortedMappings = [...accountMappings].sort((a, b) => {
-              // First priority: Inflow items first (type === 'inflow' comes before 'outflow')
-              if (a.type !== b.type) {
-                return a.type === 'inflow' ? -1 : 1
-              }
-              // Second priority: Within same type, sort by amount high-low
-              const amountA = computeMappingAmount(a.mapping, inflowItems, outflowItems, convert)
-              const amountB = computeMappingAmount(b.mapping, inflowItems, outflowItems, convert)
-              return amountB - amountA
-            })
-
-            return (
-              <div key={account} className="space-y-4 pb-4 border-b border-border-strong last:border-b-0">
-                {/* Account Header with Totals */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <Heading level={3}>{account}</Heading>
-                    <button
-                      onClick={() => {
-                        setPreselectedAccount(account)
-                        setShowAddMappingModal(true)
-                      }}
-                      className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
-                    >
+              {/* Platforms without mappings - collapsible section */}
+              {platformsWithoutMappings.length > 0 && (
+                <div className="border-t-2 border-border-strong pt-6 mt-6">
+                  <button
+                    onClick={() => setShowEmptyPlatforms(!showEmptyPlatforms)}
+                    className="w-full flex items-center justify-between bg-bg-surface-2 border border-border-subtle hover:border-[#DAA520] rounded-input px-4 py-3 transition-all duration-200 hover:shadow-card group"
+                  >
+                    <div className="flex items-center gap-3">
                       <svg
-                        className="w-4 h-4 transition-transform group-hover:rotate-90"
+                        className={`w-5 h-5 text-[#DAA520] transition-transform duration-200 ${showEmptyPlatforms ? 'rotate-180' : ''}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -762,97 +904,33 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2.5}
-                          d="M12 4v16m8-8H4"
+                          d="M19 9l-7 7-7-7"
                         />
                       </svg>
-                      <span>Add Mapping</span>
-                    </button>
-                  </div>
-                  <div className="mt-1 flex flex-col gap-1">
-                    <TotalText variant="inflow">
-                      {formatCurrency(totalInflow)}
-                    </TotalText>
-                    <TotalText variant="outflow">
-                      {formatCurrency(totalOutflow)}
-                    </TotalText>
-                    <TotalText variant="spare">
-                      {formatCurrency(spare)}
-                    </TotalText>
-                  </div>
+                      <span className="text-text-primary text-xs md:text-sm font-semibold">
+                        Platforms without mappings
+                      </span>
+                      <span className="bg-bg-surface-3 text-text-secondary text-[0.567rem] md:text-xs font-medium px-2 py-0.5 rounded-full">
+                        {platformsWithoutMappings.length}
+                      </span>
+                    </div>
+                    <span className="text-text-secondary text-[0.567rem] md:text-xs group-hover:text-[#DAA520] transition-colors">
+                      {showEmptyPlatforms ? 'Hide' : 'Show'}
+                    </span>
+                  </button>
+                  {showEmptyPlatforms && (
+                    <div className="space-y-8 mt-6">
+                      {platformsWithoutMappings.map(platform => renderPlatformCard(platform))}
+                    </div>
+                  )}
                 </div>
-
-                {/* Unified Table with Item, Inflow, Outflow, Actions */}
-                {sortedMappings.length === 0 ? (
-                  <div className="text-text-muted text-[0.567rem] md:text-xs">No mappings</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full" style={{ tableLayout: 'fixed' }}>
-                      <colgroup>
-                        <col style={{ width: 'calc((100% - 160px) / 3)' }} />
-                        <col style={{ width: 'calc((100% - 160px) / 3)' }} />
-                        <col style={{ width: 'calc((100% - 160px) / 3)' }} />
-                        <col style={{ width: '80px' }} />
-                      </colgroup>
-                      <thead>
-                        <tr className="border-b border-border-subtle">
-                          <th className="text-left pb-2">
-                            <Heading level={4}>Item</Heading>
-                          </th>
-                          <th className="text-right pb-2">
-                            <Heading level={4}>Inflow</Heading>
-                          </th>
-                          <th className="text-right pb-2">
-                            <Heading level={4}>Outflow</Heading>
-                          </th>
-                          <th className="text-right pb-2">
-                            <Heading level={4}>Actions</Heading>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedMappings.map(({ mapping, type, label }) => {
-                          const amountChf = computeMappingAmount(mapping, inflowItems, outflowItems, convert)
-                          const amount = convert(amountChf, 'CHF')
-                          
-                          return (
-                            <tr key={mapping.id} className="border-b border-border-subtle last:border-b-0">
-                              <td className="py-2">
-                                <div className="text2 truncate">{label}</div>
-                              </td>
-                              <td className="py-2 text-right">
-                                {type === 'inflow' ? (
-                                  <div className="text-success text2 whitespace-nowrap">{formatCurrency(amount)}</div>
-                                ) : (
-                                  <div className="text2">—</div>
-                                )}
-                              </td>
-                              <td className="py-2 text-right">
-                                {type === 'outflow' ? (
-                                  <div className="text-danger text2 whitespace-nowrap">{formatCurrency(amount)}</div>
-                                ) : (
-                                  <div className="text2">—</div>
-                                )}
-                              </td>
-                              <td className="py-2">
-                                <div className="flex items-center justify-end">
-                                  <CashflowItemMenu
-                                    itemId={mapping.id}
-                                    itemType="accountflow"
-                                    onEdit={() => setEditingMapping(mapping)}
-                                    onRemove={() => onRemoveMapping(mapping.id)}
-                                  />
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+              )}
+            </>
+          ) : (
+            <div className="text-center text-text-muted text-[0.567rem] md:text-xs py-4">
+              No platforms available. Please add platforms in Settings.
+            </div>
+          )}
         </div>
       </div>
 
@@ -860,6 +938,7 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
         <AddMappingModal
           inflowItems={inflowItems}
           outflowItems={outflowItems}
+          platforms={platforms}
           editingMapping={editingMapping}
           preselectedAccount={preselectedAccount}
           onClose={() => {
@@ -1321,13 +1400,14 @@ function AddOutflowItemModal({ group, editingItem, onClose, onSubmit }: AddOutfl
 interface AddMappingModalProps {
   inflowItems: InflowItem[]
   outflowItems: OutflowItem[]
+  platforms: Platform[]
   editingMapping?: AccountflowMapping | null
   preselectedAccount?: AccountPlatform | null
   onClose: () => void
   onSubmit: (mapping: AccountflowMapping) => void
 }
 
-function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselectedAccount, onClose, onSubmit }: AddMappingModalProps) {
+function AddMappingModal({ inflowItems, outflowItems, platforms, editingMapping, preselectedAccount, onClose, onSubmit }: AddMappingModalProps) {
   const { baseCurrency, convert } = useCurrency()
   const { isIncognito } = useIncognito()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
@@ -1658,6 +1738,25 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
                 </div>
               )}
 
+              <div>
+                <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="inflow-to-account-target">
+                  Target Platform
+                </label>
+                <select
+                  id="inflow-to-account-target"
+                  value={inflowToAccountTarget}
+                  onChange={(e) => setInflowToAccountTarget(e.target.value as AccountPlatform)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="">Select a platform...</option>
+                  {platforms.map((platform) => (
+                    <option key={platform.id} value={platform.name}>
+                      {platform.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {(inflowToAccountGroup || inflowToAccountItem) && (
                 <div className="bg-bg-surface-2 rounded-input px-3 py-2">
                   <div className="text-text-secondary text-[0.567rem] md:text-xs mb-1">Computed Amount</div>
@@ -1754,6 +1853,25 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
                 </div>
               )}
 
+              <div>
+                <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="account-to-outflow-source">
+                  Source Platform
+                </label>
+                <select
+                  id="account-to-outflow-source"
+                  value={accountToOutflowSource}
+                  onChange={(e) => setAccountToOutflowSource(e.target.value as AccountPlatform)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="">Select a platform...</option>
+                  {platforms.map((platform) => (
+                    <option key={platform.id} value={platform.name}>
+                      {platform.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {(accountToOutflowGroup || accountToOutflowItem) && (
                 <div className="bg-bg-surface-2 rounded-input px-3 py-2">
                   <div className="text-text-secondary text-[0.567rem] md:text-xs mb-1">Computed Amount</div>
@@ -1767,6 +1885,27 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
           {mappingType === 'accountToAccount' && (
             <div className="space-y-4">
               <div>
+                <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-from">
+                  From Platform
+                </label>
+                <select
+                  id="account-to-account-from"
+                  value={accountToAccountFrom}
+                  onChange={(e) => setAccountToAccountFrom(e.target.value as AccountPlatform)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="">Select a platform...</option>
+                  {platforms
+                    .filter(p => p.name !== accountToAccountTo)
+                    .map((platform) => (
+                      <option key={platform.id} value={platform.name}>
+                        {platform.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1" htmlFor="account-to-account-to">
                   To Platform
                 </label>
@@ -1777,11 +1916,11 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
                   className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
                 >
                   <option value="">Select a platform...</option>
-                  {accountPlatforms
-                    .filter(p => p !== (accountToAccountFrom || preselectedAccount))
+                  {platforms
+                    .filter(p => p.name !== accountToAccountFrom)
                     .map((platform) => (
-                      <option key={platform} value={platform}>
-                        {platform}
+                      <option key={platform.id} value={platform.name}>
+                        {platform.name}
                       </option>
                     ))}
                 </select>
@@ -1995,6 +2134,7 @@ function Cashflow() {
   const [outflowItems, setOutflowItems] = useState<OutflowItem[]>([])
   const [accountflowItems, setAccountflowItems] = useState<AccountflowItem[]>([])
   const [accountflowMappings, setAccountflowMappings] = useState<AccountflowMapping[]>([])
+  const [platforms, setPlatforms] = useState<Platform[]>([])
   const [dataLoading, setDataLoading] = useState(true)
 
   // Load data from Firestore on mount and when uid changes
@@ -2011,14 +2151,79 @@ function Cashflow() {
     const loadData = async () => {
       setDataLoading(true)
       try {
-        const [inflow, outflow, mappings] = await Promise.all([
+        const defaultPlatforms: Platform[] = [
+          { id: 'physical', name: 'Physical', order: 0 },
+          { id: 'raiffeisen', name: 'Raiffeisen', order: 0 },
+          { id: 'revolut', name: 'Revolut', order: 0 },
+          { id: 'yuh', name: 'yuh!', order: 0 },
+          { id: 'saxo', name: 'SAXO', order: 0 },
+          { id: 'kraken', name: 'Kraken', order: 0 },
+          { id: 'mexc', name: 'MEXC', order: 0 },
+          { id: 'bingx', name: 'BingX', order: 0 },
+          { id: 'exodus', name: 'Exodus', order: 0 },
+          { id: 'trezor', name: 'Trezor', order: 0 },
+          { id: 'ledger', name: 'Ledger', order: 0 },
+          { id: 'ibkr', name: 'IBKR', order: 0 },
+          { id: 'ubs', name: 'UBS', order: 0 },
+          { id: 'property', name: 'Property', order: 0 },
+          { id: 'wallet', name: 'Wallet', order: 0 },
+          { id: 'other', name: 'Other', order: 0 },
+        ]
+        const [inflow, outflow, mappings, loadedPlatforms] = await Promise.all([
           loadCashflowInflowItems(mockInflowItems, uid),
           loadCashflowOutflowItems(mockOutflowItems, uid),
           loadCashflowAccountflowMappings([], uid),
+          loadPlatforms(defaultPlatforms, uid),
         ])
         setInflowItems(inflow)
         setOutflowItems(outflow)
-        setAccountflowMappings(mappings)
+        
+        // Filter out mappings for removed platforms
+        const platformNames = new Set(loadedPlatforms.map(p => p.name))
+        const filteredMappings = mappings.filter(m => {
+          if (m.kind === 'inflowToAccount') {
+            return platformNames.has(m.account)
+          } else if (m.kind === 'accountToOutflow') {
+            return platformNames.has(m.account)
+          } else if (m.kind === 'accountToAccount') {
+            return platformNames.has(m.fromAccount) && platformNames.has(m.toAccount)
+          }
+          return true
+        })
+        
+        // Remove mappings for deleted platforms
+        if (filteredMappings.length !== mappings.length) {
+          await saveCashflowAccountflowMappings(filteredMappings, uid)
+        }
+        
+        setAccountflowMappings(filteredMappings)
+        
+        // Calculate and update platform order based on inflow
+        const platformInflows = new Map<string, number>()
+        filteredMappings.forEach(m => {
+          if (m.kind === 'inflowToAccount') {
+            const amount = computeMappingAmount(m, inflow, outflow, convert)
+            const current = platformInflows.get(m.account) || 0
+            platformInflows.set(m.account, current + amount)
+          }
+        })
+        
+        // Update platform orders and sort by highest inflow first
+        const updatedPlatforms = loadedPlatforms.map(p => ({
+          ...p,
+          order: platformInflows.get(p.name) || 0
+        })).sort((a, b) => b.order - a.order)
+        
+        setPlatforms(updatedPlatforms)
+        
+        // Save updated platform orders if they changed
+        const orderChanged = updatedPlatforms.some((p, i) => {
+          const original = loadedPlatforms.find(op => op.id === p.id)
+          return !original || original.order !== p.order
+        })
+        if (orderChanged) {
+          await savePlatforms(updatedPlatforms, uid)
+        }
       } catch (error) {
         console.error('Failed to load data:', error)
       } finally {
@@ -2173,6 +2378,7 @@ function Cashflow() {
         <div>
           <AccountflowSection
             mappings={accountflowMappings}
+            platforms={platforms}
             onAddMapping={handleAddMapping}
             onEditMapping={handleEditMapping}
             onRemoveMapping={handleRemoveMapping}

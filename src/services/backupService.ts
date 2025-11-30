@@ -4,14 +4,17 @@ import {
   loadCashflowInflowItems,
   loadCashflowOutflowItems,
   loadCashflowAccountflowMappings,
+  loadPlatforms,
   saveNetWorthItems,
   saveNetWorthTransactions,
   saveCashflowInflowItems,
   saveCashflowOutflowItems,
   saveCashflowAccountflowMappings,
+  savePlatforms,
   clearAllData,
+  type Platform,
 } from './storageService'
-import { clearAllUserData } from './firestoreService'
+import { clearAllUserData, loadUserSettings, saveUserSettings } from './firestoreService'
 import { loadSnapshots, saveSnapshots, type NetWorthSnapshot } from './snapshotService'
 import { loadCashflowSnapshots, saveCashflowSnapshots, type CashflowSnapshot } from './cashflowSnapshotService'
 
@@ -30,6 +33,8 @@ export interface BackupData {
     cashflowAccountflowMappings: unknown[]
     snapshots: unknown[]
     cashflowSnapshots: unknown[]
+    platforms: unknown[]
+    settings: { baseCurrency: string } | null
   }
 }
 
@@ -45,6 +50,8 @@ export async function createBackup(uid: string): Promise<BackupData> {
     cashflowAccountflowMappings,
     snapshots,
     cashflowSnapshots,
+    platforms,
+    settings,
   ] = await Promise.all([
     loadNetWorthItems([], uid),
     loadNetWorthTransactions([], uid),
@@ -53,6 +60,8 @@ export async function createBackup(uid: string): Promise<BackupData> {
     loadCashflowAccountflowMappings([], uid),
     loadSnapshots(uid),
     loadCashflowSnapshots(uid),
+    loadPlatforms([], uid),
+    loadUserSettings(uid),
   ])
 
   return {
@@ -67,6 +76,8 @@ export async function createBackup(uid: string): Promise<BackupData> {
       cashflowAccountflowMappings,
       snapshots,
       cashflowSnapshots,
+      platforms,
+      settings,
     },
   }
 }
@@ -113,6 +124,18 @@ export function validateBackup(backup: unknown): backup is BackupData {
   // cashflowSnapshots is optional for backward compatibility
   if (data.cashflowSnapshots !== undefined && !Array.isArray(data.cashflowSnapshots)) {
     return false
+  }
+
+  // platforms is optional for backward compatibility
+  if (data.platforms !== undefined && !Array.isArray(data.platforms)) {
+    return false
+  }
+
+  // settings is optional for backward compatibility
+  if (data.settings !== undefined && data.settings !== null) {
+    if (typeof data.settings !== 'object' || !('baseCurrency' in data.settings)) {
+      return false
+    }
   }
 
   return true
@@ -165,6 +188,11 @@ export async function restoreBackup(
     ),
     saveSnapshots(backup.data.snapshots as NetWorthSnapshot[], currentUid),
     saveCashflowSnapshots((backup.data.cashflowSnapshots as CashflowSnapshot[]) || [], currentUid),
+    savePlatforms((backup.data.platforms as Platform[]) || [], currentUid),
+    // Only restore settings if they exist in the backup
+    backup.data.settings
+      ? saveUserSettings(currentUid, backup.data.settings as { baseCurrency: string })
+      : Promise.resolve(),
   ])
 }
 

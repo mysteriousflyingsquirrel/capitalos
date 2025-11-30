@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   CASHFLOW_INFLOW_ITEMS: 'capitalos_cashflow_inflow_items_v1',
   CASHFLOW_OUTFLOW_ITEMS: 'capitalos_cashflow_outflow_items_v1',
   CASHFLOW_ACCOUNTFLOW_MAPPINGS: 'capitalos_cashflow_accountflow_mappings_v1',
+  PLATFORMS: 'capitalos_platforms_v1',
 } as const
 
 // Generic storage functions for localStorage (fallback)
@@ -41,6 +42,8 @@ import {
   loadCashflowOutflowItems as loadCashflowOutflowItemsFirestore,
   saveCashflowAccountflowMappings as saveCashflowAccountflowMappingsFirestore,
   loadCashflowAccountflowMappings as loadCashflowAccountflowMappingsFirestore,
+  savePlatforms as savePlatformsFirestore,
+  loadPlatforms as loadPlatformsFirestore,
 } from './firestoreService'
 
 // Net Worth storage - now async and uses Firestore when uid is provided
@@ -196,6 +199,43 @@ export async function loadCashflowAccountflowMappings<T>(
     }
   }
   return loadFromStorage(STORAGE_KEYS.CASHFLOW_ACCOUNTFLOW_MAPPINGS, defaultValue)
+}
+
+// Platform storage
+export interface Platform {
+  id: string
+  name: string
+  order: number // For sorting by usage (higher = more used)
+}
+
+export async function savePlatforms(
+  platforms: Platform[],
+  uid?: string
+): Promise<void> {
+  if (uid) {
+    await savePlatformsFirestore(uid, platforms)
+    saveToStorage(STORAGE_KEYS.PLATFORMS, platforms)
+  } else {
+    saveToStorage(STORAGE_KEYS.PLATFORMS, platforms)
+  }
+}
+
+export async function loadPlatforms(
+  defaultValue: Platform[],
+  uid?: string
+): Promise<Platform[]> {
+  if (uid) {
+    try {
+      const platforms = await loadPlatformsFirestore(uid)
+      if (platforms.length > 0) {
+        saveToStorage(STORAGE_KEYS.PLATFORMS, platforms)
+        return platforms
+      }
+    } catch (error) {
+      console.error('Failed to load from Firestore, falling back to localStorage:', error)
+    }
+  }
+  return loadFromStorage(STORAGE_KEYS.PLATFORMS, defaultValue)
 }
 
 // Clear all data (useful for testing or reset)

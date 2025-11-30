@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, FormEvent } from 'react'
 import Heading from '../components/Heading'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -10,6 +10,7 @@ import {
   readBackupFile,
   restoreBackup,
 } from '../services/backupService'
+import { savePlatforms, loadPlatforms, saveCashflowAccountflowMappings, loadCashflowAccountflowMappings, type Platform } from '../services/storageService'
 
 function Settings() {
   const { baseCurrency, setBaseCurrency, exchangeRates, isLoading, error } = useCurrency()
@@ -20,6 +21,13 @@ function Settings() {
   const [importLoading, setImportLoading] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [importSuccess, setImportSuccess] = useState(false)
+  
+  // Platform management
+  const [platforms, setPlatforms] = useState<Platform[]>([])
+  const [platformLoading, setPlatformLoading] = useState(true)
+  const [editingPlatform, setEditingPlatform] = useState<Platform | null>(null)
+  const [newPlatformName, setNewPlatformName] = useState('')
+  const [platformError, setPlatformError] = useState<string | null>(null)
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -111,6 +119,126 @@ function Settings() {
       }
     }
     input.click()
+  }
+
+  // Load platforms on mount
+  useEffect(() => {
+    const loadPlatformsData = async () => {
+      setPlatformLoading(true)
+      try {
+        const defaultPlatforms: Platform[] = [
+          { id: 'physical', name: 'Physical', order: 0 },
+          { id: 'raiffeisen', name: 'Raiffeisen', order: 0 },
+          { id: 'revolut', name: 'Revolut', order: 0 },
+          { id: 'yuh', name: 'yuh!', order: 0 },
+          { id: 'saxo', name: 'SAXO', order: 0 },
+          { id: 'kraken', name: 'Kraken', order: 0 },
+          { id: 'mexc', name: 'MEXC', order: 0 },
+          { id: 'bingx', name: 'BingX', order: 0 },
+          { id: 'exodus', name: 'Exodus', order: 0 },
+          { id: 'trezor', name: 'Trezor', order: 0 },
+          { id: 'ledger', name: 'Ledger', order: 0 },
+          { id: 'ibkr', name: 'IBKR', order: 0 },
+          { id: 'ubs', name: 'UBS', order: 0 },
+          { id: 'property', name: 'Property', order: 0 },
+          { id: 'wallet', name: 'Wallet', order: 0 },
+          { id: 'other', name: 'Other', order: 0 },
+        ]
+        const loaded = await loadPlatforms(defaultPlatforms, uid)
+        setPlatforms(loaded)
+      } catch (err) {
+        console.error('Failed to load platforms:', err)
+      } finally {
+        setPlatformLoading(false)
+      }
+    }
+    loadPlatformsData()
+  }, [uid])
+
+  const handleAddPlatform = async (e: FormEvent) => {
+    e.preventDefault()
+    setPlatformError(null)
+
+    if (!newPlatformName.trim()) {
+      setPlatformError('Please enter a platform name.')
+      return
+    }
+
+    if (platforms.some(p => p.name.toLowerCase() === newPlatformName.trim().toLowerCase())) {
+      setPlatformError('A platform with this name already exists.')
+      return
+    }
+
+    const newPlatform: Platform = {
+      id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `platform-${Date.now()}`,
+      name: newPlatformName.trim(),
+      order: 0,
+    }
+
+    const updated = [...platforms, newPlatform]
+    setPlatforms(updated)
+    await savePlatforms(updated, uid)
+    setNewPlatformName('')
+  }
+
+  const handleEditPlatform = async (platform: Platform, newName: string) => {
+    if (!newName.trim()) {
+      setPlatformError('Platform name cannot be empty.')
+      return
+    }
+
+    if (platforms.some(p => p.id !== platform.id && p.name.toLowerCase() === newName.trim().toLowerCase())) {
+      setPlatformError('A platform with this name already exists.')
+      return
+    }
+
+    const updated = platforms.map(p => 
+      p.id === platform.id ? { ...p, name: newName.trim() } : p
+    )
+    setPlatforms(updated)
+    await savePlatforms(updated, uid)
+    setEditingPlatform(null)
+    setPlatformError(null)
+  }
+
+  const handleRemovePlatform = async (platform: Platform) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to remove "${platform.name}"?\n\n` +
+      'This will:\n' +
+      '- Remove all mappings in Platformflow\n' +
+      '- Items in Net Worth will show a warning icon until you change their platform\n\n' +
+      'This action cannot be undone.'
+    )
+
+    if (!confirmed) return
+
+    // Remove platform
+    const updated = platforms.filter(p => p.id !== platform.id)
+    setPlatforms(updated)
+    await savePlatforms(updated, uid)
+
+    // Remove mappings from platformflow
+    if (uid) {
+      try {
+        const mappings = await loadCashflowAccountflowMappings([], uid)
+        const platformName = platform.name
+        const filteredMappings = mappings.filter(m => {
+          if (m.kind === 'inflowToAccount') {
+            return m.account !== platformName
+          } else if (m.kind === 'accountToOutflow') {
+            return m.account !== platformName
+          } else if (m.kind === 'accountToAccount') {
+            return m.fromAccount !== platformName && m.toAccount !== platformName
+          }
+          return true
+        })
+        if (filteredMappings.length !== mappings.length) {
+          await saveCashflowAccountflowMappings(filteredMappings, uid)
+        }
+      } catch (err) {
+        console.error('Failed to remove platform mappings:', err)
+      }
+    }
   }
 
   return (
@@ -243,6 +371,114 @@ function Settings() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Platforms Section */}
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
+          <Heading level={2} className="mb-4">Platforms</Heading>
+          
+          <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
+            Manage platforms that appear in dropdowns throughout the application. Platforms with highest inflow are listed first.
+          </p>
+
+          {platformError && (
+            <div className="mb-4 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+              {platformError}
+            </div>
+          )}
+
+          {/* Add Platform Form */}
+          <form onSubmit={handleAddPlatform} className="mb-6">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newPlatformName}
+                onChange={(e) => setNewPlatformName(e.target.value)}
+                placeholder="Enter platform name"
+                className="flex-1 bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
+              >
+                Add Platform
+              </button>
+            </div>
+          </form>
+
+          {/* Platforms List */}
+          {platformLoading ? (
+            <p className="text-text-muted text-[0.567rem] md:text-xs">Loading platforms...</p>
+          ) : (
+            <div className="space-y-2">
+              {platforms.length === 0 ? (
+                <p className="text-text-muted text-[0.567rem] md:text-xs">No platforms yet. Add one above.</p>
+              ) : (
+                platforms.map((platform) => (
+                  <div
+                    key={platform.id}
+                    className="flex items-center justify-between p-3 bg-bg-surface-2 border border-border-subtle rounded-input"
+                  >
+                    {editingPlatform?.id === platform.id ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          const input = e.currentTarget.querySelector('input') as HTMLInputElement
+                          if (input) {
+                            handleEditPlatform(platform, input.value)
+                          }
+                        }}
+                        className="flex-1 flex gap-2"
+                      >
+                        <input
+                          type="text"
+                          defaultValue={platform.name}
+                          className="flex-1 bg-bg-surface-1 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                          autoFocus
+                        />
+                        <button
+                          type="submit"
+                          className="px-3 py-2 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPlatform(null)
+                            setPlatformError(null)
+                          }}
+                          className="px-3 py-2 bg-bg-surface-3 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs rounded-full hover:bg-bg-surface-1 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        <span className="text-text-primary text-xs md:text-sm font-medium">{platform.name}</span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditingPlatform(platform)}
+                            className="px-3 py-1.5 bg-bg-surface-3 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs rounded-full hover:bg-bg-surface-1 transition-colors"
+                            title="Edit platform"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleRemovePlatform(platform)}
+                            className="px-3 py-1.5 bg-bg-surface-3 border border-danger/40 text-danger text-[0.567rem] md:text-xs rounded-full hover:bg-danger/10 transition-colors"
+                            title="Remove platform"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* About Section */}
