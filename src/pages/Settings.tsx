@@ -11,6 +11,8 @@ import {
   restoreBackup,
 } from '../services/backupService'
 import { savePlatforms, loadPlatforms, saveCashflowAccountflowMappings, loadCashflowAccountflowMappings, type Platform } from '../services/storageService'
+import { getYearsWithCryptoActivity } from '../services/cryptoTaxReportService'
+import CryptoTaxReportModal from '../components/CryptoTaxReportModal'
 
 function Settings() {
   const { baseCurrency, setBaseCurrency, exchangeRates, isLoading, error } = useCurrency()
@@ -28,6 +30,8 @@ function Settings() {
   const [editingPlatform, setEditingPlatform] = useState<Platform | null>(null)
   const [newPlatformName, setNewPlatformName] = useState('')
   const [platformError, setPlatformError] = useState<string | null>(null)
+  const [showCryptoTaxModal, setShowCryptoTaxModal] = useState(false)
+  const [checkingCryptoActivity, setCheckingCryptoActivity] = useState(false)
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -35,9 +39,24 @@ function Settings() {
   // Get other currencies (all except base)
   const otherCurrencies = supportedCurrencies.filter(c => c !== baseCurrency)
 
-  // Report generation handlers (stubs for now)
-  const handleCryptoTaxReport = () => {
-    alert('Crypto Tax Report generation is not implemented yet. This will trigger a serverless function in a future version.')
+  // Report generation handlers
+  const handleCryptoTaxReport = async () => {
+    setCheckingCryptoActivity(true)
+    try {
+      const years = await getYearsWithCryptoActivity(uid)
+      if (years.length === 0) {
+        // Show info message - no crypto activity
+        alert('Keine Krypto-Aktivität gefunden – es gibt noch keinen Tax-Report.')
+      } else {
+        // Open modal
+        setShowCryptoTaxModal(true)
+      }
+    } catch (error) {
+      console.error('Failed to check crypto activity:', error)
+      alert('Fehler beim Prüfen der Krypto-Aktivität. Bitte später erneut versuchen.')
+    } finally {
+      setCheckingCryptoActivity(false)
+    }
   }
 
   const handleExportJSON = async () => {
@@ -310,9 +329,10 @@ function Settings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               onClick={handleCryptoTaxReport}
-              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
+              disabled={checkingCryptoActivity || !uid}
+              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Generate Crypto Tax Report
+              {checkingCryptoActivity ? 'Prüfe...' : 'Crypto Tax Report (CH)'}
             </button>
           </div>
         </div>
@@ -507,6 +527,11 @@ function Settings() {
           </div>
         </div>
       </div>
+
+      {/* Crypto Tax Report Modal */}
+      {showCryptoTaxModal && (
+        <CryptoTaxReportModal onClose={() => setShowCryptoTaxModal(false)} />
+      )}
     </div>
   )
 }
