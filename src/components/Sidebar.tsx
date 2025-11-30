@@ -29,10 +29,10 @@ function Sidebar() {
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const { toggleIncognito } = useIncognito()
 
-  // Keyboard shortcut: Shift + I to toggle incognito
+  // Keyboard shortcut: CTRL + I to toggle incognito
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.shiftKey && event.key === 'I') {
+      if ((event.ctrlKey || event.metaKey) && (event.key === 'i' || event.key === 'I')) {
         event.preventDefault()
         toggleIncognito()
       }

@@ -5,7 +5,7 @@ import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useIncognito } from '../contexts/IncognitoContext'
-import { formatMoney, formatNumber } from '../lib/currency'
+import { formatMoney, formatNumber, type CurrencyCode } from '../lib/currency'
 import {
   saveCashflowInflowItems,
   loadCashflowInflowItems,
@@ -20,7 +20,9 @@ type InflowGroupName = 'Time' | 'Service' | 'Worker Bees'
 interface InflowItem {
   id: string
   item: string
-  amountChf: number
+  amountChf: number // Kept for backward compatibility, but will be calculated from amount and currency
+  amount: number // Original amount in original currency
+  currency: string // Original currency (CHF, EUR, USD)
   provider: string
   group: InflowGroupName
 }
@@ -30,7 +32,9 @@ type OutflowGroupName = 'Fix' | 'Variable' | 'Shared Variable' | 'Investments'
 interface OutflowItem {
   id: string
   item: string
-  amountChf: number
+  amountChf: number // Kept for backward compatibility, but will be calculated from amount and currency
+  amount: number // Original amount in original currency
+  currency: string // Original currency (CHF, EUR, USD)
   receiver: string
   group: OutflowGroupName
 }
@@ -93,36 +97,59 @@ const mockAccountflowItems: AccountflowItem[] = []
 // formatChf will be replaced with currency-aware formatting in the component
 
 // Helper functions for mapping amounts
-function getInflowGroupSum(group: InflowGroupName, items: InflowItem[]): number {
+function getInflowGroupSum(group: InflowGroupName, items: InflowItem[], convert: (amount: number, from: CurrencyCode) => number): number {
   return items
     .filter(i => i.group === group)
-    .reduce((sum, i) => sum + i.amountChf, 0)
+    .reduce((sum, i) => {
+      // Use original amount and currency if available, otherwise fall back to amountChf
+      if (i.amount !== undefined && i.currency) {
+        return sum + convert(i.amount, i.currency as CurrencyCode)
+      }
+      return sum + i.amountChf
+    }, 0)
 }
 
-function getOutflowGroupSum(group: OutflowGroupName, items: OutflowItem[]): number {
+function getOutflowGroupSum(group: OutflowGroupName, items: OutflowItem[], convert: (amount: number, from: CurrencyCode) => number): number {
   return items
     .filter(i => i.group === group)
-    .reduce((sum, i) => sum + i.amountChf, 0)
+    .reduce((sum, i) => {
+      // Use original amount and currency if available, otherwise fall back to amountChf
+      if (i.amount !== undefined && i.currency) {
+        return sum + convert(i.amount, i.currency as CurrencyCode)
+      }
+      return sum + i.amountChf
+    }, 0)
 }
 
 function computeMappingAmount(
   mapping: AccountflowMapping,
   inflowItems: InflowItem[],
-  outflowItems: OutflowItem[]
+  outflowItems: OutflowItem[],
+  convert: (amount: number, from: CurrencyCode) => number
 ): number {
   if (mapping.kind === 'inflowToAccount') {
     if (mapping.mode === 'group' && mapping.group) {
-      return getInflowGroupSum(mapping.group, inflowItems)
+      return getInflowGroupSum(mapping.group, inflowItems, convert)
     } else if (mapping.mode === 'item' && mapping.inflowItemId) {
       const item = inflowItems.find(i => i.id === mapping.inflowItemId)
-      return item ? item.amountChf : 0
+      if (!item) return 0
+      // Use original amount and currency if available, otherwise fall back to amountChf
+      if (item.amount !== undefined && item.currency) {
+        return convert(item.amount, item.currency as CurrencyCode)
+      }
+      return item.amountChf
     }
   } else if (mapping.kind === 'accountToOutflow') {
     if (mapping.mode === 'group' && mapping.group) {
-      return getOutflowGroupSum(mapping.group, outflowItems)
+      return getOutflowGroupSum(mapping.group, outflowItems, convert)
     } else if (mapping.mode === 'item' && mapping.outflowItemId) {
       const item = outflowItems.find(i => i.id === mapping.outflowItemId)
-      return item ? item.amountChf : 0
+      if (!item) return 0
+      // Use original amount and currency if available, otherwise fall back to amountChf
+      if (item.amount !== undefined && item.currency) {
+        return convert(item.amount, item.currency as CurrencyCode)
+      }
+      return item.amountChf
     }
   } else if (mapping.kind === 'accountToAccount') {
     return mapping.amountChf
@@ -228,8 +255,8 @@ function GroupedList<T extends Record<string, any>>({
 // Inflow Section Component
 interface InflowSectionProps {
   items: InflowItem[]
-  onAddItem: (group: InflowGroupName, data: { item: string; amountChf: number; currency: string; provider: string }) => void
-  onEditItem: (id: string, data: { item: string; amountChf: number; currency: string; provider: string }) => void
+  onAddItem: (group: InflowGroupName, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => void
+  onEditItem: (id: string, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => void
   onRemoveItem: (id: string) => void
 }
 
@@ -239,7 +266,13 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   
   const inflowGroups: InflowGroupName[] = ['Time', 'Service', 'Worker Bees']
-  const totalInflowChf = items.reduce((sum, item) => sum + item.amountChf, 0)
+  const totalInflowChf = items.reduce((sum, item) => {
+    // Use original amount and currency if available, otherwise fall back to amountChf
+    if (item.amount !== undefined && item.currency) {
+      return sum + convert(item.amount, item.currency as CurrencyCode)
+    }
+    return sum + item.amountChf
+  }, 0)
   const totalInflow = convert(totalInflowChf, 'CHF')
   const [addItemGroup, setAddItemGroup] = useState<InflowGroupName | null>(null)
   const [editingItem, setEditingItem] = useState<InflowItem | null>(null)
@@ -252,7 +285,13 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
         groupKey="group"
         groupOrder={inflowGroups}
         renderGroupHeader={(groupName, groupItems) => {
-          const totalChf = groupItems.reduce((sum, item) => sum + item.amountChf, 0)
+          const totalChf = groupItems.reduce((sum, item) => {
+            // Use original amount and currency if available, otherwise fall back to amountChf
+            if (item.amount !== undefined && item.currency) {
+              return sum + convert(item.amount, item.currency as CurrencyCode)
+            }
+            return sum + item.amountChf
+          }, 0)
           const total = convert(totalChf, 'CHF')
           return (
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
@@ -333,7 +372,13 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
                         <div className="text2 truncate">{item.item}</div>
                       </td>
                       <td className="py-2 text-right">
-                        <div className="text-success text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
+                        <div className="text-success text2 whitespace-nowrap">
+                          {formatCurrency(
+                            item.amount !== undefined && item.currency
+                              ? convert(item.amount, item.currency as CurrencyCode)
+                              : convert(item.amountChf, 'CHF')
+                          )}
+                        </div>
                       </td>
                       <td className="py-2 text-right">
                         <div className="text2 truncate">{item.provider}</div>
@@ -384,8 +429,8 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
 // Outflow Section Component
 interface OutflowSectionProps {
   items: OutflowItem[]
-  onAddItem: (group: OutflowGroupName, data: { item: string; amountChf: number; currency: string; receiver: string }) => void
-  onEditItem: (id: string, data: { item: string; amountChf: number; currency: string; receiver: string }) => void
+  onAddItem: (group: OutflowGroupName, data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => void
+  onEditItem: (id: string, data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => void
   onRemoveItem: (id: string) => void
 }
 
@@ -395,7 +440,13 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   
   const outflowGroups: OutflowGroupName[] = ['Fix', 'Variable', 'Shared Variable', 'Investments']
-  const totalOutflowChf = items.reduce((sum, item) => sum + item.amountChf, 0)
+  const totalOutflowChf = items.reduce((sum, item) => {
+    // Use original amount and currency if available, otherwise fall back to amountChf
+    if (item.amount !== undefined && item.currency) {
+      return sum + convert(item.amount, item.currency as CurrencyCode)
+    }
+    return sum + item.amountChf
+  }, 0)
   const totalOutflow = convert(totalOutflowChf, 'CHF')
   const [addItemGroup, setAddItemGroup] = useState<OutflowGroupName | null>(null)
   const [editingItem, setEditingItem] = useState<OutflowItem | null>(null)
@@ -408,7 +459,13 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
         groupKey="group"
         groupOrder={outflowGroups}
         renderGroupHeader={(groupName, groupItems) => {
-          const totalChf = groupItems.reduce((sum, item) => sum + item.amountChf, 0)
+          const totalChf = groupItems.reduce((sum, item) => {
+            // Use original amount and currency if available, otherwise fall back to amountChf
+            if (item.amount !== undefined && item.currency) {
+              return sum + convert(item.amount, item.currency as CurrencyCode)
+            }
+            return sum + item.amountChf
+          }, 0)
           const total = convert(totalChf, 'CHF')
           return (
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
@@ -489,7 +546,13 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
                         <div className="text2 truncate">{item.item}</div>
                       </td>
                       <td className="py-2 text-right">
-                        <div className="text-danger text2 whitespace-nowrap">{formatCurrency(convert(item.amountChf, 'CHF'))}</div>
+                        <div className="text-danger text2 whitespace-nowrap">
+                          {formatCurrency(
+                            item.amount !== undefined && item.currency
+                              ? convert(item.amount, item.currency as CurrencyCode)
+                              : convert(item.amountChf, 'CHF')
+                          )}
+                        </div>
                       </td>
                       <td className="py-2 text-right">
                         <div className="text2 truncate">{item.receiver}</div>
@@ -652,11 +715,11 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
             // Calculate totals
             const totalInflowChf = accountMappings
               .filter(m => m.type === 'inflow')
-              .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems), 0)
+              .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems, convert), 0)
 
             const totalOutflowChf = accountMappings
               .filter(m => m.type === 'outflow')
-              .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems), 0)
+              .reduce((sum, m) => sum + computeMappingAmount(m.mapping, inflowItems, outflowItems, convert), 0)
 
             const spareChf = totalInflowChf - totalOutflowChf
 
@@ -671,8 +734,8 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
                 return a.type === 'inflow' ? -1 : 1
               }
               // Second priority: Within same type, sort by amount high-low
-              const amountA = computeMappingAmount(a.mapping, inflowItems, outflowItems)
-              const amountB = computeMappingAmount(b.mapping, inflowItems, outflowItems)
+              const amountA = computeMappingAmount(a.mapping, inflowItems, outflowItems, convert)
+              const amountB = computeMappingAmount(b.mapping, inflowItems, outflowItems, convert)
               return amountB - amountA
             })
 
@@ -748,7 +811,7 @@ function AccountflowSection({ mappings, onAddMapping, onEditMapping, onRemoveMap
                       </thead>
                       <tbody>
                         {sortedMappings.map(({ mapping, type, label }) => {
-                          const amountChf = computeMappingAmount(mapping, inflowItems, outflowItems)
+                          const amountChf = computeMappingAmount(mapping, inflowItems, outflowItems, convert)
                           const amount = convert(amountChf, 'CHF')
                           
                           return (
@@ -913,13 +976,14 @@ interface AddInflowItemModalProps {
   group: InflowGroupName
   editingItem?: InflowItem | null
   onClose: () => void
-  onSubmit: (data: { item: string; amountChf: number; currency: string; provider: string }) => void
+  onSubmit: (data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => void
 }
 
 function AddInflowItemModal({ group, editingItem, onClose, onSubmit }: AddInflowItemModalProps) {
+  const { convert } = useCurrency()
   const [item, setItem] = useState('')
   const [inflow, setInflow] = useState('')
-  const [currency, setCurrency] = useState('CHF')
+  const [currency, setCurrency] = useState<CurrencyCode>('CHF')
   const [provider, setProvider] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -927,8 +991,15 @@ function AddInflowItemModal({ group, editingItem, onClose, onSubmit }: AddInflow
   useEffect(() => {
     if (editingItem) {
       setItem(editingItem.item)
-      setInflow(editingItem.amountChf.toString())
-      setCurrency('CHF') // Default, as currency is not stored in InflowItem
+      // Use original amount and currency if available, otherwise fall back to amountChf in CHF
+      if (editingItem.amount !== undefined && editingItem.currency) {
+        setInflow(editingItem.amount.toString())
+        setCurrency(editingItem.currency as CurrencyCode)
+      } else {
+        // Backward compatibility: assume CHF
+        setInflow(editingItem.amountChf.toString())
+        setCurrency('CHF')
+      }
       setProvider(editingItem.provider)
     } else {
       setItem('')
@@ -956,10 +1027,14 @@ function AddInflowItemModal({ group, editingItem, onClose, onSubmit }: AddInflow
       return
     }
 
+    // Convert to CHF for backward compatibility (amountChf field)
+    const amountChf = convert(parsedInflow, currency)
+
     onSubmit({
       item: item.trim(),
-      amountChf: parsedInflow,
-      currency,
+      amountChf, // Converted to CHF for backward compatibility
+      amount: parsedInflow, // Original amount
+      currency, // Original currency
       provider: provider.trim(),
     })
 
@@ -1032,8 +1107,6 @@ function AddInflowItemModal({ group, editingItem, onClose, onSubmit }: AddInflow
               <option value="CHF">CHF</option>
               <option value="EUR">EUR</option>
               <option value="USD">USD</option>
-              <option value="BTC">BTC</option>
-              <option value="ETH">ETH</option>
             </select>
           </div>
 
@@ -1076,13 +1149,14 @@ interface AddOutflowItemModalProps {
   group: OutflowGroupName
   editingItem?: OutflowItem | null
   onClose: () => void
-  onSubmit: (data: { item: string; amountChf: number; currency: string; receiver: string }) => void
+  onSubmit: (data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => void
 }
 
 function AddOutflowItemModal({ group, editingItem, onClose, onSubmit }: AddOutflowItemModalProps) {
+  const { convert } = useCurrency()
   const [item, setItem] = useState('')
   const [outflow, setOutflow] = useState('')
-  const [currency, setCurrency] = useState('CHF')
+  const [currency, setCurrency] = useState<CurrencyCode>('CHF')
   const [receiver, setReceiver] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -1090,8 +1164,15 @@ function AddOutflowItemModal({ group, editingItem, onClose, onSubmit }: AddOutfl
   useEffect(() => {
     if (editingItem) {
       setItem(editingItem.item)
-      setOutflow(editingItem.amountChf.toString())
-      setCurrency('CHF') // Default, as currency is not stored in OutflowItem
+      // Use original amount and currency if available, otherwise fall back to amountChf in CHF
+      if (editingItem.amount !== undefined && editingItem.currency) {
+        setOutflow(editingItem.amount.toString())
+        setCurrency(editingItem.currency as CurrencyCode)
+      } else {
+        // Backward compatibility: assume CHF
+        setOutflow(editingItem.amountChf.toString())
+        setCurrency('CHF')
+      }
       setReceiver(editingItem.receiver)
     } else {
       setItem('')
@@ -1119,10 +1200,14 @@ function AddOutflowItemModal({ group, editingItem, onClose, onSubmit }: AddOutfl
       return
     }
 
+    // Convert to CHF for backward compatibility (amountChf field)
+    const amountChf = convert(parsedOutflow, currency)
+
     onSubmit({
       item: item.trim(),
-      amountChf: parsedOutflow,
-      currency,
+      amountChf, // Converted to CHF for backward compatibility
+      amount: parsedOutflow, // Original amount
+      currency, // Original currency
       receiver: receiver.trim(),
     })
 
@@ -1195,8 +1280,6 @@ function AddOutflowItemModal({ group, editingItem, onClose, onSubmit }: AddOutfl
               <option value="CHF">CHF</option>
               <option value="EUR">EUR</option>
               <option value="USD">USD</option>
-              <option value="BTC">BTC</option>
-              <option value="ETH">ETH</option>
             </select>
           </div>
 
@@ -1322,20 +1405,30 @@ function AddMappingModal({ inflowItems, outflowItems, editingMapping, preselecte
   // Calculate computed amounts for display
   const getInflowToAccountAmount = (): number => {
     if (inflowToAccountMode === 'group' && inflowToAccountGroup) {
-      return getInflowGroupSum(inflowToAccountGroup, inflowItems)
+      return getInflowGroupSum(inflowToAccountGroup, inflowItems, convert)
     } else if (inflowToAccountMode === 'item' && inflowToAccountItem) {
       const item = inflowItems.find(i => i.id === inflowToAccountItem)
-      return item ? item.amountChf : 0
+      if (!item) return 0
+      // Use original amount and currency if available, otherwise fall back to amountChf
+      if (item.amount !== undefined && item.currency) {
+        return convert(item.amount, item.currency as CurrencyCode)
+      }
+      return item.amountChf
     }
     return 0
   }
 
   const getAccountToOutflowAmount = (): number => {
     if (accountToOutflowMode === 'group' && accountToOutflowGroup) {
-      return getOutflowGroupSum(accountToOutflowGroup, outflowItems)
+      return getOutflowGroupSum(accountToOutflowGroup, outflowItems, convert)
     } else if (accountToOutflowMode === 'item' && accountToOutflowItem) {
       const item = outflowItems.find(i => i.id === accountToOutflowItem)
-      return item ? item.amountChf : 0
+      if (!item) return 0
+      // Use original amount and currency if available, otherwise fall back to amountChf
+      if (item.amount !== undefined && item.currency) {
+        return convert(item.amount, item.currency as CurrencyCode)
+      }
+      return item.amountChf
     }
     return 0
   }
@@ -1868,8 +1961,6 @@ function AddAccountflowItemModal({ platform, onClose, onSubmit }: AddAccountflow
               <option value="CHF">CHF</option>
               <option value="EUR">EUR</option>
               <option value="USD">USD</option>
-              <option value="BTC">BTC</option>
-              <option value="ETH">ETH</option>
             </select>
           </div>
 
@@ -1962,24 +2053,28 @@ function Cashflow() {
     }
   }, [accountflowMappings, uid, dataLoading])
 
-  const handleAddInflowItem = (group: InflowGroupName, data: { item: string; amountChf: number; currency: string; provider: string }) => {
+  const handleAddInflowItem = (group: InflowGroupName, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `inflow-${Date.now()}`
     const newItem: InflowItem = {
       id,
       item: data.item,
-      amountChf: data.amountChf,
+      amountChf: data.amountChf, // Converted to CHF for backward compatibility
+      amount: data.amount, // Original amount
+      currency: data.currency, // Original currency
       provider: data.provider,
       group,
     }
     setInflowItems(prev => [...prev, newItem])
   }
 
-  const handleAddOutflowItem = (group: OutflowGroupName, data: { item: string; amountChf: number; currency: string; receiver: string }) => {
+  const handleAddOutflowItem = (group: OutflowGroupName, data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `outflow-${Date.now()}`
     const newItem: OutflowItem = {
       id,
       item: data.item,
-      amountChf: data.amountChf,
+      amountChf: data.amountChf, // Converted to CHF for backward compatibility
+      amount: data.amount, // Original amount
+      currency: data.currency, // Original currency
       receiver: data.receiver,
       group,
     }
@@ -2000,18 +2095,18 @@ function Cashflow() {
     setAccountflowItems(prev => [...prev, newItem])
   }
 
-  const handleEditInflowItem = (id: string, data: { item: string; amountChf: number; currency: string; provider: string }) => {
+  const handleEditInflowItem = (id: string, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => {
     setInflowItems(prev => prev.map(item => 
       item.id === id 
-        ? { ...item, item: data.item, amountChf: data.amountChf, provider: data.provider }
+        ? { ...item, item: data.item, amountChf: data.amountChf, amount: data.amount, currency: data.currency, provider: data.provider }
         : item
     ))
   }
 
-  const handleEditOutflowItem = (id: string, data: { item: string; amountChf: number; currency: string; receiver: string }) => {
+  const handleEditOutflowItem = (id: string, data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => {
     setOutflowItems(prev => prev.map(item => 
       item.id === id 
-        ? { ...item, item: data.item, amountChf: data.amountChf, receiver: data.receiver }
+        ? { ...item, item: data.item, amountChf: data.amountChf, amount: data.amount, currency: data.currency, receiver: data.receiver }
         : item
     ))
   }
