@@ -137,7 +137,7 @@ function formatCHFTick(value: number): string {
 }
 
 function Dashboard() {
-  const [timeFrame, setTimeFrame] = useState<'YTD' | '1Year' | '5Year' | 'Max'>('Max')
+  const [timeFrame, setTimeFrame] = useState<'YTD' | '1M' | '3M' | '1Y' | '5Y' | 'MAX'>('MAX')
   const { baseCurrency, convert, exchangeRates } = useCurrency()
 
   // Load data from Firestore
@@ -553,13 +553,19 @@ function Dashboard() {
       case 'YTD':
         cutoffDate = new Date(now.getFullYear(), 0, 1)
         break
-      case '1Year':
+      case '1M':
+        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
+        break
+      case '3M':
+        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+        break
+      case '1Y':
         cutoffDate = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate())
         break
-      case '5Year':
+      case '5Y':
         cutoffDate = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
         break
-      case 'Max':
+      case 'MAX':
       default:
         cutoffDate = null
         break
@@ -769,13 +775,15 @@ function Dashboard() {
               <Heading level={2}>Net Worth Evolution</Heading>
               <select
                 value={timeFrame}
-                onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '1Year' | '5Year' | 'Max')}
+                onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '1M' | '3M' | '1Y' | '5Y' | 'MAX')}
                 className="bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text2 focus:outline-none focus:border-accent-blue"
               >
                 <option value="YTD">YTD</option>
-                <option value="1Year">1Year</option>
-                <option value="5Year">5Year</option>
-                <option value="Max">Max</option>
+                <option value="1M">1M</option>
+                <option value="3M">3M</option>
+                <option value="1Y">1Y</option>
+                <option value="5Y">5Y</option>
+                <option value="MAX">MAX</option>
               </select>
             </div>
           </div>
