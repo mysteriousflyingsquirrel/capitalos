@@ -11,12 +11,12 @@ import {
   restoreBackup,
 } from '../services/backupService'
 import { savePlatforms, loadPlatforms, saveCashflowAccountflowMappings, loadCashflowAccountflowMappings, type Platform } from '../services/storageService'
-import { getYearsWithCryptoActivity } from '../services/cryptoTaxReportService'
-import CryptoTaxReportModal from '../components/CryptoTaxReportModal'
+import { getYearsWithCryptoActivity, generateCryptoTaxReport } from '../services/cryptoTaxReportService'
+import { generateCryptoTaxReportPDF } from '../services/pdfService'
 
 function Settings() {
-  const { baseCurrency, exchangeRates, isLoading, error } = useCurrency()
-  const { uid } = useAuth()
+  const { baseCurrency, exchangeRates, isLoading, error, convert } = useCurrency()
+  const { uid, user } = useAuth()
   const [exportLoading, setExportLoading] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [exportSuccess, setExportSuccess] = useState(false)
@@ -29,9 +29,12 @@ function Settings() {
   const [editingPlatform, setEditingPlatform] = useState<Platform | null>(null)
   const [newPlatformName, setNewPlatformName] = useState('')
   const [platformError, setPlatformError] = useState<string | null>(null)
-  const [showCryptoTaxModal, setShowCryptoTaxModal] = useState(false)
-  const [checkingCryptoActivity, setCheckingCryptoActivity] = useState(false)
+  const [generatingTaxReport, setGeneratingTaxReport] = useState(false)
   const [showPlatformsList, setShowPlatformsList] = useState(false)
+  // Crypto tax report year selection
+  const [availableYears, setAvailableYears] = useState<number[]>([])
+  const [selectedYear, setSelectedYear] = useState<number | null>(null)
+  const [loadingYears, setLoadingYears] = useState(false)
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -41,21 +44,27 @@ function Settings() {
 
   // Report generation handlers
   const handleCryptoTaxReport = async () => {
-    setCheckingCryptoActivity(true)
+    if (!uid || !convert || !selectedYear) return
+    
+    setGeneratingTaxReport(true)
     try {
-      const years = await getYearsWithCryptoActivity(uid)
-      if (years.length === 0) {
-        // Show info message - no crypto activity
-        alert('Keine Krypto-Aktivität gefunden – es gibt noch keinen Tax-Report.')
-      } else {
-        // Open modal
-        setShowCryptoTaxModal(true)
+      // Generate the report using the selected year
+      const report = await generateCryptoTaxReport(selectedYear, uid, convert)
+      
+      if (!report) {
+        alert('Report could not be generated. Please try again later.')
+        return
       }
+      
+      // Generate and download PDF
+      const userName = user?.email || user?.displayName || undefined
+      generateCryptoTaxReportPDF(report, userName)
+      
     } catch (error) {
-      console.error('Failed to check crypto activity:', error)
-      alert('Fehler beim Prüfen der Krypto-Aktivität. Bitte später erneut versuchen.')
+      console.error('Failed to generate tax report:', error)
+      alert('Error generating tax report. Please try again later.')
     } finally {
-      setCheckingCryptoActivity(false)
+      setGeneratingTaxReport(false)
     }
   }
 
@@ -142,6 +151,26 @@ function Settings() {
 
 
   // Load platforms on mount
+  // Load available years for crypto tax report
+  useEffect(() => {
+    const loadYears = async () => {
+      if (!uid) return
+      setLoadingYears(true)
+      try {
+        const years = await getYearsWithCryptoActivity(uid)
+        setAvailableYears(years)
+        if (years.length > 0) {
+          setSelectedYear(years[0]) // Select most recent year by default
+        }
+      } catch (error) {
+        console.error('Failed to load years:', error)
+      } finally {
+        setLoadingYears(false)
+      }
+    }
+    loadYears()
+  }, [uid])
+
   useEffect(() => {
     const loadPlatformsData = async () => {
       setPlatformLoading(true)
@@ -310,16 +339,44 @@ function Settings() {
           <Heading level={2} className="mb-4">Reports</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
-            Generate tax reports based on your Capitalos data. These buttons will trigger server-side report generation in a future version.
+            Generate tax reports based on your Capitalos data. Select a tax year and generate a PDF report for your crypto transactions.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
+            {/* Year Selection */}
+            <div>
+              <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
+                Tax Year
+              </label>
+              {loadingYears ? (
+                <div className="text-text-muted text-[0.567rem] md:text-xs">Loading years...</div>
+              ) : (
+                <select
+                  value={selectedYear || ''}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                  disabled={availableYears.length === 0}
+                >
+                  {availableYears.length === 0 ? (
+                    <option value="">No years available</option>
+                  ) : (
+                    availableYears.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
+            </div>
+
+            {/* Generate Report Button */}
             <button
               onClick={handleCryptoTaxReport}
-              disabled={checkingCryptoActivity || !uid}
-              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={generatingTaxReport || !uid || !selectedYear || availableYears.length === 0}
+              className="w-full py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {checkingCryptoActivity ? 'Prüfe...' : 'Crypto Tax Report (CH)'}
+              {generatingTaxReport ? 'Generating PDF...' : 'Generate Crypto Tax Report (CH)'}
             </button>
           </div>
         </div>
@@ -550,11 +607,6 @@ function Settings() {
           </div>
         </div>
       </div>
-
-      {/* Crypto Tax Report Modal */}
-      {showCryptoTaxModal && (
-        <CryptoTaxReportModal onClose={() => setShowCryptoTaxModal(false)} />
-      )}
 
     </div>
   )

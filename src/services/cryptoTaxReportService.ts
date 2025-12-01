@@ -1,7 +1,6 @@
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
 import { calculateCoinAmount } from '../pages/NetWorth'
 import { loadNetWorthItems, loadNetWorthTransactions } from './storageService'
-import { loadSnapshots, type NetWorthSnapshot } from './snapshotService'
 import { fetchCoinPrice } from './coinGeckoService'
 import type { CurrencyCode } from '../lib/currency'
 
@@ -36,33 +35,22 @@ export interface CryptoTaxReport {
 
 /**
  * Get all years with crypto activity
- * Activity = at least one buy/sell transaction OR non-zero holding snapshot
+ * Activity = at least one buy/sell transaction (only transactions, not snapshots)
  */
 export async function getYearsWithCryptoActivity(uid?: string): Promise<number[]> {
-  const [items, transactions, snapshots] = await Promise.all([
+  const [items, transactions] = await Promise.all([
     loadNetWorthItems([], uid),
     loadNetWorthTransactions([], uid),
-    loadSnapshots(uid),
   ])
 
   const cryptoItems = items.filter(item => item.category === 'Crypto')
   const years = new Set<number>()
 
-  // Get years from transactions
+  // Get years from transactions only (buy/sell transactions on crypto items)
   transactions.forEach(tx => {
     const item = cryptoItems.find(i => i.id === tx.itemId)
     if (item && (tx.side === 'buy' || tx.side === 'sell')) {
       const date = new Date(tx.date)
-      if (!isNaN(date.getTime())) {
-        years.add(date.getFullYear())
-      }
-    }
-  })
-
-  // Get years from snapshots with non-zero crypto holdings
-  snapshots.forEach(snapshot => {
-    if (snapshot.categories.Crypto > 0) {
-      const date = new Date(snapshot.timestamp)
       if (!isNaN(date.getTime())) {
         years.add(date.getFullYear())
       }
@@ -170,10 +158,9 @@ export async function generateCryptoTaxReport(
   uid: string | undefined,
   convert: (amount: number, from: CurrencyCode) => number
 ): Promise<CryptoTaxReport> {
-  const [items, transactions, snapshots] = await Promise.all([
+  const [items, transactions] = await Promise.all([
     loadNetWorthItems([], uid),
     loadNetWorthTransactions([], uid),
-    loadSnapshots(uid),
   ])
 
   const cryptoItems = items.filter(item => item.category === 'Crypto')
