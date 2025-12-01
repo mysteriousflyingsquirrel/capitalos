@@ -15,8 +15,6 @@ import {
   type Platform,
 } from './storageService'
 import { clearAllUserData, loadUserSettings, saveUserSettings } from './firestoreService'
-import { loadSnapshots, saveSnapshots, type NetWorthSnapshot } from './snapshotService'
-import { loadCashflowSnapshots, saveCashflowSnapshots, type CashflowSnapshot } from './cashflowSnapshotService'
 
 // Backup schema version
 const BACKUP_SCHEMA_VERSION = '1.0.0'
@@ -31,12 +29,11 @@ export interface BackupData {
     cashflowInflowItems: unknown[]
     cashflowOutflowItems: unknown[]
     cashflowAccountflowMappings: unknown[]
-    snapshots: unknown[]
-    cashflowSnapshots: unknown[]
     platforms: unknown[]
     settings: { baseCurrency: string } | null
   }
 }
+
 
 /**
  * Creates a backup object from all user data in Firestore
@@ -48,8 +45,6 @@ export async function createBackup(uid: string): Promise<BackupData> {
     cashflowInflowItems,
     cashflowOutflowItems,
     cashflowAccountflowMappings,
-    snapshots,
-    cashflowSnapshots,
     platforms,
     settings,
   ] = await Promise.all([
@@ -58,8 +53,6 @@ export async function createBackup(uid: string): Promise<BackupData> {
     loadCashflowInflowItems([], uid),
     loadCashflowOutflowItems([], uid),
     loadCashflowAccountflowMappings([], uid),
-    loadSnapshots(uid),
-    loadCashflowSnapshots(uid),
     loadPlatforms([], uid),
     loadUserSettings(uid),
   ])
@@ -74,13 +67,12 @@ export async function createBackup(uid: string): Promise<BackupData> {
       cashflowInflowItems,
       cashflowOutflowItems,
       cashflowAccountflowMappings,
-      snapshots,
-      cashflowSnapshots,
       platforms,
       settings,
     },
   }
 }
+
 
 /**
  * Validates a backup object structure
@@ -112,18 +104,12 @@ export function validateBackup(backup: unknown): backup is BackupData {
     'cashflowInflowItems',
     'cashflowOutflowItems',
     'cashflowAccountflowMappings',
-    'snapshots',
   ]
 
   for (const field of requiredDataFields) {
     if (!Array.isArray(data[field])) {
       return false
     }
-  }
-
-  // cashflowSnapshots is optional for backward compatibility
-  if (data.cashflowSnapshots !== undefined && !Array.isArray(data.cashflowSnapshots)) {
-    return false
   }
 
   // platforms is optional for backward compatibility
@@ -186,8 +172,6 @@ export async function restoreBackup(
       backup.data.cashflowAccountflowMappings as { id: string }[],
       currentUid
     ),
-    saveSnapshots(backup.data.snapshots as NetWorthSnapshot[], currentUid),
-    saveCashflowSnapshots((backup.data.cashflowSnapshots as CashflowSnapshot[]) || [], currentUid),
     savePlatforms((backup.data.platforms as Platform[]) || [], currentUid),
     // Only restore settings if they exist in the backup
     backup.data.settings
@@ -195,6 +179,7 @@ export async function restoreBackup(
       : Promise.resolve(),
   ])
 }
+
 
 /**
  * Downloads a backup as a JSON file
@@ -217,6 +202,7 @@ export function downloadBackup(backup: BackupData): void {
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
 }
+
 
 /**
  * Reads a backup file from a File object
@@ -242,4 +228,5 @@ export async function readBackupFile(file: File): Promise<BackupData> {
     reader.readAsText(file)
   })
 }
+
 

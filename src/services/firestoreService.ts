@@ -35,6 +35,7 @@ export async function saveDocuments<T extends { id: string }>(
   collectionName: string,
   items: T[]
 ): Promise<void> {
+  console.log(`[saveDocuments] Saving ${items.length} items to ${collectionName} for uid: ${uid}`)
   const collectionPath = getUserCollectionPath(uid, collectionName)
   const BATCH_SIZE = 500 // Firestore batch limit
 
@@ -43,10 +44,14 @@ export async function saveDocuments<T extends { id: string }>(
     const q = query(collection(db, collectionPath))
     const querySnapshot = await getDocs(q)
     
-    if (querySnapshot.empty) return
+    if (querySnapshot.empty) {
+      console.log(`[saveDocuments] Collection ${collectionName} is already empty`)
+      return
+    }
     
     // Delete in batches
     const docs = querySnapshot.docs
+    console.log(`[saveDocuments] Deleting ${docs.length} existing documents from ${collectionName}`)
     for (let i = 0; i < docs.length; i += BATCH_SIZE) {
       const chunk = docs.slice(i, i + BATCH_SIZE)
       const batch = writeBatch(db)
@@ -57,6 +62,7 @@ export async function saveDocuments<T extends { id: string }>(
       
       await batch.commit()
     }
+    console.log(`[saveDocuments] Successfully deleted all documents from ${collectionName}`)
     return
   }
 
@@ -66,8 +72,11 @@ export async function saveDocuments<T extends { id: string }>(
   const existingIds = new Set(querySnapshot.docs.map(d => d.id))
   const newIds = new Set(items.map(item => item.id))
   
+  console.log(`[saveDocuments] Existing IDs: ${existingIds.size}, New IDs: ${newIds.size}`)
+  
   // Find IDs to delete (exist in Firestore but not in new items)
   const idsToDelete = Array.from(existingIds).filter(id => !newIds.has(id))
+  console.log(`[saveDocuments] IDs to delete: ${idsToDelete.length}`)
 
   // Process saves in chunks of 500
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
@@ -80,10 +89,12 @@ export async function saveDocuments<T extends { id: string }>(
     })
 
     await batch.commit()
+    console.log(`[saveDocuments] Saved chunk ${i / BATCH_SIZE + 1} (${chunk.length} items) to ${collectionName}`)
   }
 
   // Delete removed documents in batches
   if (idsToDelete.length > 0) {
+    console.log(`[saveDocuments] Deleting ${idsToDelete.length} removed documents from ${collectionName}`)
     for (let i = 0; i < idsToDelete.length; i += BATCH_SIZE) {
       const chunk = idsToDelete.slice(i, i + BATCH_SIZE)
       const batch = writeBatch(db)
@@ -95,7 +106,10 @@ export async function saveDocuments<T extends { id: string }>(
       
       await batch.commit()
     }
+    console.log(`[saveDocuments] Successfully deleted removed documents from ${collectionName}`)
   }
+  
+  console.log(`[saveDocuments] Successfully saved all ${items.length} items to ${collectionName}`)
 }
 
 // Generic function to load all documents from a collection
@@ -103,11 +117,17 @@ export async function loadDocuments<T>(
   uid: string,
   collectionName: string
 ): Promise<T[]> {
+  console.log(`[loadDocuments] Loading from ${collectionName} for uid: ${uid}`)
   const collectionPath = getUserCollectionPath(uid, collectionName)
   const q = query(collection(db, collectionPath))
   const querySnapshot = await getDocs(q)
   
-  return querySnapshot.docs.map((doc) => doc.data() as T)
+  const items = querySnapshot.docs.map((doc) => doc.data() as T)
+  console.log(`[loadDocuments] Loaded ${items.length} items from ${collectionName}`)
+  if (items.length > 0) {
+    console.log(`[loadDocuments] Sample item from ${collectionName}:`, items[0])
+  }
+  return items
 }
 
 // Generic function to delete all documents in a collection

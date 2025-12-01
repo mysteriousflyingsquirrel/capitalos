@@ -25,15 +25,6 @@ import {
   loadCashflowInflowItems,
   loadCashflowOutflowItems,
 } from '../services/storageService'
-import {
-  loadSnapshots,
-  type NetWorthSnapshot,
-} from '../services/snapshotService'
-import {
-  loadCashflowSnapshots,
-  takeCashflowSnapshotForCurrentMonthIfNeeded,
-  type CashflowSnapshot,
-} from '../services/cashflowSnapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
 import { calculateBalanceChf, calculateCoinAmount } from './NetWorth'
@@ -57,13 +48,6 @@ interface NetWorthDataPoint {
 interface AssetAllocationItem {
   name: string
   value: number
-}
-
-interface CashflowDataPoint {
-  month: string
-  inflow: number
-  outflow: number
-  spare: number
 }
 
 interface KpiCardProps {
@@ -198,54 +182,6 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netWorthItems]) // Re-fetch when crypto items change
 
-  // Load snapshots from Firestore
-  const [snapshots, setSnapshots] = useState<NetWorthSnapshot[]>([])
-  
-  useEffect(() => {
-    if (uid) {
-      loadSnapshots(uid).then(setSnapshots)
-    } else {
-      loadSnapshots().then(setSnapshots)
-    }
-  }, [uid])
-
-  // Load cashflow snapshots
-  const [cashflowSnapshots, setCashflowSnapshots] = useState<CashflowSnapshot[]>([])
-  
-  useEffect(() => {
-    if (uid) {
-      loadCashflowSnapshots(uid).then(setCashflowSnapshots)
-    } else {
-      loadCashflowSnapshots().then(setCashflowSnapshots)
-    }
-  }, [uid])
-
-  // Create cashflow snapshot for current month if needed
-  useEffect(() => {
-    if (!uid) return
-    
-    // Only run once after data is loaded, use a ref to prevent multiple runs
-    let isMounted = true
-    
-    takeCashflowSnapshotForCurrentMonthIfNeeded(
-      monthlyInflowChf,
-      monthlyOutflowChf,
-      monthlySpareChangeChf,
-      uid
-    ).then((newSnapshot) => {
-      if (isMounted && newSnapshot) {
-        // Reload cashflow snapshots after creating a new one
-        loadCashflowSnapshots(uid).then(setCashflowSnapshots).catch(console.error)
-      }
-    }).catch((error) => {
-      console.error('Failed to create cashflow snapshot:', error)
-    })
-    
-    return () => {
-      isMounted = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid]) // Only run when uid changes, not on every data change
 
   // Calculate total net worth from actual data
   const totalNetWorthChf = useMemo(() => {
@@ -278,70 +214,74 @@ function Dashboard() {
 
   const monthlySpareChangeChf = monthlyInflowChf - monthlyOutflowChf
 
-  // Calculate monthly PnL (difference between current net worth and last snapshot)
+  // Helper function to calculate net worth at a specific date from transactions
+  const calculateNetWorthAtDate = useMemo(() => {
+    return (targetDate: Date): number => {
+      // Filter transactions up to target date
+      const transactionsUpToDate = transactions.filter((tx: NetWorthTransaction) => {
+        const txDate = new Date(tx.date)
+        return txDate <= targetDate
+      })
+
+      return netWorthItems.reduce((sum: number, item: NetWorthItem) => {
+        if (item.category === 'Crypto') {
+          // For Crypto: calculate coin amount from filtered transactions, use current price
+          const coinAmount = calculateCoinAmount(item.id, transactionsUpToDate)
+          const ticker = item.name.trim().toUpperCase()
+          const currentPriceUsd = cryptoPrices[ticker] || 0
+          if (currentPriceUsd > 0) {
+            return sum + convert(coinAmount * currentPriceUsd, 'USD')
+          }
+          // Fallback to transaction-based calculation
+          return sum + calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
+        }
+        // For non-Crypto items, balance is already in CHF
+        return sum + calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
+      }, 0)
+    }
+  }, [netWorthItems, transactions, cryptoPrices, convert])
+
+  // Calculate monthly PnL (difference between current net worth and previous month end)
   const monthlyPnLChf = useMemo(() => {
-    if (snapshots.length === 0) return 0
-    const lastSnapshot = snapshots[snapshots.length - 1]
-    return totalNetWorthChf - lastSnapshot.total
-  }, [snapshots, totalNetWorthChf])
+    const now = new Date()
+    const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+    lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+    
+    const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+    return totalNetWorthChf - previousMonthNetWorth
+  }, [totalNetWorthChf, calculateNetWorthAtDate])
 
   // Calculate monthly PnL percentage
   const monthlyPnLPercentage = useMemo(() => {
-    if (snapshots.length === 0) return 0
-    const lastSnapshot = snapshots[snapshots.length - 1]
-    if (lastSnapshot.total === 0) return 0
-    return ((totalNetWorthChf - lastSnapshot.total) / lastSnapshot.total) * 100
-  }, [snapshots, totalNetWorthChf])
+    const now = new Date()
+    const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+    lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+    
+    const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+    if (previousMonthNetWorth === 0) return 0
+    return ((totalNetWorthChf - previousMonthNetWorth) / previousMonthNetWorth) * 100
+  }, [totalNetWorthChf, calculateNetWorthAtDate])
 
   // Calculate Year-to-Date (YTD) PnL
   const ytdPnLChf = useMemo(() => {
-    if (snapshots.length === 0) return 0
     const currentYear = new Date().getFullYear()
-    // Find the first snapshot of the current year (or the last snapshot before the year started)
-    const firstSnapshotOfYear = snapshots.find(snapshot => {
-      const snapshotDate = new Date(snapshot.date)
-      return snapshotDate.getFullYear() === currentYear
-    })
+    const firstDayOfYear = new Date(currentYear, 0, 1)
+    firstDayOfYear.setHours(0, 0, 0, 0)
     
-    // If no snapshot found for current year, use the last snapshot before the year
-    if (!firstSnapshotOfYear) {
-      const snapshotsBeforeYear = snapshots.filter(snapshot => {
-        const snapshotDate = new Date(snapshot.date)
-        return snapshotDate.getFullYear() < currentYear
-      })
-      if (snapshotsBeforeYear.length === 0) return 0
-      const lastSnapshotBeforeYear = snapshotsBeforeYear[snapshotsBeforeYear.length - 1]
-      return totalNetWorthChf - lastSnapshotBeforeYear.total
-    }
-    
-    return totalNetWorthChf - firstSnapshotOfYear.total
-  }, [snapshots, totalNetWorthChf])
+    const yearStartNetWorth = calculateNetWorthAtDate(firstDayOfYear)
+    return totalNetWorthChf - yearStartNetWorth
+  }, [totalNetWorthChf, calculateNetWorthAtDate])
 
   // Calculate YTD PnL percentage
   const ytdPnLPercentage = useMemo(() => {
-    if (snapshots.length === 0) return 0
     const currentYear = new Date().getFullYear()
-    const firstSnapshotOfYear = snapshots.find(snapshot => {
-      const snapshotDate = new Date(snapshot.date)
-      return snapshotDate.getFullYear() === currentYear
-    })
+    const firstDayOfYear = new Date(currentYear, 0, 1)
+    firstDayOfYear.setHours(0, 0, 0, 0)
     
-    let baseTotal = 0
-    if (!firstSnapshotOfYear) {
-      const snapshotsBeforeYear = snapshots.filter(snapshot => {
-        const snapshotDate = new Date(snapshot.date)
-        return snapshotDate.getFullYear() < currentYear
-      })
-      if (snapshotsBeforeYear.length === 0) return 0
-      const lastSnapshotBeforeYear = snapshotsBeforeYear[snapshotsBeforeYear.length - 1]
-      baseTotal = lastSnapshotBeforeYear.total
-    } else {
-      baseTotal = firstSnapshotOfYear.total
-    }
-    
-    if (baseTotal === 0) return 0
-    return ((totalNetWorthChf - baseTotal) / baseTotal) * 100
-  }, [snapshots, totalNetWorthChf])
+    const yearStartNetWorth = calculateNetWorthAtDate(firstDayOfYear)
+    if (yearStartNetWorth === 0) return 0
+    return ((totalNetWorthChf - yearStartNetWorth) / yearStartNetWorth) * 100
+  }, [totalNetWorthChf, calculateNetWorthAtDate])
 
   // Convert values from CHF to baseCurrency
   const totalNetWorthConverted = convert(totalNetWorthChf, 'CHF')
@@ -441,66 +381,10 @@ function Dashboard() {
     }))
   }, [outflowItems])
 
-  // Generate net worth evolution data from snapshots + current value
+  // Generate net worth evolution data from transactions
   const netWorthData = useMemo(() => {
-    // Calculate cutoff date based on timeframe
-    const now = new Date()
-    let cutoffDate: Date | null = null
-
-    switch (timeFrame) {
-      case 'YTD':
-        // Year to date: from January 1st of current year
-        cutoffDate = new Date(now.getFullYear(), 0, 1)
-        break
-      case '1Year':
-        // Last 12 months
-        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate())
-        break
-      case '5Year':
-        // Last 5 years
-        cutoffDate = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
-        break
-      case 'Max':
-      default:
-        // All data (no cutoff)
-        cutoffDate = null
-        break
-    }
-
-    // Filter snapshots based on timeframe
-    const filteredSnapshots = cutoffDate
-      ? snapshots.filter(snapshot => new Date(snapshot.date) >= cutoffDate)
-      : snapshots
-
-    // Convert snapshots to chart data format
-    const chartData = filteredSnapshots.map(snapshot => {
-      const date = new Date(snapshot.date)
-      const month = date.toLocaleString('en-US', { month: 'short', year: 'numeric' })
-      
-      return {
-        month,
-        'Total Net Worth': convert(snapshot.total, 'CHF'),
-        'Cash': convert(snapshot.categories['Cash'], 'CHF'),
-        'Bank Accounts': convert(snapshot.categories['Bank Accounts'], 'CHF'),
-        'Funds': convert(snapshot.categories['Funds'], 'CHF'),
-        'Stocks': convert(snapshot.categories['Stocks'], 'CHF'),
-        'Commodities': convert(snapshot.categories['Commodities'], 'CHF'),
-        'Crypto': convert(snapshot.categories['Crypto'], 'CHF'),
-        'Real Estate': convert(snapshot.categories['Real Estate'], 'CHF'),
-        'Inventory': convert(snapshot.categories['Inventory'], 'CHF'),
-      }
-    })
-
-    // Add current state as the next month after the last snapshot
-    if (filteredSnapshots.length > 0) {
-      const lastSnapshot = filteredSnapshots[filteredSnapshots.length - 1]
-      const lastDate = new Date(lastSnapshot.date)
-      
-      // Calculate the next month after the last snapshot
-      const nextMonth = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, 1)
-      const nextMonthLabel = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' })
-      
-      // Calculate current values by category
+    if (transactions.length === 0) {
+      // If no transactions, just show current state
       const categoryTotals: Record<NetWorthCategory, number> = {
         'Cash': 0,
         'Bank Accounts': 0,
@@ -515,30 +399,23 @@ function Dashboard() {
       netWorthItems.forEach((item: NetWorthItem) => {
         let balance: number
         if (item.category === 'Crypto') {
-          // For Crypto: use current price * coin amount, convert USD to CHF
           const coinAmount = calculateCoinAmount(item.id, transactions)
           const ticker = item.name.trim().toUpperCase()
           const currentPriceUsd = cryptoPrices[ticker] || 0
           if (currentPriceUsd > 0) {
-            // Convert USD to CHF for balance
             balance = convert(coinAmount * currentPriceUsd, 'USD')
           } else {
-            // Fallback to transaction-based calculation if price not available
-            balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+            balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
           }
         } else {
-          // For non-Crypto items, balance is already in CHF
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
         }
         categoryTotals[item.category] += balance
       })
 
-      const currentTotal = totalNetWorthChf
-
-      // Add current state as the next month
-      chartData.push({
-        month: nextMonthLabel,
-        'Total Net Worth': convert(currentTotal, 'CHF'),
+      return [{
+        month: new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+        'Total Net Worth': convert(totalNetWorthChf, 'CHF'),
         'Cash': convert(categoryTotals['Cash'], 'CHF'),
         'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
         'Funds': convert(categoryTotals['Funds'], 'CHF'),
@@ -547,87 +424,141 @@ function Dashboard() {
         'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
         'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
         'Inventory': convert(categoryTotals['Inventory'], 'CHF'),
-      })
+      }]
     }
 
-    return chartData
-  }, [snapshots, netWorthItems, transactions, totalNetWorthChf, cryptoPrices, convert, timeFrame])
+    // Get all unique month-end dates from transactions
+    const monthEnds = new Set<string>()
+    transactions.forEach((tx: NetWorthTransaction) => {
+      const txDate = new Date(tx.date)
+      // Get last day of the month for this transaction
+      const lastDayOfMonth = new Date(txDate.getFullYear(), txDate.getMonth() + 1, 0)
+      monthEnds.add(lastDayOfMonth.toISOString().split('T')[0])
+    })
 
-  // Generate cashflow data from snapshots + current value
-  const cashflowData = useMemo(() => {
-    // Ensure cashflowSnapshots is an array
-    const snapshots = Array.isArray(cashflowSnapshots) ? cashflowSnapshots : []
-    
     // Calculate cutoff date based on timeframe
     const now = new Date()
     let cutoffDate: Date | null = null
 
     switch (timeFrame) {
       case 'YTD':
-        // Year to date: from January 1st of current year
         cutoffDate = new Date(now.getFullYear(), 0, 1)
         break
       case '1Year':
-        // Last 12 months
         cutoffDate = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate())
         break
       case '5Year':
-        // Last 5 years
         cutoffDate = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
         break
       case 'Max':
       default:
-        // All data (no cutoff)
         cutoffDate = null
         break
     }
 
-    // Filter snapshots based on timeframe
-    const filteredSnapshots = cutoffDate
-      ? snapshots.filter(snapshot => new Date(snapshot.date) >= cutoffDate)
-      : snapshots
+    // Filter month ends based on timeframe and sort
+    const sortedMonthEnds = Array.from(monthEnds)
+      .map(dateStr => new Date(dateStr))
+      .filter(date => !cutoffDate || date >= cutoffDate)
+      .sort((a, b) => a.getTime() - b.getTime())
 
-    // Convert snapshots to chart data format
-    const chartData = filteredSnapshots.map(snapshot => {
-      const date = new Date(snapshot.date)
-      const month = date.toLocaleString('en-US', { month: 'short', year: 'numeric' })
-      
+    // Calculate net worth for each month end
+    const chartData = sortedMonthEnds.map(monthEnd => {
+      const transactionsUpToDate = transactions.filter((tx: NetWorthTransaction) => {
+        const txDate = new Date(tx.date)
+        return txDate <= monthEnd
+      })
+
+      const categoryTotals: Record<NetWorthCategory, number> = {
+        'Cash': 0,
+        'Bank Accounts': 0,
+        'Funds': 0,
+        'Stocks': 0,
+        'Commodities': 0,
+        'Crypto': 0,
+        'Real Estate': 0,
+        'Inventory': 0,
+      }
+
+      netWorthItems.forEach((item: NetWorthItem) => {
+        let balance: number
+        if (item.category === 'Crypto') {
+          const coinAmount = calculateCoinAmount(item.id, transactionsUpToDate)
+          const ticker = item.name.trim().toUpperCase()
+          const currentPriceUsd = cryptoPrices[ticker] || 0
+          if (currentPriceUsd > 0) {
+            balance = convert(coinAmount * currentPriceUsd, 'USD')
+          } else {
+            balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
+          }
+        } else {
+          balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
+        }
+        categoryTotals[item.category] += balance
+      })
+
+      const total = Object.values(categoryTotals).reduce((sum, val) => sum + val, 0)
+      const month = monthEnd.toLocaleString('en-US', { month: 'short', year: 'numeric' })
+
       return {
         month,
-        inflow: convert(snapshot.inflow, 'CHF'),
-        outflow: convert(snapshot.outflow, 'CHF'),
-        spare: convert(snapshot.spare, 'CHF'),
+        'Total Net Worth': convert(total, 'CHF'),
+        'Cash': convert(categoryTotals['Cash'], 'CHF'),
+        'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
+        'Funds': convert(categoryTotals['Funds'], 'CHF'),
+        'Stocks': convert(categoryTotals['Stocks'], 'CHF'),
+        'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
+        'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
+        'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
+        'Inventory': convert(categoryTotals['Inventory'], 'CHF'),
       }
     })
 
-    // Add current state as the next month after the last snapshot
-    if (filteredSnapshots.length > 0) {
-      const lastSnapshot = filteredSnapshots[filteredSnapshots.length - 1]
-      const lastDate = new Date(lastSnapshot.date)
-      
-      // Calculate the next month after the last snapshot
-      const nextMonth = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, 1)
-      const nextMonthLabel = nextMonth.toLocaleString('en-US', { month: 'short', year: 'numeric' })
-      
-      // Add current state as the next month
-      chartData.push({
-        month: nextMonthLabel,
-        inflow: monthlyInflowConverted,
-        outflow: monthlyOutflowConverted,
-        spare: convert(monthlySpareChangeChf, 'CHF'),
-      })
-    } else if (cashflowSnapshots.length === 0) {
-      // If no snapshots, show current month
-      chartData.push({
-        month: new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' }),
-        inflow: monthlyInflowConverted,
-        outflow: monthlyOutflowConverted,
-        spare: convert(monthlySpareChangeChf, 'CHF'),
-      })
+    // Add current state
+    const categoryTotals: Record<NetWorthCategory, number> = {
+      'Cash': 0,
+      'Bank Accounts': 0,
+      'Funds': 0,
+      'Stocks': 0,
+      'Commodities': 0,
+      'Crypto': 0,
+      'Real Estate': 0,
+      'Inventory': 0,
     }
 
+    netWorthItems.forEach((item: NetWorthItem) => {
+      let balance: number
+      if (item.category === 'Crypto') {
+        const coinAmount = calculateCoinAmount(item.id, transactions)
+        const ticker = item.name.trim().toUpperCase()
+        const currentPriceUsd = cryptoPrices[ticker] || 0
+        if (currentPriceUsd > 0) {
+          balance = convert(coinAmount * currentPriceUsd, 'USD')
+        } else {
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+        }
+      } else {
+        balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+      }
+      categoryTotals[item.category] += balance
+    })
+
+    chartData.push({
+      month: new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+      'Total Net Worth': convert(totalNetWorthChf, 'CHF'),
+      'Cash': convert(categoryTotals['Cash'], 'CHF'),
+      'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
+      'Funds': convert(categoryTotals['Funds'], 'CHF'),
+      'Stocks': convert(categoryTotals['Stocks'], 'CHF'),
+      'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
+      'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
+      'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
+      'Inventory': convert(categoryTotals['Inventory'], 'CHF'),
+    })
+
     return chartData
-  }, [cashflowSnapshots, monthlyInflowConverted, monthlyOutflowConverted, monthlySpareChangeChf, convert, timeFrame])
+  }, [netWorthItems, transactions, totalNetWorthChf, cryptoPrices, convert, timeFrame])
+
 
   return (
     <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
@@ -967,86 +898,6 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Fourth Row: Monthly Cashflow (Full Width) */}
-        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
-          <div className="mb-6 pb-4 border-b border-border-strong">
-            <div className="flex items-center justify-between">
-              <Heading level={2}>Monthly Cashflow</Heading>
-              <select
-                value={timeFrame}
-                onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '1Year' | '5Year' | 'Max')}
-                className="bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text2 focus:outline-none focus:border-accent-blue"
-              >
-                <option value="YTD">YTD</option>
-                <option value="1Year">1Year</option>
-                <option value="5Year">5Year</option>
-                <option value="Max">Max</option>
-              </select>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={cashflowData}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke={CHART_COLORS.muted1}
-                opacity={0.2}
-              />
-              <XAxis
-                dataKey="month"
-                stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
-              />
-              <YAxis
-                stroke={CHART_COLORS.muted1}
-                tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
-                tickFormatter={formatCurrencyTick}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #E5E7EB',
-                  borderRadius: '12px',
-                  color: '#111827',
-                  fontSize: '0.648rem',
-                  fontWeight: '400',
-                }}
-                formatter={(value: number) => formatCurrencyValue(value)}
-              />
-              <Legend
-                wrapperStyle={{ color: '#8B8F99', fontSize: '0.72rem', fontWeight: '400' }}
-                iconType="line"
-                className="text2"
-              />
-              <Line
-                type="monotone"
-                dataKey="inflow"
-                stroke={CHART_COLORS.success}
-                strokeWidth={3}
-                dot={false}
-                activeDot={false}
-                name="Inflow"
-              />
-              <Line
-                type="monotone"
-                dataKey="outflow"
-                stroke={CHART_COLORS.danger}
-                strokeWidth={3}
-                dot={false}
-                activeDot={false}
-                name="Outflow"
-              />
-              <Line
-                type="monotone"
-                dataKey="spare"
-                stroke={CHART_COLORS.gold}
-                strokeWidth={3}
-                dot={false}
-                activeDot={false}
-                name="Spare Change"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
 
       </div>
     </div>

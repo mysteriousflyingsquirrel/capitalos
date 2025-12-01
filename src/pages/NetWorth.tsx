@@ -18,7 +18,7 @@ import {
 } from '../services/storageService'
 
 // TypeScript types
-type NetWorthCategory =
+export type NetWorthCategory =
   | 'Cash'
   | 'Bank Accounts'
   | 'Funds'
@@ -533,6 +533,7 @@ function NetWorth() {
   const [transactions, setTransactions] = useState<NetWorthTransaction[]>([])
   const [platforms, setPlatforms] = useState<Platform[]>([])
   const [dataLoading, setDataLoading] = useState(true)
+  const isManuallySaving = useRef(false)
 
   // Store current crypto prices (ticker -> USD price)
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
@@ -573,6 +574,7 @@ function NetWorth() {
           loadNetWorthTransactions(initialMockTransactions, uid),
           loadPlatforms(defaultPlatforms, uid),
         ])
+        console.log('Loaded transactions from Firestore:', txs.length, txs)
         setNetWorthItems(items)
         setTransactions(txs)
         setPlatforms(loadedPlatforms)
@@ -595,9 +597,28 @@ function NetWorth() {
     }
   }, [netWorthItems, uid, dataLoading])
 
+  // Helper function to remove undefined values from an object (Firestore doesn't allow undefined)
+  const removeUndefined = <T extends Record<string, any>>(obj: T): Partial<T> => {
+    const cleaned: Partial<T> = {}
+    Object.keys(obj).forEach(key => {
+      if (obj[key] !== undefined) {
+        cleaned[key as keyof T] = obj[key]
+      }
+    })
+    return cleaned
+  }
+
   useEffect(() => {
+    // Skip if we're manually saving to avoid race conditions
+    if (isManuallySaving.current) {
+      console.log('Skipping useEffect save - manual save in progress')
+      return
+    }
     if (uid && !dataLoading) {
-      saveNetWorthTransactions(transactions, uid).catch((error) => {
+      console.log('useEffect: Saving transactions (count:', transactions.length, ')')
+      // Clean all transactions before saving (remove undefined values)
+      const cleanedTransactions = transactions.map(tx => removeUndefined(tx))
+      saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
         console.error('Failed to save transactions:', error)
       })
     }
@@ -736,7 +757,18 @@ function NetWorth() {
         ...transactionData,
       }
       
-      setTransactions((prev) => [...prev, newTransaction])
+      setTransactions((prev) => {
+        const updated = [...prev, newTransaction]
+        // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
+        if (uid) {
+          // Clean all transactions before saving (remove undefined values)
+          const cleanedTransactions = updated.map(tx => removeUndefined(tx) as NetWorthTransaction)
+          saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
+            console.error('Failed to save transaction when adding item:', error)
+          })
+        }
+        return updated
+      })
     }
   }
 
@@ -755,7 +787,38 @@ function NetWorth() {
       ...transaction,
     }
 
-    setTransactions((prev) => [...prev, newTransaction])
+    // Remove undefined values before saving (Firestore doesn't allow undefined)
+    const cleanedTransaction = removeUndefined(newTransaction)
+
+    console.log('Saving transaction:', cleanedTransaction)
+    console.log('UID:', uid)
+
+    // Update state (keep original with undefined for local state)
+    isManuallySaving.current = true
+    setTransactions((prev) => {
+      const updated = [...prev, newTransaction]
+      // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
+      if (uid) {
+        // Clean all transactions before saving (remove undefined values)
+        const cleanedTransactions = updated.map(tx => removeUndefined(tx))
+        console.log('Calling saveNetWorthTransactions with', cleanedTransactions.length, 'transactions')
+        saveNetWorthTransactions(cleanedTransactions, uid)
+          .then(() => {
+            console.log('Successfully saved transactions to Firestore')
+            isManuallySaving.current = false
+          })
+          .catch((error) => {
+            console.error('Failed to save transaction:', error)
+            console.error('Error details:', error.message, error.stack)
+            isManuallySaving.current = false
+          })
+      } else {
+        console.warn('Cannot save transaction: uid is not available')
+        isManuallySaving.current = false
+      }
+      return updated
+    })
+    
     // Only clear transactionItemId if we're in the Add Transaction modal context
     // (not when called from Add Item modal)
     if (transactionItemId) {
@@ -769,14 +832,34 @@ function NetWorth() {
   }
 
   const handleUpdateTransaction = (transactionId: string, transaction: Omit<NetWorthTransaction, 'id'>) => {
-    setTransactions((prev) =>
-      prev.map((tx) => (tx.id === transactionId ? { ...tx, ...transaction } : tx))
-    )
+      setTransactions((prev) => {
+        const updated = prev.map((tx) => (tx.id === transactionId ? { ...tx, ...transaction } : tx))
+        // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
+        if (uid) {
+          // Clean all transactions before saving (remove undefined values)
+          const cleanedTransactions = updated.map(tx => removeUndefined(tx) as NetWorthTransaction)
+          saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
+            console.error('Failed to save updated transaction:', error)
+          })
+        }
+        return updated
+      })
     setEditingTransactionId(null)
   }
 
   const handleDeleteTransaction = (transactionId: string) => {
-    setTransactions((prev) => prev.filter((tx) => tx.id !== transactionId))
+    setTransactions((prev) => {
+      const updated = prev.filter((tx) => tx.id !== transactionId)
+      // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
+      if (uid) {
+        // Clean all transactions before saving (remove undefined values)
+        const cleanedTransactions = updated.map(tx => removeUndefined(tx) as NetWorthTransaction)
+        saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
+          console.error('Failed to save after deleting transaction:', error)
+        })
+      }
+      return updated
+    })
   }
 
   const handleShowMenu = (itemId: string, buttonElement: HTMLButtonElement) => {
@@ -786,7 +869,18 @@ function NetWorth() {
   const handleRemoveItem = (itemId: string) => {
     if (window.confirm('Are you sure you want to remove this item? All associated transactions will also be removed.')) {
       setNetWorthItems((prev) => prev.filter(i => i.id !== itemId))
-      setTransactions((prev) => prev.filter(tx => tx.itemId !== itemId))
+      setTransactions((prev) => {
+        const updated = prev.filter(tx => tx.itemId !== itemId)
+        // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
+        if (uid) {
+          // Clean all transactions before saving (remove undefined values)
+          const cleanedTransactions = updated.map(tx => removeUndefined(tx) as NetWorthTransaction)
+          saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
+            console.error('Failed to save after removing item:', error)
+          })
+        }
+        return updated
+      })
     }
   }
 
@@ -867,6 +961,7 @@ function NetWorth() {
         {transactionItemId && (
           <AddTransactionModal
             item={netWorthItems.find(i => i.id === transactionItemId)!}
+            transactions={transactions}
             onClose={() => setTransactionItemId(null)}
             onSave={handleSaveTransaction}
           />
@@ -905,6 +1000,7 @@ function NetWorth() {
             <AddTransactionModal
               item={item}
               transaction={transaction}
+              transactions={transactions}
               onClose={() => setEditingTransactionId(null)}
               onSave={(updatedTransaction) => {
                 handleUpdateTransaction(editingTransactionId, updatedTransaction)
@@ -936,7 +1032,11 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState<CurrencyCode>('CHF')
   const [platform, setPlatform] = useState('Physical')
-  const [date, setDate] = useState(getCurrentDateFormatted())
+  // For date input, use YYYY-MM-DD format (HTML5 date input format)
+  const [date, setDate] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  })
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = (e: FormEvent) => {
@@ -959,12 +1059,12 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
       return
     }
 
-    // Validate date format
-    const parsedDate = parseDateInput(date)
-    if (!parsedDate) {
-      setError('Please enter a valid date in DD/MM/YYYY format.')
+    // Date input already provides YYYY-MM-DD format, use it directly
+    if (!date) {
+      setError('Please select a date.')
       return
     }
+    const parsedDate = date // Already in YYYY-MM-DD format
 
     // Create the item first and get its ID
     const newItemId = onSubmit(category, {
@@ -990,7 +1090,9 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
     setAmount('')
     setCurrency('CHF')
     setPlatform('Physical')
-    setDate(getCurrentDateFormatted())
+    // Reset date to today in YYYY-MM-DD format
+    const now = new Date()
+    setDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`)
     
     // Close modal
     onClose()
@@ -1103,16 +1205,54 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
               className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
               htmlFor="nw-date"
             >
-              Date
+              Date (DD/MM/YYYY)
             </label>
-            <input
-              id="nw-date"
-              type="text"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              placeholder="DD/MM/YYYY"
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-            />
+            <div className="relative flex items-center">
+              <input
+                id="nw-date-display"
+                type="text"
+                value={date ? formatDate(date) : ''}
+                readOnly
+                onClick={() => {
+                  const dateInput = document.getElementById('nw-date') as HTMLInputElement
+                  if (dateInput) {
+                    if (dateInput.showPicker) {
+                      dateInput.showPicker()
+                    } else {
+                      dateInput.click()
+                    }
+                  }
+                }}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 pr-10 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue cursor-pointer"
+                placeholder="DD/MM/YYYY"
+              />
+              <input
+                id="nw-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="absolute right-0 opacity-0 w-10 h-full cursor-pointer"
+                style={{ cursor: 'pointer' }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const dateInput = document.getElementById('nw-date') as HTMLInputElement
+                  if (dateInput) {
+                    if (dateInput.showPicker) {
+                      dateInput.showPicker()
+                    } else {
+                      dateInput.click()
+                    }
+                  }
+                }}
+                className="absolute right-2 cursor-pointer text-text-secondary hover:text-text-primary transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -1291,6 +1431,7 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
 interface AddTransactionModalProps {
   item: NetWorthItem
   transaction?: NetWorthTransaction // If provided, we're editing
+  transactions?: NetWorthTransaction[] // All transactions for calculating current balance
   onClose: () => void
   onSave: (transaction: Omit<NetWorthTransaction, 'id'>) => void
 }
@@ -1300,7 +1441,7 @@ const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Account
 
 type TransactionTab = 'buy' | 'sell'
 
-function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransactionModalProps) {
+function AddTransactionModal({ item, transaction, transactions = [], onClose, onSave }: AddTransactionModalProps) {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const isEditing = !!transaction
@@ -1330,16 +1471,96 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
     return transaction.pricePerItemChf.toString()
   }
   
-  const [activeTab, setActiveTab] = useState<TransactionTab>(transaction?.side || 'buy')
-  const [amount, setAmount] = useState(transaction?.amount.toString() || '')
+  // Determine side from amount: positive = buy, negative = sell
+  const getSideFromAmount = (amountValue: string): TransactionTab => {
+    const parsed = Number(amountValue)
+    if (isNaN(parsed) || parsed === 0) {
+      // Default to buy if no amount or editing existing transaction
+      return transaction?.side || 'buy'
+    }
+    return parsed > 0 ? 'buy' : 'sell'
+  }
+
+  const [inputMode, setInputMode] = useState<'amount' | 'balance'>('amount')
+  const [amount, setAmount] = useState(() => {
+    if (transaction) {
+      // For editing, keep the original sign
+      return transaction.side === 'sell' ? `-${transaction.amount}` : transaction.amount.toString()
+    }
+    return '0'
+  })
+  const [targetBalance, setTargetBalance] = useState(() => {
+    if (transaction) {
+      // For editing, calculate what the balance/holdings was after this transaction
+      const relevantTransactions = transactions.filter(tx => 
+        tx.itemId === item.id && tx.id !== transaction.id
+      )
+      let balanceBefore: number
+      if (isCrypto) {
+        // For crypto, use holdings (coin amount)
+        balanceBefore = calculateCoinAmount(item.id, relevantTransactions)
+      } else {
+        // For non-crypto, use balance value
+        balanceBefore = relevantTransactions.reduce((sum, tx) => {
+          return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
+        }, 0)
+      }
+      return (balanceBefore + (transaction.side === 'buy' ? 1 : -1) * transaction.amount).toString()
+    }
+    // Default to current balance/holdings for new transactions
+    if (isCrypto) {
+      // For crypto, use holdings (coin amount)
+      const relevantTransactions = transactions.filter(tx => tx.itemId === item.id)
+      const currentHoldings = calculateCoinAmount(item.id, relevantTransactions)
+      return currentHoldings.toString()
+    } else {
+      // For non-crypto, use balance value
+      const relevantTransactions = transactions.filter(tx => tx.itemId === item.id)
+      const currentBal = relevantTransactions.reduce((sum, tx) => {
+        return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
+      }, 0)
+      return currentBal.toString()
+    }
+  })
+  const [isUpdatingFromAmount, setIsUpdatingFromAmount] = useState(false)
+  const [isUpdatingFromBalance, setIsUpdatingFromBalance] = useState(false)
+  
+  // Derive activeTab from amount
+  const activeTab = useMemo(() => getSideFromAmount(amount), [amount, transaction])
   const [pricePerItemChf, setPricePerItemChf] = useState(getInitialPrice())
   const [priceCurrency, setPriceCurrency] = useState<CurrencyCode>(
     (transaction?.currency as CurrencyCode) || (item.currency as CurrencyCode) || 'CHF'
   )
-  const [date, setDate] = useState(transaction?.date ? formatDateInput(transaction.date) : getCurrentDateFormatted())
+  // For date input, use YYYY-MM-DD format (HTML5 date input format)
+  const [date, setDate] = useState(() => {
+    if (transaction?.date) {
+      // Transaction date is already in YYYY-MM-DD format
+      return transaction.date
+    }
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  })
   const [error, setError] = useState<string | null>(null)
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
+  
+  // Calculate current balance/holdings for this item, excluding the transaction being edited
+  // For crypto: use coin amount (holdings), for others: use balance value
+  const currentBalance = useMemo(() => {
+    const relevantTransactions = transactions.filter(tx => 
+      tx.itemId === item.id && (!transaction || tx.id !== transaction.id)
+    )
+    
+    if (isCrypto) {
+      // For crypto, use calculateCoinAmount to get holdings (coin quantity)
+      return calculateCoinAmount(item.id, relevantTransactions)
+    } else {
+      // For non-crypto, calculate balance value
+      return relevantTransactions.reduce((sum, tx) => {
+        return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
+      }, 0)
+    }
+  }, [transactions, item.id, transaction, isCrypto])
 
   // Fetch coin price when modal opens for Crypto items (both for new transactions and when editing)
   useEffect(() => {
@@ -1399,17 +1620,46 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
     if (isNaN(parsedAmount)) {
       return 0
     }
+    // Use absolute value for calculation
+    const absoluteAmount = Math.abs(parsedAmount)
     if (needsPricePerItem) {
       const parsedPrice = Number(pricePerItemChf)
       if (isNaN(parsedPrice) || parsedPrice <= 0) {
         return 0
       }
-      return parsedAmount * parsedPrice
+      return absoluteAmount * parsedPrice
     } else {
       // For categories without price per item, amount directly represents the value in CHF
-      return parsedAmount
+      return absoluteAmount
     }
   }, [amount, pricePerItemChf, needsPricePerItem])
+
+  // Update target balance when amount changes (only in amount mode)
+  useEffect(() => {
+    if (inputMode !== 'amount' || isUpdatingFromBalance) return
+    
+    const parsedAmount = Number(amount)
+    if (!isNaN(parsedAmount)) {
+      setIsUpdatingFromAmount(true)
+      // Add the amount (can be positive or negative) to current balance
+      setTargetBalance((currentBalance + parsedAmount).toString())
+      setIsUpdatingFromAmount(false)
+    }
+  }, [amount, currentBalance, isUpdatingFromBalance, inputMode])
+
+  // Update amount when target balance changes (only in balance mode)
+  useEffect(() => {
+    if (inputMode !== 'balance' || isUpdatingFromAmount) return
+    
+    const parsedTarget = Number(targetBalance)
+    if (!isNaN(parsedTarget)) {
+      setIsUpdatingFromBalance(true)
+      // Calculate the difference (can be positive or negative)
+      const calculatedAmount = parsedTarget - currentBalance
+      setAmount(calculatedAmount.toString())
+      setIsUpdatingFromBalance(false)
+    }
+  }, [targetBalance, currentBalance, isUpdatingFromAmount, inputMode])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -1418,8 +1668,8 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
     const parsedAmount = Number(amount)
     const parsedPrice = Number(pricePerItemChf)
 
-    if (!amount || Number.isNaN(parsedAmount)) {
-      setError('Please enter a valid amount.')
+    if (!amount || Number.isNaN(parsedAmount) || parsedAmount === 0) {
+      setError('Please enter a valid amount (positive for buy, negative for sell).')
       return
     }
     if (needsPricePerItem) {
@@ -1429,25 +1679,26 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
       }
     }
     if (!date) {
-      setError('Please enter a date in DD/MM/YYYY format.')
+      setError('Please select a date.')
       return
     }
     
-    // Parse date from DD/MM/YYYY to YYYY-MM-DD for storage
-    const parsedDate = parseDateInput(date)
-    if (!parsedDate) {
-      setError('Please enter a valid date in DD/MM/YYYY format.')
-      return
-    }
+    // Date input already provides YYYY-MM-DD format, use it directly
+    const parsedDate = date
+
+    // Determine side from amount sign
+    const side: TransactionTab = parsedAmount > 0 ? 'buy' : 'sell'
+    // Store absolute value of amount
+    const absoluteAmount = Math.abs(parsedAmount)
 
     if (isCrypto && needsPricePerItem) {
       // For Crypto: convert USD price to CHF for storage
       const pricePerCoinChf = convert(parsedPrice, 'USD')
       onSave({
         itemId: item.id,
-        side: activeTab,
+        side,
         currency: 'USD', // Store as USD for crypto
-        amount: parsedAmount,
+        amount: absoluteAmount,
         pricePerItemChf: pricePerCoinChf, // Converted to CHF for storage
         pricePerItem: parsedPrice, // Original price in USD
         date: parsedDate,
@@ -1459,18 +1710,20 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
         : 1
       onSave({
         itemId: item.id,
-        side: activeTab,
+        side,
         currency: transactionCurrency,
-        amount: parsedAmount,
+        amount: absoluteAmount,
         pricePerItemChf: pricePerItemChfValue, // Converted to CHF for backward compatibility
         pricePerItem: needsPricePerItem ? parsedPrice : undefined, // Original price per item in original currency
         date: parsedDate,
       })
     }
 
-    setAmount('')
+    setAmount('0')
     setPricePerItemChf('')
-    setDate(getCurrentDateFormatted())
+    // Reset date to today in YYYY-MM-DD format
+    const now = new Date()
+    setDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`)
     onClose()
   }
 
@@ -1480,35 +1733,9 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
         <Heading level={2} className="mb-4">
           {isEditing 
             ? `Edit Transaction – ${item.name}`
-            : `${activeTab === 'buy' ? 'Add Buy Transaction' : 'Add Sell Transaction'} – ${item.name}`
+            : `Add Transaction – ${item.name}`
           }
         </Heading>
-
-        {/* Tabs */}
-        <div className="flex gap-2 mb-4 border-b border-border-subtle">
-          <button
-            type="button"
-            onClick={() => setActiveTab('buy')}
-            className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium transition-colors ${
-              activeTab === 'buy'
-                ? 'text-highlight-yellow border-b-2 border-highlight-yellow'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            Buy
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('sell')}
-            className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium transition-colors ${
-              activeTab === 'sell'
-                ? 'text-highlight-yellow border-b-2 border-highlight-yellow'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            Sell
-          </button>
-        </div>
 
         {error && (
           <div className="mb-3 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
@@ -1527,26 +1754,92 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
           <div className="text-text-secondary text-[0.567rem] md:text-xs">
             <span className="font-medium">Platform:</span> {item.platform}
           </div>
+          <div className="text-text-secondary text-[0.567rem] md:text-xs">
+            <span className="font-medium">{isCrypto ? 'Current Holdings' : 'Current Balance'}:</span> {currentBalance.toFixed(8).replace(/\.?0+$/, '')}
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-              htmlFor="tx-amount"
-            >
-              {isCrypto ? 'Amount (coins)' : needsPricePerItem ? 'Amount' : 'Amount (CHF)'}
-            </label>
-            <input
-              id="tx-amount"
-              type="number"
-              step={isCrypto ? "0.00000001" : "0.01"}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              placeholder={needsPricePerItem ? "e.g. 0.5, 100, 1" : "e.g. 1000, 5000, 10000"}
-            />
+          {/* Fancy toggle switch for input mode */}
+          <div className="mb-4">
+            <div className="relative inline-flex rounded-lg bg-bg-surface-2 border border-border-subtle p-1" role="group">
+              <button
+                type="button"
+                onClick={() => {
+                  setInputMode('amount')
+                  // When switching to amount mode, ensure amount is set
+                  if (!amount || amount === '') {
+                    setAmount('0')
+                  }
+                }}
+                className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                  inputMode === 'amount'
+                    ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Buy/Sell amount
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInputMode('balance')
+                  // When switching to balance mode, ensure target balance is set to current balance if empty
+                  if (!targetBalance || targetBalance === '') {
+                    setTargetBalance(currentBalance.toString())
+                  }
+                }}
+                className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                  inputMode === 'balance'
+                    ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                {isCrypto ? 'Total holdings' : 'Total balance'}
+              </button>
+            </div>
           </div>
+
+          {inputMode === 'amount' ? (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="tx-amount"
+              >
+                {isCrypto ? 'Amount (coins)' : needsPricePerItem ? 'Amount' : 'Amount (CHF)'}
+                <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">
+                  (positive = buy, negative = sell)
+                </span>
+              </label>
+              <input
+                id="tx-amount"
+                type="number"
+                step={isCrypto ? "0.00000001" : "0.01"}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                placeholder={needsPricePerItem ? "e.g. 0.5, 100, -50" : "e.g. 1000, 5000, -2000"}
+              />
+            </div>
+          ) : (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="tx-target-balance"
+              >
+                {isCrypto ? 'Target Total Holdings' : 'Target Total Balance'} (after this transaction)
+              </label>
+              <input
+                id="tx-target-balance"
+                type="number"
+                step={isCrypto ? "0.00000001" : "0.01"}
+                value={targetBalance}
+                onChange={(e) => setTargetBalance(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                placeholder={isCrypto ? "0.00000000" : "0.00"}
+              />
+            </div>
+          )}
 
           {needsPricePerItem && (
             <>
@@ -1605,7 +1898,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
           {needsPricePerItem && (
             <div>
               <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
-                {activeTab === 'buy' ? 'Total spent' : 'Total sold'} {isCrypto ? '(USD)' : `(${priceCurrency})`}
+                Total {isCrypto ? '(USD)' : `(${priceCurrency})`}
               </label>
               <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm">
                 {isCrypto 
@@ -1621,16 +1914,54 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
               className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
               htmlFor="tx-date"
             >
-              Date
+              Date (DD/MM/YYYY)
             </label>
-            <input
-              id="tx-date"
-              type="text"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              placeholder="DD/MM/YYYY"
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-            />
+            <div className="relative flex items-center">
+              <input
+                id="tx-date-display"
+                type="text"
+                value={date ? formatDate(date) : ''}
+                readOnly
+                onClick={() => {
+                  const dateInput = document.getElementById('tx-date') as HTMLInputElement
+                  if (dateInput) {
+                    if (dateInput.showPicker) {
+                      dateInput.showPicker()
+                    } else {
+                      dateInput.click()
+                    }
+                  }
+                }}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 pr-10 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue cursor-pointer"
+                placeholder="DD/MM/YYYY"
+              />
+              <input
+                id="tx-date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="absolute right-0 opacity-0 w-10 h-full cursor-pointer"
+                style={{ cursor: 'pointer' }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const dateInput = document.getElementById('tx-date') as HTMLInputElement
+                  if (dateInput) {
+                    if (dateInput.showPicker) {
+                      dateInput.showPicker()
+                    } else {
+                      dateInput.click()
+                    }
+                  }
+                }}
+                className="absolute right-2 cursor-pointer text-text-secondary hover:text-text-primary transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -1645,7 +1976,7 @@ function AddTransactionModal({ item, transaction, onClose, onSave }: AddTransact
               type="submit"
               className="px-4 py-2 rounded-full text-[0.567rem] md:text-xs bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] font-semibold hover:brightness-110 transition-all duration-200 shadow-card"
             >
-              {isEditing ? 'Save Changes' : (activeTab === 'buy' ? 'Add Buy' : 'Add Sell')}
+              {isEditing ? 'Save Changes' : 'Add Transaction'}
             </button>
           </div>
         </form>

@@ -85,29 +85,51 @@ export function createCashflowSnapshot(
   }
 }
 
-// Get the date string for the first day of the current month (for snapshot key)
+// Get the date string for the last day of the current month (for snapshot key)
 export function getCurrentMonthCashflowSnapshotDate(): string {
   const now = new Date()
-  const firstDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  return firstDayOfCurrentMonth.toISOString().split('T')[0]
+  const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  return lastDayOfCurrentMonth.toISOString().split('T')[0]
 }
 
-// Check if we should take a cashflow snapshot for the current month
-export function shouldTakeCashflowSnapshotForCurrentMonth(snapshots: CashflowSnapshot[]): boolean {
-  const currentMonthDate = getCurrentMonthCashflowSnapshotDate()
+// Get the date string for the last day of the previous month
+export function getPreviousMonthCashflowSnapshotDate(): string {
+  const now = new Date()
+  const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+  return lastDayOfPreviousMonth.toISOString().split('T')[0]
+}
+
+// Check if we should take a cashflow snapshot for the previous month
+// This is called on app load - if we're on the last day of the current month OR
+// if we're on the 1st or later of a new month and don't have a snapshot for the previous month
+export function shouldTakeCashflowSnapshotForPreviousMonth(snapshots: CashflowSnapshot[]): boolean {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  const firstDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   
-  // Check if we already have a snapshot for current month
-  if (hasCashflowSnapshotForDate(snapshots, currentMonthDate)) {
+  // Determine which month we need to snapshot
+  let targetMonthDate: string
+  if (today.getTime() === lastDayOfCurrentMonth.getTime()) {
+    // We're on the last day of the current month - snapshot current month
+    targetMonthDate = getCurrentMonthCashflowSnapshotDate()
+  } else if (today >= firstDayOfCurrentMonth) {
+    // We're on the 1st or later of the current month - snapshot previous month
+    targetMonthDate = getPreviousMonthCashflowSnapshotDate()
+  } else {
+    // Shouldn't happen, but default to previous month
+    targetMonthDate = getPreviousMonthCashflowSnapshotDate()
+  }
+  
+  // Check if we already have a snapshot for the target month
+  if (hasCashflowSnapshotForDate(snapshots, targetMonthDate)) {
     return false // Already have snapshot
   }
   
-  // Check if we're on or past the first day of the current month
-  const now = new Date()
-  const firstDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  
-  // If today is on or after the first day of current month, we should take a snapshot
-  return today >= firstDayOfCurrentMonth
+  // We should take a snapshot if:
+  // 1. We're on the last day of the current month, OR
+  // 2. We're on the 1st or later of the current month and don't have a snapshot for previous month
+  return true
 }
 
 // Check if cashflow snapshot already exists for a given date
@@ -115,8 +137,8 @@ export function hasCashflowSnapshotForDate(snapshots: CashflowSnapshot[], date: 
   return snapshots.some(s => s.date === date)
 }
 
-// Take a cashflow snapshot for the current month if needed (called on app load)
-// This creates a snapshot dated as the first day of the current month
+// Take a cashflow snapshot for the previous month if needed (called on app load)
+// This creates a snapshot dated as the last day of the target month (current month if on last day, previous month if on 1st or later)
 export async function takeCashflowSnapshotForCurrentMonthIfNeeded(
   inflowChf: number,
   outflowChf: number,
@@ -125,18 +147,33 @@ export async function takeCashflowSnapshotForCurrentMonthIfNeeded(
 ): Promise<CashflowSnapshot | null> {
   const snapshots = await loadCashflowSnapshots(uid)
   
-  // Check if we should take a snapshot for the current month
-  if (!shouldTakeCashflowSnapshotForCurrentMonth(snapshots)) {
+  // Check if we should take a snapshot
+  if (!shouldTakeCashflowSnapshotForPreviousMonth(snapshots)) {
     return null
   }
   
-  // Create snapshot with the date of the first day of current month
-  const currentMonthDate = getCurrentMonthCashflowSnapshotDate()
-  const firstDayOfMonth = new Date(currentMonthDate)
+  // Determine which month to snapshot
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  
+  let targetMonthDate: string
+  let targetTimestamp: number
+  
+  if (today.getTime() === lastDayOfCurrentMonth.getTime()) {
+    // We're on the last day of the current month - snapshot current month
+    targetMonthDate = getCurrentMonthCashflowSnapshotDate()
+    targetTimestamp = lastDayOfCurrentMonth.getTime()
+  } else {
+    // We're on the 1st or later of the current month - snapshot previous month
+    targetMonthDate = getPreviousMonthCashflowSnapshotDate()
+    const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+    targetTimestamp = lastDayOfPreviousMonth.getTime()
+  }
 
   const snapshot: CashflowSnapshot = {
-    date: currentMonthDate,
-    timestamp: firstDayOfMonth.getTime(),
+    date: targetMonthDate,
+    timestamp: targetTimestamp,
     inflow: inflowChf,
     outflow: outflowChf,
     spare: spareChf,

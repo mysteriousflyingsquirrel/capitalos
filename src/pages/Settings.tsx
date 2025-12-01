@@ -15,7 +15,7 @@ import { getYearsWithCryptoActivity } from '../services/cryptoTaxReportService'
 import CryptoTaxReportModal from '../components/CryptoTaxReportModal'
 
 function Settings() {
-  const { baseCurrency, setBaseCurrency, exchangeRates, isLoading, error } = useCurrency()
+  const { baseCurrency, exchangeRates, isLoading, error } = useCurrency()
   const { uid } = useAuth()
   const [exportLoading, setExportLoading] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -23,7 +23,6 @@ function Settings() {
   const [importLoading, setImportLoading] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [importSuccess, setImportSuccess] = useState(false)
-  
   // Platform management
   const [platforms, setPlatforms] = useState<Platform[]>([])
   const [platformLoading, setPlatformLoading] = useState(true)
@@ -139,6 +138,7 @@ function Settings() {
     }
     input.click()
   }
+
 
   // Load platforms on mount
   useEffect(() => {
@@ -271,26 +271,12 @@ function Settings() {
           <Heading level={2} className="mb-4">General</Heading>
           
           <div>
-            {/* Base Currency */}
+            {/* Exchange Rates Display */}
             <div>
               <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
-                Base Currency
+                Exchange Rates (Base: CHF)
               </label>
-              <select
-                value={baseCurrency}
-                onChange={(e) => setBaseCurrency(e.target.value as CurrencyCode)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              >
-                <option value="CHF">CHF</option>
-                <option value="EUR">EUR</option>
-                <option value="USD">USD</option>
-              </select>
-              <p className="mt-2 text-text-muted text-[0.567rem] md:text-xs">
-                All values in Capitalos will be displayed in this currency.
-              </p>
-              
-              {/* Exchange Rates Display */}
-              <div className="mt-4 space-y-2">
+              <div className="mt-2 space-y-2">
                 {isLoading && (
                   <p className="text-text-muted text-[0.567rem] md:text-xs italic">
                     Loading latest rates...
@@ -342,54 +328,59 @@ function Settings() {
           <Heading level={2} className="mb-4">Data</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
-            Export or import your Capitalos data. These buttons will trigger data operations in a future version.
+            Export or import your Capitalos data. Net Worth and Cashflow data exports the current state.
           </p>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <button
-                  onClick={handleExportJSON}
-                  disabled={exportLoading || !uid}
-                  className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed w-full"
-                >
-                  {exportLoading ? 'Exporting...' : 'Export All Data (JSON)'}
-                </button>
-                {exportSuccess && (
-                  <p className="mt-2 text-success text-[0.567rem] md:text-xs">
-                    Export successful! File downloaded.
+          <div className="space-y-6">
+            {/* Main Data Export/Import */}
+            <div>
+              <Heading level={3} className="mb-3 text-sm">Net Worth & Cashflow Data</Heading>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <button
+                    onClick={handleExportJSON}
+                    disabled={exportLoading || !uid}
+                    className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed w-full"
+                  >
+                    {exportLoading ? 'Exporting...' : 'Export Data (JSON)'}
+                  </button>
+                  {exportSuccess && (
+                    <p className="mt-2 text-success text-[0.567rem] md:text-xs">
+                      Export successful! File downloaded.
+                    </p>
+                  )}
+                  {exportError && (
+                    <p className="mt-2 text-danger text-[0.567rem] md:text-xs">
+                      {exportError}
+                    </p>
+                  )}
+                  <p className="mt-2 text-warning text-[0.567rem] md:text-xs">
+                    ⚠️ This JSON file contains sensitive financial data. Keep it private and secure.
                   </p>
-                )}
-                {exportError && (
-                  <p className="mt-2 text-danger text-[0.567rem] md:text-xs">
-                    {exportError}
-                  </p>
-                )}
-                <p className="mt-2 text-warning text-[0.567rem] md:text-xs">
-                  ⚠️ This JSON file contains sensitive financial data. Keep it private and secure.
-                </p>
-              </div>
+                </div>
 
-              <div>
-                <button
-                  onClick={handleImportJSON}
-                  disabled={importLoading || !uid}
-                  className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed w-full"
-                >
-                  {importLoading ? 'Importing...' : 'Import Data (JSON)'}
-                </button>
-                {importSuccess && (
-                  <p className="mt-2 text-success text-[0.567rem] md:text-xs">
-                    Import successful! Page will reload shortly...
-                  </p>
-                )}
-                {importError && (
-                  <p className="mt-2 text-danger text-[0.567rem] md:text-xs">
-                    {importError}
-                  </p>
-                )}
+                <div>
+                  <button
+                    onClick={handleImportJSON}
+                    disabled={importLoading || !uid}
+                    className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed w-full"
+                  >
+                    {importLoading ? 'Importing...' : 'Import Data (JSON)'}
+                  </button>
+                  {importSuccess && (
+                    <p className="mt-2 text-success text-[0.567rem] md:text-xs">
+                      Import successful! Page will reload shortly...
+                    </p>
+                  )}
+                  {importError && (
+                    <p className="mt-2 text-danger text-[0.567rem] md:text-xs">
+                      {importError}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
+
           </div>
         </div>
 
@@ -532,6 +523,7 @@ function Settings() {
       {showCryptoTaxModal && (
         <CryptoTaxReportModal onClose={() => setShowCryptoTaxModal(false)} />
       )}
+
     </div>
   )
 }

@@ -1628,27 +1628,56 @@ function AddMappingModal({ inflowItems, outflowItems, platforms, editingMapping,
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Mapping Type Selection */}
+          {/* Mapping Type Selection - Fancy Toggle Switch */}
           <div>
             <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
               Mapping Type
             </label>
-            <select
-              value={mappingType}
-              onChange={(e) => {
-                const newType = e.target.value as MappingKind
-                setMappingType(newType)
-                // When switching to accountToAccount, set from account to preselected if available
-                if (newType === 'accountToAccount' && preselectedAccount && !accountToAccountFrom) {
-                  setAccountToAccountFrom(preselectedAccount)
-                }
-              }}
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-            >
-              <option value="inflowToAccount">Inflow to Platform</option>
-              <option value="accountToOutflow">Platform to Outflow</option>
-              <option value="accountToAccount">Platform to Platform Transfer</option>
-            </select>
+            <div className="relative inline-flex rounded-lg bg-bg-surface-2 border border-border-subtle p-1 w-full" role="group">
+              <button
+                type="button"
+                onClick={() => {
+                  setMappingType('inflowToAccount')
+                }}
+                className={`flex-1 px-3 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                  mappingType === 'inflowToAccount'
+                    ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Inflow to Platform
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMappingType('accountToOutflow')
+                }}
+                className={`flex-1 px-3 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                  mappingType === 'accountToOutflow'
+                    ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Platform to Outflow
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMappingType('accountToAccount')
+                  // When switching to accountToAccount, set from account to preselected if available
+                  if (preselectedAccount && !accountToAccountFrom) {
+                    setAccountToAccountFrom(preselectedAccount)
+                  }
+                }}
+                className={`flex-1 px-3 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                  mappingType === 'accountToAccount'
+                    ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Platform Transfer
+              </button>
+            </div>
           </div>
 
           {/* Inflow to Platform Form */}
@@ -1658,35 +1687,35 @@ function AddMappingModal({ inflowItems, outflowItems, platforms, editingMapping,
                 <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
                   Mode
                 </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="inflow-to-account-mode"
-                      value="group"
-                      checked={inflowToAccountMode === 'group'}
-                      onChange={() => {
-                        setInflowToAccountMode('group')
-                        setInflowToAccountItem('')
-                      }}
-                      className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
-                    />
-                    <span className="text-text-primary text-[0.567rem] md:text-xs">Whole Group</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="inflow-to-account-mode"
-                      value="item"
-                      checked={inflowToAccountMode === 'item'}
-                      onChange={() => {
-                        setInflowToAccountMode('item')
-                        setInflowToAccountGroup('')
-                      }}
-                      className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
-                    />
-                    <span className="text-text-primary text-[0.567rem] md:text-xs">Single Item</span>
-                  </label>
+                <div className="relative inline-flex rounded-lg bg-bg-surface-2 border border-border-subtle p-1" role="group">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInflowToAccountMode('group')
+                      setInflowToAccountItem('')
+                    }}
+                    className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                      inflowToAccountMode === 'group'
+                        ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                        : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    Whole Group
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInflowToAccountMode('item')
+                      setInflowToAccountGroup('')
+                    }}
+                    className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                      inflowToAccountMode === 'item'
+                        ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                        : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    Single Item
+                  </button>
                 </div>
               </div>
 
@@ -1773,35 +1802,35 @@ function AddMappingModal({ inflowItems, outflowItems, platforms, editingMapping,
                 <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
                   Mode
                 </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="account-to-outflow-mode"
-                      value="group"
-                      checked={accountToOutflowMode === 'group'}
-                      onChange={() => {
-                        setAccountToOutflowMode('group')
-                        setAccountToOutflowItem('')
-                      }}
-                      className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
-                    />
-                    <span className="text-text-primary text-[0.567rem] md:text-xs">Whole Group</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="account-to-outflow-mode"
-                      value="item"
-                      checked={accountToOutflowMode === 'item'}
-                      onChange={() => {
-                        setAccountToOutflowMode('item')
-                        setAccountToOutflowGroup('')
-                      }}
-                      className="w-4 h-4 text-accent-blue focus:ring-accent-blue"
-                    />
-                    <span className="text-text-primary text-[0.567rem] md:text-xs">Single Item</span>
-                  </label>
+                <div className="relative inline-flex rounded-lg bg-bg-surface-2 border border-border-subtle p-1" role="group">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountToOutflowMode('group')
+                      setAccountToOutflowItem('')
+                    }}
+                    className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                      accountToOutflowMode === 'group'
+                        ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                        : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    Whole Group
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccountToOutflowMode('item')
+                      setAccountToOutflowGroup('')
+                    }}
+                    className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                      accountToOutflowMode === 'item'
+                        ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                        : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    Single Item
+                  </button>
                 </div>
               </div>
 

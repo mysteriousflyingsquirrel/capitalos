@@ -1,5 +1,5 @@
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
-import { calculateBalanceChf } from '../pages/NetWorth'
+import { calculateBalanceChf, calculateCoinAmount } from '../pages/NetWorth'
 import type { NetWorthCategory } from '../pages/NetWorth'
 
 export interface NetWorthSnapshot {
@@ -73,7 +73,9 @@ export async function saveSnapshots(snapshots: NetWorthSnapshot[], uid?: string)
 // Create a snapshot from current net worth data
 export function createSnapshot(
   items: NetWorthItem[],
-  transactions: NetWorthTransaction[]
+  transactions: NetWorthTransaction[],
+  cryptoPrices?: Record<string, number>,
+  convert?: (amount: number, from: import('../lib/currency').CurrencyCode) => number
 ): NetWorthSnapshot {
   const categories: Record<NetWorthCategory, number> = {
     'Cash': 0,
@@ -87,8 +89,23 @@ export function createSnapshot(
   }
 
   items.forEach(item => {
-    const balance = calculateBalanceChf(item.id, transactions)
-    categories[item.category] += balance
+    if (item.category === 'Crypto') {
+      // For Crypto: match Dashboard logic EXACTLY
+      const coinAmount = calculateCoinAmount(item.id, transactions)
+      const ticker = item.name.trim().toUpperCase()
+      const currentPriceUsd = cryptoPrices && cryptoPrices[ticker] ? cryptoPrices[ticker] : 0
+      
+      if (currentPriceUsd > 0 && convert) {
+        // Match Dashboard: convert USD to CHF
+        categories[item.category] += convert(coinAmount * currentPriceUsd, 'USD')
+      } else {
+        // Match Dashboard: use calculateBalanceChf directly (already in CHF)
+        categories[item.category] += calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+      }
+    } else {
+      // For non-Crypto items, balance is already in CHF
+      categories[item.category] += calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+    }
   })
 
   const total = Object.values(categories).reduce((sum, val) => sum + val, 0)
@@ -103,38 +120,51 @@ export function createSnapshot(
   }
 }
 
-// Get the date string for the first day of the current month (for snapshot key)
+// Get the date string for the last day of the current month (for snapshot key)
 export function getCurrentMonthSnapshotDate(): string {
   const now = new Date()
-  const firstDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  return firstDayOfCurrentMonth.toISOString().split('T')[0]
+  const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  return lastDayOfCurrentMonth.toISOString().split('T')[0]
 }
 
-// Get the date string for the first day of the previous month
+// Get the date string for the last day of the previous month
 export function getPreviousMonthSnapshotDate(): string {
   const now = new Date()
-  const firstDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  return firstDayOfPreviousMonth.toISOString().split('T')[0]
+  const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+  return lastDayOfPreviousMonth.toISOString().split('T')[0]
 }
 
-// Check if we should take a snapshot for the current month
-// This is called on app load - if we're on or past the first day of the current month
-// and don't have a snapshot for it, we should create one
-export function shouldTakeSnapshotForCurrentMonth(snapshots: NetWorthSnapshot[]): boolean {
-  const currentMonthDate = getCurrentMonthSnapshotDate()
+// Check if we should take a snapshot for the previous month
+// This is called on app load - if we're on the last day of the current month OR
+// if we're on the 1st or later of a new month and don't have a snapshot for the previous month
+export function shouldTakeSnapshotForPreviousMonth(snapshots: NetWorthSnapshot[]): boolean {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  const firstDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   
-  // Check if we already have a snapshot for current month
-  if (hasSnapshotForDate(snapshots, currentMonthDate)) {
+  // Determine which month we need to snapshot
+  let targetMonthDate: string
+  if (today.getTime() === lastDayOfCurrentMonth.getTime()) {
+    // We're on the last day of the current month - snapshot current month
+    targetMonthDate = getCurrentMonthSnapshotDate()
+  } else if (today >= firstDayOfCurrentMonth) {
+    // We're on the 1st or later of the current month - snapshot previous month
+    targetMonthDate = getPreviousMonthSnapshotDate()
+  } else {
+    // Shouldn't happen, but default to previous month
+    targetMonthDate = getPreviousMonthSnapshotDate()
+  }
+  
+  // Check if we already have a snapshot for the target month
+  if (hasSnapshotForDate(snapshots, targetMonthDate)) {
     return false // Already have snapshot
   }
   
-  // Check if we're on or past the first day of the current month
-  const now = new Date()
-  const firstDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  
-  // If today is on or after the first day of current month, we should take a snapshot
-  return today >= firstDayOfCurrentMonth
+  // We should take a snapshot if:
+  // 1. We're on the last day of the current month, OR
+  // 2. We're on the 1st or later of the current month and don't have a snapshot for previous month
+  return true
 }
 
 // Check if snapshot already exists for a given date
@@ -142,24 +172,41 @@ export function hasSnapshotForDate(snapshots: NetWorthSnapshot[], date: string):
   return snapshots.some(s => s.date === date)
 }
 
-// Take a snapshot for the current month if needed (called on app load)
-// This creates a snapshot dated as the first day of the current month
+// Take a snapshot for the previous month if needed (called on app load)
+// This creates a snapshot dated as the last day of the target month (current month if on last day, previous month if on 1st or later)
 export async function takeSnapshotForCurrentMonthIfNeeded(
   items: NetWorthItem[],
   transactions: NetWorthTransaction[],
-  uid?: string
+  uid?: string,
+  cryptoPrices?: Record<string, number>,
+  convert?: (amount: number, from: import('../lib/currency').CurrencyCode) => number
 ): Promise<NetWorthSnapshot | null> {
   const snapshots = await loadSnapshots(uid)
   
-  // Check if we should take a snapshot for the current month
-  if (!shouldTakeSnapshotForCurrentMonth(snapshots)) {
+  // Check if we should take a snapshot
+  if (!shouldTakeSnapshotForPreviousMonth(snapshots)) {
     return null
   }
   
-  // Create snapshot with the date of the first day of current month
-  const currentMonthDate = getCurrentMonthSnapshotDate()
-  const firstDayOfMonth = new Date(currentMonthDate)
+  // Determine which month to snapshot
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   
+  let targetMonthDate: string
+  let targetTimestamp: number
+  
+  if (today.getTime() === lastDayOfCurrentMonth.getTime()) {
+    // We're on the last day of the current month - snapshot current month
+    targetMonthDate = getCurrentMonthSnapshotDate()
+    targetTimestamp = lastDayOfCurrentMonth.getTime()
+  } else {
+    // We're on the 1st or later of the current month - snapshot previous month
+    targetMonthDate = getPreviousMonthSnapshotDate()
+    const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+    targetTimestamp = lastDayOfPreviousMonth.getTime()
+  }
+
   const categories: Record<NetWorthCategory, number> = {
     'Cash': 0,
     'Bank Accounts': 0,
@@ -172,15 +219,32 @@ export async function takeSnapshotForCurrentMonthIfNeeded(
   }
 
   items.forEach(item => {
-    const balance = calculateBalanceChf(item.id, transactions)
-    categories[item.category] += balance
+    if (item.category === 'Crypto') {
+      // For Crypto: match Dashboard logic EXACTLY
+      // Dashboard line 289: convert(coinAmount * currentPriceUsd, 'USD')
+      // Dashboard line 292: calculateBalanceChf(...) (no convert call)
+      const coinAmount = calculateCoinAmount(item.id, transactions)
+      const ticker = item.name.trim().toUpperCase()
+      const currentPriceUsd = cryptoPrices && cryptoPrices[ticker] ? cryptoPrices[ticker] : 0
+      
+      if (currentPriceUsd > 0 && convert) {
+        // Match Dashboard line 289: convert USD to CHF
+        categories[item.category] += convert(coinAmount * currentPriceUsd, 'USD')
+      } else {
+        // Match Dashboard line 292: use calculateBalanceChf directly (already in CHF)
+        categories[item.category] += calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+      }
+    } else {
+      // For non-Crypto items, balance is already in CHF
+      categories[item.category] += calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+    }
   })
 
   const total = Object.values(categories).reduce((sum, val) => sum + val, 0)
 
   const snapshot: NetWorthSnapshot = {
-    date: currentMonthDate,
-    timestamp: firstDayOfMonth.getTime(),
+    date: targetMonthDate,
+    timestamp: targetTimestamp,
     categories,
     total,
   }
