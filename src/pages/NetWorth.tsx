@@ -979,7 +979,7 @@ function NetWorth() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
+    <div className="min-h-screen bg-[#050A1A] px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Net Worth</Heading>
@@ -1111,6 +1111,9 @@ interface AddNetWorthItemModalProps {
 function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTransaction }: AddNetWorthItemModalProps) {
   const { convert } = useCurrency()
   const isCrypto = category === 'Crypto'
+  // Categories where price per item is always 1 (no need to show input)
+  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate', 'Inventory']
+  const hidePricePerItem = categoriesWithoutPricePerItem.includes(category)
   
   const [name, setName] = useState('')
   const [amount, setAmount] = useState('')
@@ -1161,9 +1164,10 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   // Calculate total balance for all categories
   const totalBalance = useMemo(() => {
     const parsedAmount = Number(amount) || 0
-    const parsedPrice = Number(pricePerItem) || 0
+    // For categories without price per item, price is always 1
+    const parsedPrice = hidePricePerItem ? 1 : (Number(pricePerItem) || 0)
     return parsedAmount * parsedPrice
-  }, [amount, pricePerItem])
+  }, [amount, pricePerItem, hidePricePerItem])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -1182,16 +1186,20 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
 
     // For all categories, use the same format
     const parsedAmount = Number(amount)
-    const parsedPricePerItem = Number(pricePerItem)
+    // For categories without price per item, price is always 1
+    const parsedPricePerItem = hidePricePerItem ? 1 : Number(pricePerItem)
 
     if (!amount || Number.isNaN(parsedAmount) || parsedAmount === 0) {
       setError('Please enter a valid amount (can be positive for buy or negative for sell).')
       return
     }
 
-    if (!pricePerItem || Number.isNaN(parsedPricePerItem) || parsedPricePerItem <= 0) {
-      setError('Please enter a valid price per item greater than 0.')
-      return
+    // Only validate price per item for categories that require it
+    if (!hidePricePerItem) {
+      if (!pricePerItem || Number.isNaN(parsedPricePerItem) || parsedPricePerItem <= 0) {
+        setError('Please enter a valid price per item greater than 0.')
+        return
+      }
     }
 
     // For Crypto, currency is always USD
@@ -1210,6 +1218,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
       const holdingsAmount = Math.abs(parsedAmount)
       
       // Convert price per item to CHF for storage
+      // For categories without price per item, price is always 1
       const pricePerItemChf = convert(parsedPricePerItem, itemCurrency as CurrencyCode)
 
       onSaveTransaction(newItemId, {
@@ -1319,35 +1328,38 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
             />
           </div>
 
-          <div>
-            <label
-              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-              htmlFor="nw-price-per-item"
-            >
-              Price per Item ({isCrypto ? 'USD' : currency})
-              {isLoadingPrice && isCrypto && (
-                <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
+          {/* Only show price per item field for categories that need it */}
+          {!hidePricePerItem && (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="nw-price-per-item"
+              >
+                Price per Item ({isCrypto ? 'USD' : currency})
+                {isLoadingPrice && isCrypto && (
+                  <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
+                )}
+              </label>
+              <input
+                id="nw-price-per-item"
+                type="number"
+                step={isCrypto ? "any" : "0.01"}
+                min="0"
+                value={pricePerItem}
+                onChange={(e) => setPricePerItem(e.target.value)}
+                className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
+                  priceError ? 'border-warning' : 'border-border-subtle'
+                }`}
+                placeholder={isCrypto ? "e.g. 50000, 3000, 1.00" : "e.g. 150.50"}
+                disabled={isLoadingPrice && isCrypto}
+              />
+              {priceError && (
+                <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
+                  {priceError}
+                </p>
               )}
-            </label>
-            <input
-              id="nw-price-per-item"
-              type="number"
-              step={isCrypto ? "any" : "0.01"}
-              min="0"
-              value={pricePerItem}
-              onChange={(e) => setPricePerItem(e.target.value)}
-              className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
-                priceError ? 'border-warning' : 'border-border-subtle'
-              }`}
-              placeholder={isCrypto ? "e.g. 50000, 3000, 1.00" : "e.g. 150.50"}
-              disabled={isLoadingPrice && isCrypto}
-            />
-            {priceError && (
-              <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
-                {priceError}
-              </p>
-            )}
-          </div>
+            </div>
+          )}
 
           <div>
             <label
@@ -1649,6 +1661,9 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const isEditing = !!transaction
   const isCrypto = item.category === 'Crypto'
+  // Categories where price per item is always 1 (no need to show input)
+  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate', 'Inventory']
+  const hidePricePerItem = categoriesWithoutPricePerItem.includes(item.category)
   
   // For all categories, use original pricePerItem if available, otherwise convert from CHF
   const getInitialPrice = () => {
@@ -1802,14 +1817,15 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
     }
     // Use absolute value for calculation
     const absoluteAmount = Math.abs(parsedAmount)
-    const parsedPrice = Number(pricePerItemChf)
+    // For categories without price per item, price is always 1
+    const parsedPrice = hidePricePerItem ? 1 : Number(pricePerItemChf)
     if (isNaN(parsedPrice) || parsedPrice <= 0) {
       return 0
     }
     // For all categories, total is in the selected currency (not converted to CHF for display)
     // The total will be converted to CHF when saving
     return absoluteAmount * parsedPrice
-  }, [amount, pricePerItemChf])
+  }, [amount, pricePerItemChf, hidePricePerItem])
 
   // Update target balance when amount changes (only in amount mode)
   useEffect(() => {
@@ -1843,15 +1859,19 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
     setError(null)
 
     const parsedAmount = Number(amount)
-    const parsedPrice = Number(pricePerItemChf)
+    // For categories without price per item, price is always 1
+    const parsedPrice = hidePricePerItem ? 1 : Number(pricePerItemChf)
 
     if (!amount || Number.isNaN(parsedAmount) || parsedAmount === 0) {
       setError('Please enter a valid amount (positive for buy, negative for sell).')
       return
     }
-    if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
-      setError('Please enter a valid price per item greater than 0.')
-      return
+    // Only validate price per item for categories that require it
+    if (!hidePricePerItem) {
+      if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+        setError('Please enter a valid price per item greater than 0.')
+        return
+      }
     }
     if (!date) {
       setError('Please select a date.')
@@ -1953,35 +1973,38 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
             />
           </div>
 
-          <div>
-            <label
-              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-              htmlFor="tx-price"
-            >
-              Price per Item ({isCrypto ? 'USD' : item.currency})
-              {isLoadingPrice && isCrypto && (
-                <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
+          {/* Only show price per item field for categories that need it */}
+          {!hidePricePerItem && (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="tx-price"
+              >
+                Price per Item ({isCrypto ? 'USD' : item.currency})
+                {isLoadingPrice && isCrypto && (
+                  <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
+                )}
+              </label>
+              <input
+                id="tx-price"
+                type="number"
+                min="0"
+                step={isCrypto ? "any" : "0.01"}
+                value={pricePerItemChf}
+                onChange={(e) => setPricePerItemChf(e.target.value)}
+                className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
+                  priceError ? 'border-warning' : 'border-border-subtle'
+                }`}
+                placeholder={isCrypto ? "e.g. 50000, 3000, 1.00" : "e.g. 150.50"}
+                disabled={isLoadingPrice && isCrypto}
+              />
+              {priceError && (
+                <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
+                  {priceError}
+                </p>
               )}
-            </label>
-            <input
-              id="tx-price"
-              type="number"
-              min="0"
-              step={isCrypto ? "any" : "0.01"}
-              value={pricePerItemChf}
-              onChange={(e) => setPricePerItemChf(e.target.value)}
-              className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
-                priceError ? 'border-warning' : 'border-border-subtle'
-              }`}
-              placeholder={isCrypto ? "e.g. 50000, 3000, 1.00" : "e.g. 150.50"}
-              disabled={isLoadingPrice && isCrypto}
-            />
-            {priceError && (
-              <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
-                {priceError}
-              </p>
-            )}
-          </div>
+            </div>
+          )}
 
           <div>
             <label
