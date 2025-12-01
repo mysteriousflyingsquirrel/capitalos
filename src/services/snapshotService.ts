@@ -80,7 +80,8 @@ export function createSnapshot(
   const categories: Record<NetWorthCategory, number> = {
     'Cash': 0,
     'Bank Accounts': 0,
-    'Funds': 0,
+    'Retirement Funds': 0,
+    'Index Funds': 0,
     'Stocks': 0,
     'Commodities': 0,
     'Crypto': 0,
@@ -210,7 +211,8 @@ export async function takeSnapshotForCurrentMonthIfNeeded(
   const categories: Record<NetWorthCategory, number> = {
     'Cash': 0,
     'Bank Accounts': 0,
-    'Funds': 0,
+    'Retirement Funds': 0,
+    'Index Funds': 0,
     'Stocks': 0,
     'Commodities': 0,
     'Crypto': 0,

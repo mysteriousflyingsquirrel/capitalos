@@ -37,7 +37,8 @@ interface NetWorthDataPoint {
   'Total Net Worth': number
   'Cash': number
   'Bank Accounts': number
-  'Funds': number
+  'Retirement Funds': number
+  'Index Funds': number
   'Stocks': number
   'Commodities': number
   'Crypto': number
@@ -69,14 +70,40 @@ const CHART_COLORS = {
   danger: '#E74C3C',
   muted1: '#8B8F99',
   muted2: '#5D6168',
+  // Additional colors for more variety
+  purple: '#9B59B6',
+  orange: '#F39C12',
+  teal: '#16A085',
+  pink: '#E91E63',
+  indigo: '#5C6BC0',
+  cyan: '#00BCD4',
+  lime: '#CDDC39',
+  amber: '#FFC107',
+  deepOrange: '#FF5722',
+  blueGrey: '#607D8B',
 }
 
+// Extended color array for pie charts and multiple elements
 const PIE_CHART_COLORS = [
   CHART_COLORS.gold,
   CHART_COLORS.accent1,
   CHART_COLORS.accent2,
   CHART_COLORS.accent3,
   CHART_COLORS.success,
+  CHART_COLORS.purple,
+  CHART_COLORS.orange,
+  CHART_COLORS.teal,
+  CHART_COLORS.pink,
+  CHART_COLORS.indigo,
+  CHART_COLORS.cyan,
+  CHART_COLORS.lime,
+  CHART_COLORS.amber,
+  CHART_COLORS.deepOrange,
+  CHART_COLORS.blueGrey,
+  CHART_COLORS.bronze,
+  CHART_COLORS.danger,
+  CHART_COLORS.muted1,
+  CHART_COLORS.muted2,
 ]
 
 // Helper component: KPI Card
@@ -111,7 +138,7 @@ function formatCHFTick(value: number): string {
 
 function Dashboard() {
   const [timeFrame, setTimeFrame] = useState<'YTD' | '1Year' | '5Year' | 'Max'>('Max')
-  const { baseCurrency, convert } = useCurrency()
+  const { baseCurrency, convert, exchangeRates } = useCurrency()
 
   // Load data from Firestore
   const { uid } = useAuth()
@@ -183,24 +210,46 @@ function Dashboard() {
   }, [netWorthItems]) // Re-fetch when crypto items change
 
 
-  // Calculate total net worth from actual data
+  // Calculate total net worth by summing all category subtotals (same logic as NetWorth page)
   const totalNetWorthChf = useMemo(() => {
-    return netWorthItems.reduce((sum, item: NetWorthItem) => {
+    const categoryTotals: Record<NetWorthCategory, number> = {
+      'Cash': 0,
+      'Bank Accounts': 0,
+      'Retirement Funds': 0,
+      'Index Funds': 0,
+      'Stocks': 0,
+      'Commodities': 0,
+      'Crypto': 0,
+      'Real Estate': 0,
+      'Inventory': 0,
+    }
+
+    netWorthItems.forEach((item: NetWorthItem) => {
+      let balance: number
       if (item.category === 'Crypto') {
         // For Crypto: use current price * coin amount, convert USD to CHF
         const coinAmount = calculateCoinAmount(item.id, transactions)
         const ticker = item.name.trim().toUpperCase()
         const currentPriceUsd = cryptoPrices[ticker] || 0
         if (currentPriceUsd > 0) {
-          // Convert USD to CHF for balance
-          return sum + convert(coinAmount * currentPriceUsd, 'USD')
+          // Convert USD to CHF
+          const cryptoValueUsd = coinAmount * currentPriceUsd
+          balance = convert(cryptoValueUsd, 'USD')
+        } else {
+          // Fallback: calculateBalanceChf returns CHF for crypto fallback
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
         }
-        // Fallback to transaction-based calculation if price not available
-        return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+      } else {
+        // For non-Crypto items, calculateBalanceChf returns CHF
+        balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
       }
-      // For non-Crypto items, balance is already in CHF
-      return sum + calculateBalanceChf(item.id, transactions, item, cryptoPrices)
-    }, 0)
+      // Ensure balance is a valid number
+      const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
+      categoryTotals[item.category] += validBalance
+    })
+
+    // Sum all category totals
+    return Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
   }, [netWorthItems, transactions, cryptoPrices, convert])
 
   // Calculate monthly inflow/outflow from cashflow items
@@ -223,21 +272,45 @@ function Dashboard() {
         return txDate <= targetDate
       })
 
-      return netWorthItems.reduce((sum: number, item: NetWorthItem) => {
+      // Use same category totals approach as totalNetWorthChf
+      const categoryTotals: Record<NetWorthCategory, number> = {
+        'Cash': 0,
+        'Bank Accounts': 0,
+        'Retirement Funds': 0,
+        'Index Funds': 0,
+        'Stocks': 0,
+        'Commodities': 0,
+        'Crypto': 0,
+        'Real Estate': 0,
+        'Inventory': 0,
+      }
+
+      netWorthItems.forEach((item: NetWorthItem) => {
+        let balance: number
         if (item.category === 'Crypto') {
           // For Crypto: calculate coin amount from filtered transactions, use current price
           const coinAmount = calculateCoinAmount(item.id, transactionsUpToDate)
           const ticker = item.name.trim().toUpperCase()
           const currentPriceUsd = cryptoPrices[ticker] || 0
           if (currentPriceUsd > 0) {
-            return sum + convert(coinAmount * currentPriceUsd, 'USD')
+            // Convert USD to CHF
+            const cryptoValueUsd = coinAmount * currentPriceUsd
+            balance = convert(cryptoValueUsd, 'USD')
+          } else {
+            // Fallback: calculateBalanceChf returns CHF for crypto fallback
+            balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
           }
-          // Fallback to transaction-based calculation
-          return sum + calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
+        } else {
+          // For non-Crypto items, calculateBalanceChf returns CHF
+          balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
         }
-        // For non-Crypto items, balance is already in CHF
-        return sum + calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
-      }, 0)
+        // Ensure balance is a valid number
+        const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
+        categoryTotals[item.category] += validBalance
+      })
+
+      // Sum all category totals
+      return Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
     }
   }, [netWorthItems, transactions, cryptoPrices, convert])
 
@@ -290,9 +363,27 @@ function Dashboard() {
   const monthlyPnLConverted = convert(monthlyPnLChf, 'CHF')
   const ytdPnLConverted = convert(ytdPnLChf, 'CHF')
 
+  // Calculate USD value for total net worth
+  const totalNetWorthInUsd = useMemo(
+    () => totalNetWorthChf * (exchangeRates?.rates['USD'] || 1),
+    [totalNetWorthChf, exchangeRates]
+  )
+
+  // Calculate USD values for PnL
+  const monthlyPnLInUsd = useMemo(
+    () => monthlyPnLChf * (exchangeRates?.rates['USD'] || 1),
+    [monthlyPnLChf, exchangeRates]
+  )
+
+  const ytdPnLInUsd = useMemo(
+    () => ytdPnLChf * (exchangeRates?.rates['USD'] || 1),
+    [ytdPnLChf, exchangeRates]
+  )
+
   // Format currency helper
   const { isIncognito } = useIncognito()
   const formatCurrencyValue = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
+  const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch', { incognito: isIncognito })
 
   // Format for chart ticks
   const formatCurrencyTick = (value: number) => {
@@ -309,7 +400,8 @@ function Dashboard() {
     const categoryTotals: Record<NetWorthCategory, number> = {
       'Cash': 0,
       'Bank Accounts': 0,
-      'Funds': 0,
+      'Retirement Funds': 0,
+      'Index Funds': 0,
       'Stocks': 0,
       'Commodities': 0,
       'Crypto': 0,
@@ -326,27 +418,32 @@ function Dashboard() {
         const currentPriceUsd = cryptoPrices[ticker] || 0
         if (currentPriceUsd > 0) {
           // Convert USD to CHF for balance
-          balance = convert(coinAmount * currentPriceUsd, 'USD')
+          const usdValue = coinAmount * currentPriceUsd
+          balance = isNaN(usdValue) ? 0 : convert(usdValue, 'USD')
         } else {
           // Fallback to transaction-based calculation if price not available
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
         }
       } else {
         // For non-Crypto items, balance is already in CHF
-        balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices)
+        balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
       }
-      categoryTotals[item.category] += balance
+      // Ensure balance is a valid number
+      const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
+      categoryTotals[item.category] += validBalance
     })
 
-    const total = Object.values(categoryTotals).reduce((sum, val) => sum + val, 0)
-    if (total === 0) return []
+    const total = Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
+    if (total === 0 || isNaN(total)) return []
 
+    // Return actual values, not percentages - the pie chart will calculate percentages automatically
+    // Include all categories with valid positive values
     return Object.entries(categoryTotals)
-      .filter(([_, value]) => value > 0)
       .map(([name, value]) => ({
         name,
-        value: Math.round((value / total) * 100),
+        value: isNaN(value) || !isFinite(value) ? 0 : Math.max(0, value),
       }))
+      .filter(({ value }) => value > 0) // Only show categories with positive values in the chart
   }, [netWorthItems, transactions, cryptoPrices, convert])
 
   // Calculate inflow breakdown
@@ -359,10 +456,13 @@ function Dashboard() {
     const total = Object.values(groupTotals).reduce((sum, val) => sum + val, 0)
     if (total === 0) return []
 
-    return Object.entries(groupTotals).map(([name, value]) => ({
-      name,
-      value: Math.round((value / total) * 100),
-    }))
+    // Return actual values, not percentages - the pie chart will calculate percentages automatically
+    return Object.entries(groupTotals)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value]) => ({
+        name,
+        value: value,
+      }))
   }, [inflowItems])
 
   // Calculate outflow breakdown
@@ -375,10 +475,13 @@ function Dashboard() {
     const total = Object.values(groupTotals).reduce((sum, val) => sum + val, 0)
     if (total === 0) return []
 
-    return Object.entries(groupTotals).map(([name, value]) => ({
-      name,
-      value: Math.round((value / total) * 100),
-    }))
+    // Return actual values, not percentages - the pie chart will calculate percentages automatically
+    return Object.entries(groupTotals)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value]) => ({
+        name,
+        value: value,
+      }))
   }, [outflowItems])
 
   // Generate net worth evolution data from transactions
@@ -388,7 +491,8 @@ function Dashboard() {
       const categoryTotals: Record<NetWorthCategory, number> = {
         'Cash': 0,
         'Bank Accounts': 0,
-        'Funds': 0,
+        'Retirement Funds': 0,
+        'Index Funds': 0,
         'Stocks': 0,
         'Commodities': 0,
         'Crypto': 0,
@@ -410,15 +514,20 @@ function Dashboard() {
         } else {
           balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
         }
-        categoryTotals[item.category] += balance
+        // Ensure balance is a valid number
+        const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
+        categoryTotals[item.category] += validBalance
       })
+
+      const total = Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
 
       return [{
         month: new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' }),
-        'Total Net Worth': convert(totalNetWorthChf, 'CHF'),
+        'Total Net Worth': convert(total, 'CHF'),
         'Cash': convert(categoryTotals['Cash'], 'CHF'),
         'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
-        'Funds': convert(categoryTotals['Funds'], 'CHF'),
+        'Retirement Funds': convert(categoryTotals['Retirement Funds'], 'CHF'),
+        'Index Funds': convert(categoryTotals['Index Funds'], 'CHF'),
         'Stocks': convert(categoryTotals['Stocks'], 'CHF'),
         'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
         'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
@@ -462,8 +571,11 @@ function Dashboard() {
       .filter(date => !cutoffDate || date >= cutoffDate)
       .sort((a, b) => a.getTime() - b.getTime())
 
+    // Initialize chartData - start at the first transaction
+    const chartData: NetWorthDataPoint[] = []
+
     // Calculate net worth for each month end
-    const chartData = sortedMonthEnds.map(monthEnd => {
+    const monthEndData = sortedMonthEnds.map(monthEnd => {
       const transactionsUpToDate = transactions.filter((tx: NetWorthTransaction) => {
         const txDate = new Date(tx.date)
         return txDate <= monthEnd
@@ -472,7 +584,8 @@ function Dashboard() {
       const categoryTotals: Record<NetWorthCategory, number> = {
         'Cash': 0,
         'Bank Accounts': 0,
-        'Funds': 0,
+        'Retirement Funds': 0,
+        'Index Funds': 0,
         'Stocks': 0,
         'Commodities': 0,
         'Crypto': 0,
@@ -494,10 +607,12 @@ function Dashboard() {
         } else {
           balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
         }
-        categoryTotals[item.category] += balance
+        // Ensure balance is a valid number
+        const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
+        categoryTotals[item.category] += validBalance
       })
 
-      const total = Object.values(categoryTotals).reduce((sum, val) => sum + val, 0)
+      const total = Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
       const month = monthEnd.toLocaleString('en-US', { month: 'short', year: 'numeric' })
 
       return {
@@ -505,7 +620,8 @@ function Dashboard() {
         'Total Net Worth': convert(total, 'CHF'),
         'Cash': convert(categoryTotals['Cash'], 'CHF'),
         'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
-        'Funds': convert(categoryTotals['Funds'], 'CHF'),
+        'Retirement Funds': convert(categoryTotals['Retirement Funds'], 'CHF'),
+        'Index Funds': convert(categoryTotals['Index Funds'], 'CHF'),
         'Stocks': convert(categoryTotals['Stocks'], 'CHF'),
         'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
         'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
@@ -514,11 +630,15 @@ function Dashboard() {
       }
     })
 
+    // Add the month end data to chartData
+    chartData.push(...monthEndData)
+
     // Add current state
     const categoryTotals: Record<NetWorthCategory, number> = {
       'Cash': 0,
       'Bank Accounts': 0,
-      'Funds': 0,
+      'Retirement Funds': 0,
+      'Index Funds': 0,
       'Stocks': 0,
       'Commodities': 0,
       'Crypto': 0,
@@ -540,15 +660,20 @@ function Dashboard() {
       } else {
         balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
       }
-      categoryTotals[item.category] += balance
+      // Ensure balance is a valid number
+      const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
+      categoryTotals[item.category] += validBalance
     })
+
+    const total = Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
 
     chartData.push({
       month: new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' }),
-      'Total Net Worth': convert(totalNetWorthChf, 'CHF'),
+      'Total Net Worth': convert(total, 'CHF'),
       'Cash': convert(categoryTotals['Cash'], 'CHF'),
       'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
-      'Funds': convert(categoryTotals['Funds'], 'CHF'),
+      'Retirement Funds': convert(categoryTotals['Retirement Funds'], 'CHF'),
+      'Index Funds': convert(categoryTotals['Index Funds'], 'CHF'),
       'Stocks': convert(categoryTotals['Stocks'], 'CHF'),
       'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
       'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
@@ -576,29 +701,42 @@ function Dashboard() {
                 <TotalText variant={totalNetWorthConverted >= 0 ? 'inflow' : 'outflow'} className="mt-1">
                   {formatCurrencyValue(totalNetWorthConverted)}
                 </TotalText>
+                <TotalText variant={totalNetWorthInUsd >= 0 ? 'inflow' : 'outflow'} className="mt-1">
+                  {formatUsd(totalNetWorthInUsd)}
+                </TotalText>
               </div>
             </div>
             <div className="space-y-2">
               <div>
                 <div className="text-xs md:text-sm text-text-muted mb-1">Monthly PnL</div>
-                <div className="flex items-baseline gap-2">
-                  <TotalText variant={monthlyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
-                    {formatCurrencyValue(monthlyPnLConverted)}
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-baseline gap-2">
+                    <TotalText variant={monthlyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
+                      {formatCurrencyValue(monthlyPnLConverted)}
+                    </TotalText>
+                    <span className={`text-xs md:text-sm ${monthlyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
+                      {isIncognito ? '(****)' : `(${monthlyPnLPercentage >= 0 ? '+' : ''}${monthlyPnLPercentage.toFixed(2)}%)`}
+                    </span>
+                  </div>
+                  <TotalText variant={monthlyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
+                    {formatUsd(monthlyPnLInUsd)}
                   </TotalText>
-                  <span className={`text-xs md:text-sm ${monthlyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                    {isIncognito ? '(****)' : `(${monthlyPnLPercentage >= 0 ? '+' : ''}${monthlyPnLPercentage.toFixed(2)}%)`}
-                  </span>
                 </div>
               </div>
               <div>
                 <div className="text-xs md:text-sm text-text-muted mb-1">YTD PnL</div>
-                <div className="flex items-baseline gap-2">
-                  <TotalText variant={ytdPnLConverted >= 0 ? 'inflow' : 'outflow'}>
-                    {formatCurrencyValue(ytdPnLConverted)}
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-baseline gap-2">
+                    <TotalText variant={ytdPnLConverted >= 0 ? 'inflow' : 'outflow'}>
+                      {formatCurrencyValue(ytdPnLConverted)}
+                    </TotalText>
+                    <span className={`text-xs md:text-sm ${ytdPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
+                      {isIncognito ? '(****)' : `(${ytdPnLPercentage >= 0 ? '+' : ''}${ytdPnLPercentage.toFixed(2)}%)`}
+                    </span>
+                  </div>
+                  <TotalText variant={ytdPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
+                    {formatUsd(ytdPnLInUsd)}
                   </TotalText>
-                  <span className={`text-xs md:text-sm ${ytdPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                    {isIncognito ? '(****)' : `(${ytdPnLPercentage >= 0 ? '+' : ''}${ytdPnLPercentage.toFixed(2)}%)`}
-                  </span>
                 </div>
               </div>
             </div>
@@ -677,75 +815,83 @@ function Dashboard() {
               <Line
                 type="monotone"
                 dataKey="Total Net Worth"
-                stroke={CHART_COLORS.gold}
-                strokeWidth={3}
+                stroke={CHART_COLORS.danger}
+                strokeWidth={4}
                 dot={false}
                 activeDot={false}
               />
-              <Line
-                type="monotone"
-                dataKey="Cash"
-                stroke={CHART_COLORS.accent1}
-                strokeWidth={2}
-                dot={false}
-                activeDot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="Bank Accounts"
-                stroke={CHART_COLORS.accent2}
-                strokeWidth={2}
-                dot={false}
-                activeDot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="Funds"
-                stroke={CHART_COLORS.accent3}
-                strokeWidth={2}
-                dot={false}
-                activeDot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="Stocks"
-                stroke={CHART_COLORS.success}
-                strokeWidth={2}
-                dot={false}
-                activeDot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="Commodities"
-                stroke={CHART_COLORS.bronze}
-                strokeWidth={2}
-                dot={false}
-                activeDot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="Crypto"
-                stroke="#F8C445"
-                strokeWidth={2}
-                dot={false}
-                activeDot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="Real Estate"
-                stroke="#4A56FF"
-                strokeWidth={2}
-                dot={false}
-                activeDot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="Inventory"
-                stroke={CHART_COLORS.muted1}
-                strokeWidth={2}
-                dot={false}
-                activeDot={false}
-              />
+                <Line
+                  type="monotone"
+                  dataKey="Cash"
+                  stroke={CHART_COLORS.accent1}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Bank Accounts"
+                  stroke={CHART_COLORS.accent2}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Retirement Funds"
+                  stroke={CHART_COLORS.accent3}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Index Funds"
+                  stroke={CHART_COLORS.purple}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Stocks"
+                  stroke={CHART_COLORS.orange}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Commodities"
+                  stroke={CHART_COLORS.teal}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Crypto"
+                  stroke={CHART_COLORS.pink}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Real Estate"
+                  stroke={CHART_COLORS.indigo}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Inventory"
+                  stroke={CHART_COLORS.cyan}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -783,7 +929,12 @@ function Dashboard() {
                     fontSize: '0.648rem',
                     fontWeight: '400',
                   }}
-                  formatter={(value: number) => isIncognito ? '****' : `${value}%`}
+                  formatter={(value: number, name: string) => {
+                    if (isIncognito) return '****'
+                    const total = assetAllocationData.reduce((sum, item) => sum + item.value, 0)
+                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0'
+                    return `${percent}%`
+                  }}
                 />
                 <Legend
                   wrapperStyle={{ color: '#8B8F99', fontSize: '0.648rem', fontWeight: '400' }}
@@ -791,9 +942,10 @@ function Dashboard() {
                   className="text2"
                   formatter={(value, entry) => {
                     if (isIncognito) return `**** in ${value}`
-                    const total = assetAllocationData.reduce((sum, item) => sum + item.value, 0)
                     const item = assetAllocationData.find(item => item.name === value)
-                    const percent = item ? ((item.value / total) * 100).toFixed(0) : '0'
+                    if (!item) return `${value}`
+                    const total = assetAllocationData.reduce((sum, item) => sum + item.value, 0)
+                    const percent = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0'
                     return `${percent}% in ${value}`
                   }}
                 />
@@ -832,16 +984,22 @@ function Dashboard() {
                     fontSize: '0.648rem',
                     fontWeight: '400',
                   }}
-                  formatter={(value: number) => isIncognito ? '****' : `${value}%`}
+                  formatter={(value: number, name: string) => {
+                    if (isIncognito) return '****'
+                    const total = inflowBreakdownData.reduce((sum, item) => sum + item.value, 0)
+                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
+                    return `${percent}%`
+                  }}
                 />
                 <Legend
                   wrapperStyle={{ color: '#8B8F99', fontSize: '0.648rem', fontWeight: '400' }}
                   iconType="circle"
                   className="text2"
                   formatter={(value, entry) => {
+                    if (isIncognito) return `**** in ${value}`
                     const total = inflowBreakdownData.reduce((sum, item) => sum + item.value, 0)
                     const item = inflowBreakdownData.find(item => item.name === value)
-                    const percent = item ? ((item.value / total) * 100).toFixed(0) : '0'
+                    const percent = item && total > 0 ? ((item.value / total) * 100).toFixed(1) : '0.0'
                     return `${percent}% in ${value}`
                   }}
                 />
@@ -880,16 +1038,22 @@ function Dashboard() {
                     fontSize: '0.648rem',
                     fontWeight: '400',
                   }}
-                  formatter={(value: number) => isIncognito ? '****' : `${value}%`}
+                  formatter={(value: number, name: string) => {
+                    if (isIncognito) return '****'
+                    const total = outflowBreakdownData.reduce((sum, item) => sum + item.value, 0)
+                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
+                    return `${percent}%`
+                  }}
                 />
                 <Legend
                   wrapperStyle={{ color: '#8B8F99', fontSize: '0.648rem', fontWeight: '400' }}
                   iconType="circle"
                   className="text2"
                   formatter={(value, entry) => {
+                    if (isIncognito) return `**** in ${value}`
                     const total = outflowBreakdownData.reduce((sum, item) => sum + item.value, 0)
                     const item = outflowBreakdownData.find(item => item.name === value)
-                    const percent = item ? ((item.value / total) * 100).toFixed(0) : '0'
+                    const percent = item && total > 0 ? ((item.value / total) * 100).toFixed(1) : '0.0'
                     return `${percent}% in ${value}`
                   }}
                 />

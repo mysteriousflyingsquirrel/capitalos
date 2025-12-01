@@ -21,7 +21,8 @@ import {
 export type NetWorthCategory =
   | 'Cash'
   | 'Bank Accounts'
-  | 'Funds'
+  | 'Retirement Funds'
+  | 'Index Funds'
   | 'Stocks'
   | 'Commodities'
   | 'Crypto'
@@ -57,7 +58,8 @@ const initialMockTransactions: NetWorthTransaction[] = []
 const categoryOrder: NetWorthCategory[] = [
   'Cash',
   'Bank Accounts',
-  'Funds',
+  'Retirement Funds',
+  'Index Funds',
   'Stocks',
   'Commodities',
   'Crypto',
@@ -92,26 +94,13 @@ export function calculateBalanceChf(
   
   // For non-Crypto items or Crypto without current prices, use transaction-based calculation
   // Returns CHF (converts from original currency if available)
-  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Real Estate', 'Inventory']
-  const isCategoryWithoutPricePerItem = item && categoriesWithoutPricePerItem.includes(item.category)
-  
+  // All categories now use price per item
   return transactions
     .filter(tx => tx.itemId === itemId)
     .reduce((sum, tx) => {
       const txValue = tx.amount * (tx.side === 'buy' ? 1 : -1)
       
-      // For categories without price per item, amount is the total value in the selected currency
-      // When pricePerItemChf is 1, it means amount is the total value
-      if (isCategoryWithoutPricePerItem || tx.pricePerItemChf === 1) {
-        if (tx.currency && convert) {
-          // Convert amount from original currency to CHF
-          return sum + convert(txValue, tx.currency as CurrencyCode)
-        }
-        // Fallback: assume CHF
-        return sum + txValue
-      }
-      
-      // For categories with price per item, use pricePerItem and currency if available
+      // For all categories, use pricePerItem and currency if available
       if (tx.pricePerItem !== undefined && tx.currency && convert) {
         const priceInOriginalCurrency = tx.pricePerItem
         const totalInOriginalCurrency = txValue * priceInOriginalCurrency
@@ -135,12 +124,54 @@ export function calculateCoinAmount(itemId: string, transactions: NetWorthTransa
     .reduce((sum, tx) => sum + (tx.side === 'buy' ? 1 : -1) * tx.amount, 0)
 }
 
+// Calculate holdings (quantity) for Index Funds, Commodities, and Stocks
+export function calculateHoldings(itemId: string, transactions: NetWorthTransaction[]): number {
+  return transactions
+    .filter(tx => tx.itemId === itemId)
+    .reduce((sum, tx) => sum + (tx.side === 'buy' ? 1 : -1) * tx.amount, 0)
+}
+
+// Calculate average price per item for Index Funds, Commodities, and Stocks
+export function calculateAveragePricePerItem(
+  itemId: string,
+  transactions: NetWorthTransaction[],
+  convert?: (amount: number, from: CurrencyCode) => number
+): number {
+  const itemTransactions = transactions.filter(tx => tx.itemId === itemId)
+  if (itemTransactions.length === 0) return 0
+
+  let totalValue = 0
+  let totalQuantity = 0
+
+  itemTransactions.forEach(tx => {
+    if (tx.side === 'buy') {
+      const quantity = tx.amount
+      let pricePerItem: number
+      
+      // Use pricePerItem if available, otherwise calculate from pricePerItemChf
+      if (tx.pricePerItem !== undefined && tx.currency && convert) {
+        // Convert from original currency to CHF
+        pricePerItem = convert(tx.pricePerItem, tx.currency as CurrencyCode)
+      } else {
+        // Use pricePerItemChf (already in CHF)
+        pricePerItem = tx.pricePerItemChf
+      }
+      
+      totalValue += quantity * pricePerItem
+      totalQuantity += quantity
+    }
+  })
+
+  return totalQuantity > 0 ? totalValue / totalQuantity : 0
+}
+
 // Helper component: NetWorthCategorySection
 interface NetWorthCategorySectionProps {
   category: NetWorthCategory
   items: NetWorthItem[]
   transactions: NetWorthTransaction[]
   cryptoPrices?: Record<string, number>
+  platforms: Platform[]
   onAddClick: () => void
   onAddTransaction: (itemId: string) => void
   onShowMenu: (itemId: string, buttonElement: HTMLButtonElement) => void
@@ -186,17 +217,28 @@ function NetWorthCategorySection({
         return sum + (coinAmount * currentPriceUsd)
       }
       // Fallback to transaction-based if price not available
-      // For crypto fallback, reconstruct USD from stored value
+      // For crypto fallback, calculateBalanceChf returns CHF
       const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-      // This is stored in CHF but represents USD originally, so convert back
-      return sum + convert(balanceChf, 'CHF') * (exchangeRates?.rates['USD'] || 1)
+      // Convert CHF back to USD for the subtotal (which should be in USD for Crypto)
+      // Since balanceChf is in CHF, we need to get USD: USD = CHF / rate
+      const usdValue = exchangeRates?.rates['USD'] ? balanceChf / exchangeRates.rates['USD'] : balanceChf
+      return sum + (isNaN(usdValue) || !isFinite(usdValue) ? 0 : usdValue)
     }
-    // For non-Crypto, balance is already in CHF, convert to baseCurrency
-    return sum + convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert), 'CHF')
+    // For non-Crypto, calculateBalanceChf already returns CHF (converts from original currency internally)
+    const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+    return sum + (isNaN(balanceChf) || !isFinite(balanceChf) ? 0 : balanceChf)
   }, 0)
   
   // For Crypto, also calculate the subtotal in baseCurrency
+  // For non-Crypto, subtotal is already in baseCurrency
   const subtotalInBaseCurrency = category === 'Crypto' ? convert(subtotal, 'USD') : subtotal
+  
+  // Calculate USD value for all categories
+  // For Crypto, subtotal is already in USD
+  // For non-Crypto, convert from baseCurrency (CHF) to USD using exchange rate
+  const subtotalInUsd = category === 'Crypto' 
+    ? subtotal 
+    : (subtotal * (exchangeRates?.rates['USD'] || 1))
 
   return (
     <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
@@ -204,20 +246,12 @@ function NetWorthCategorySection({
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <Heading level={2}>{category}</Heading>
-                  {category === 'Crypto' ? (
-                    <>
-                      <TotalText variant={subtotalInBaseCurrency >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
-                        {formatCurrency(subtotalInBaseCurrency)}
-                      </TotalText>
-                      <TotalText variant={subtotal >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
-                        {formatUsd(subtotal)}
-                      </TotalText>
-                    </>
-                  ) : (
-                    <TotalText variant={subtotal >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
-                      {formatCurrency(subtotal)}
-                    </TotalText>
-                  )}
+                  <TotalText variant={subtotalInBaseCurrency >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
+                    {formatCurrency(subtotalInBaseCurrency)}
+                  </TotalText>
+                  <TotalText variant={subtotalInUsd >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
+                    {formatUsd(subtotalInUsd)}
+                  </TotalText>
                 </div>
           <button
             onClick={onAddClick}
@@ -236,7 +270,7 @@ function NetWorthCategorySection({
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            <span>{category === 'Crypto' ? 'Add Coin' : 'Add Item'}</span>
+            <span>Add Item</span>
           </button>
         </div>
       </div>
@@ -246,33 +280,21 @@ function NetWorthCategorySection({
         <div className="overflow-x-auto">
           <table className="w-full" style={{ tableLayout: 'fixed' }}>
             <colgroup>
-              {category === 'Crypto' ? (
-                <>
-                  <col style={{ width: '70px' }} />
-                  <col style={{ width: 'calc((100% - 150px) / 3)' }} />
-                  <col style={{ width: 'calc((100% - 150px) / 3)' }} />
-                  <col style={{ width: 'calc((100% - 150px) / 3)' }} />
-                  <col style={{ width: '80px' }} />
-                </>
-              ) : (
-                <>
-                  <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                  <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                  <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                  <col style={{ width: '80px' }} />
-                </>
-              )}
+              {/* All categories have the same column structure */}
+              <col style={{ width: '70px' }} />
+              <col style={{ width: 'calc((100% - 150px) / 3)' }} />
+              <col style={{ width: 'calc((100% - 150px) / 3)' }} />
+              <col style={{ width: 'calc((100% - 150px) / 3)' }} />
+              <col style={{ width: '80px' }} />
             </colgroup>
             <thead>
               <tr className="border-b border-border-subtle">
                 <th className="text-left pb-2">
-                  <Heading level={4}>{category === 'Crypto' ? 'Coin' : 'Item'}</Heading>
+                  <Heading level={4}>Item</Heading>
                 </th>
-                {category === 'Crypto' && (
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Holdings</Heading>
-                  </th>
-                )}
+                <th className="text-right pb-2">
+                  <Heading level={4}>Holdings</Heading>
+                </th>
                 <th className="text-right pb-2">
                   <Heading level={4}>Balance</Heading>
                 </th>
@@ -287,46 +309,44 @@ function NetWorthCategorySection({
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={category === 'Crypto' ? 5 : 4} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                  <td colSpan={5} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
                     No items yet. Click "Add Item" to get started.
                   </td>
                 </tr>
               ) : (
-                // Sort items by balance (high to low)
+                // Sort items by balance (high to low) - all categories converted to CHF
                 [...items].sort((a, b) => {
-                  // Calculate balance for item a - Crypto always in USD, others in baseCurrency
+                  // Calculate balance for item a - always convert to CHF
                   let balanceA: number
                   if (category === 'Crypto') {
                     const coinAmountA = calculateCoinAmount(a.id, transactions)
                     const tickerA = a.name.trim().toUpperCase()
                     const currentPriceUsdA = cryptoPrices[tickerA] || 0
                     if (currentPriceUsdA > 0) {
-                      // Crypto is always USD, no conversion
-                      balanceA = coinAmountA * currentPriceUsdA
+                      // Crypto: holdings * current price (USD), then convert to CHF
+                      const balanceUsd = coinAmountA * currentPriceUsdA
+                      balanceA = convert(balanceUsd, 'USD')
                     } else {
-                      // Fallback: reconstruct USD from stored value
-                      const balanceChf = calculateBalanceChf(a.id, transactions, a, cryptoPrices, convert)
-                      const { exchangeRates: rates } = useCurrency()
-                      balanceA = convert(balanceChf, 'CHF') * (rates?.rates['USD'] || 1)
+                      // Fallback: use transaction-based calculation
+                      balanceA = convert(calculateBalanceChf(a.id, transactions, a, cryptoPrices, convert), 'CHF')
                     }
                   } else {
                     balanceA = convert(calculateBalanceChf(a.id, transactions, a, cryptoPrices, convert), 'CHF')
                   }
 
-                  // Calculate balance for item b - Crypto always in USD, others in baseCurrency
+                  // Calculate balance for item b - always convert to CHF
                   let balanceB: number
                   if (category === 'Crypto') {
                     const coinAmountB = calculateCoinAmount(b.id, transactions)
                     const tickerB = b.name.trim().toUpperCase()
                     const currentPriceUsdB = cryptoPrices[tickerB] || 0
                     if (currentPriceUsdB > 0) {
-                      // Crypto is always USD, no conversion
-                      balanceB = coinAmountB * currentPriceUsdB
+                      // Crypto: holdings * current price (USD), then convert to CHF
+                      const balanceUsd = coinAmountB * currentPriceUsdB
+                      balanceB = convert(balanceUsd, 'USD')
                     } else {
-                      // Fallback: reconstruct USD from stored value
-                      const balanceChf = calculateBalanceChf(b.id, transactions, b, cryptoPrices, convert)
-                      const { exchangeRates: rates } = useCurrency()
-                      balanceB = convert(balanceChf, 'CHF') * (rates?.rates['USD'] || 1)
+                      // Fallback: use transaction-based calculation
+                      balanceB = convert(calculateBalanceChf(b.id, transactions, b, cryptoPrices, convert), 'CHF')
                     }
                   } else {
                     balanceB = convert(calculateBalanceChf(b.id, transactions, b, cryptoPrices, convert), 'CHF')
@@ -335,39 +355,41 @@ function NetWorthCategorySection({
                   // Sort high to low
                   return balanceB - balanceA
                 }).map((item) => {
-                  // For Crypto, calculate balance as coin amount * current price (always USD)
+                  // For all categories, calculate holdings
+                  const holdings = calculateHoldings(item.id, transactions)
+                  
+                  // Calculate balance - always convert to CHF for display
                   let balanceConverted: number
                   if (category === 'Crypto') {
                     const coinAmount = calculateCoinAmount(item.id, transactions)
                     const ticker = item.name.trim().toUpperCase()
                     const currentPriceUsd = cryptoPrices[ticker] || 0
                     if (currentPriceUsd > 0) {
-                      // Crypto is always USD, no conversion
-                      balanceConverted = coinAmount * currentPriceUsd
+                      // Crypto: holdings * current price (USD), then convert to CHF
+                      const balanceUsd = coinAmount * currentPriceUsd
+                      balanceConverted = convert(balanceUsd, 'USD')
                     } else {
-                      // Fallback: reconstruct USD from stored value
-                      const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-                      balanceConverted = convert(balanceChf, 'CHF') * (exchangeRates?.rates['USD'] || 1)
+                      // Fallback: use transaction-based calculation
+                      balanceConverted = convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert), 'CHF')
                     }
                   } else {
+                    // For all other categories, calculate balance from transactions and convert to CHF
                     balanceConverted = convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert), 'CHF')
                   }
-                  const coinAmount = category === 'Crypto' ? calculateCoinAmount(item.id, transactions) : 0
+                  
                   return (
                     <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
                       <td className="py-2">
                         <div className="text2 truncate">{item.name}</div>
                       </td>
-                      {category === 'Crypto' && (
-                        <td className="py-2 text-right">
-                          <div className="text2 whitespace-nowrap">
-                            {formatCoinAmount(coinAmount, isIncognito)}
-                          </div>
-                        </td>
-                      )}
                       <td className="py-2 text-right">
                         <div className="text2 whitespace-nowrap">
-                          {category === 'Crypto' ? formatUsd(balanceConverted) : formatCurrency(balanceConverted)}
+                          {formatCoinAmount(holdings, isIncognito)}
+                        </div>
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="text2 whitespace-nowrap">
+                          {formatCurrency(balanceConverted)}
                         </div>
                       </td>
                       <td className="py-2 text-right">
@@ -378,8 +400,8 @@ function NetWorthCategorySection({
                               className="w-4 h-4 text-warning flex-shrink-0"
                               fill="currentColor"
                               viewBox="0 0 20 20"
-                              title="Platform has been removed. Please update this item."
                             >
+                              <title>Platform has been removed. Please update this item.</title>
                               <path
                                 fillRule="evenodd"
                                 d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
@@ -527,6 +549,7 @@ function NetWorth() {
   const { uid } = useAuth()
   const { isIncognito } = useIncognito()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
+  const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch', { incognito: isIncognito })
   
   // Load data from Firestore on mount
   const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>([])
@@ -617,7 +640,9 @@ function NetWorth() {
     if (uid && !dataLoading) {
       console.log('useEffect: Saving transactions (count:', transactions.length, ')')
       // Clean all transactions before saving (remove undefined values)
-      const cleanedTransactions = transactions.map(tx => removeUndefined(tx))
+      const cleanedTransactions = transactions
+        .filter(tx => tx.id) // Ensure id exists
+        .map(tx => removeUndefined(tx) as NetWorthTransaction)
       saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
         console.error('Failed to save transactions:', error)
       })
@@ -688,28 +713,52 @@ function NetWorth() {
     [netWorthItems]
   )
 
-  const totalNetWorth = useMemo(
-    () => netWorthItems.reduce((sum, item) => {
+  // Calculate total net worth by summing all category subtotals (same logic as category sections)
+  const totalNetWorth = useMemo(() => {
+    const categoryTotals: Record<NetWorthCategory, number> = {
+      'Cash': 0,
+      'Bank Accounts': 0,
+      'Retirement Funds': 0,
+      'Index Funds': 0,
+      'Stocks': 0,
+      'Commodities': 0,
+      'Crypto': 0,
+      'Real Estate': 0,
+      'Inventory': 0,
+    }
+
+    netWorthItems.forEach((item) => {
+      let balance: number
       if (item.category === 'Crypto') {
-        // For Crypto: use current price * coin amount (always in USD)
-        // But convert to baseCurrency for the total
+        // For Crypto: use current price * coin amount, convert USD to CHF
         const coinAmount = calculateCoinAmount(item.id, transactions)
         const ticker = item.name.trim().toUpperCase()
         const currentPriceUsd = cryptoPrices[ticker] || 0
         if (currentPriceUsd > 0) {
-          // Crypto is in USD, convert to baseCurrency for total
+          // Convert USD to CHF
           const cryptoValueUsd = coinAmount * currentPriceUsd
-          return sum + convert(cryptoValueUsd, 'USD')
+          balance = convert(cryptoValueUsd, 'USD')
+        } else {
+          // Fallback: calculateBalanceChf returns CHF for crypto fallback
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
         }
-        // Fallback: reconstruct USD from stored value, then convert to baseCurrency
-        const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-        const cryptoValueUsd = convert(balanceChf, 'CHF') * (exchangeRates?.rates['USD'] || 1)
-        return sum + convert(cryptoValueUsd, 'USD')
+      } else {
+        // For non-Crypto items, calculateBalanceChf returns CHF
+        balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
       }
-      // For non-Crypto items, balance is already in CHF, convert to baseCurrency
-      return sum + convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert), 'CHF')
-    }, 0),
-    [netWorthItems, transactions, cryptoPrices, convert, exchangeRates]
+      // Ensure balance is a valid number
+      const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
+      categoryTotals[item.category] += validBalance
+    })
+
+    // Sum all category totals
+    return Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
+  }, [netWorthItems, transactions, cryptoPrices, convert])
+
+  // Calculate USD value for total net worth
+  const totalNetWorthInUsd = useMemo(
+    () => totalNetWorth * (exchangeRates?.rates['USD'] || 1),
+    [totalNetWorth, exchangeRates]
   )
 
 
@@ -800,7 +849,9 @@ function NetWorth() {
       // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
       if (uid) {
         // Clean all transactions before saving (remove undefined values)
-        const cleanedTransactions = updated.map(tx => removeUndefined(tx))
+        const cleanedTransactions = updated
+          .filter(tx => tx.id) // Ensure id exists
+          .map(tx => removeUndefined(tx) as NetWorthTransaction)
         console.log('Calling saveNetWorthTransactions with', cleanedTransactions.length, 'transactions')
         saveNetWorthTransactions(cleanedTransactions, uid)
           .then(() => {
@@ -912,6 +963,9 @@ function NetWorth() {
               <Heading level={2}>Total Net Worth</Heading>
               <TotalText variant={totalNetWorth >= 0 ? 'inflow' : 'outflow'} className="mt-1">
                 {formatCurrency(totalNetWorth)}
+              </TotalText>
+              <TotalText variant={totalNetWorthInUsd >= 0 ? 'inflow' : 'outflow'} className="mt-1">
+                {formatUsd(totalNetWorthInUsd)}
               </TotalText>
             </div>
           </div>
@@ -1028,9 +1082,13 @@ interface AddNetWorthItemModalProps {
 
 function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTransaction }: AddNetWorthItemModalProps) {
   const { convert } = useCurrency()
+  const isCrypto = category === 'Crypto'
+  
   const [name, setName] = useState('')
   const [amount, setAmount] = useState('')
-  const [currency, setCurrency] = useState<CurrencyCode>('CHF')
+  const [pricePerItem, setPricePerItem] = useState('')
+  // For Crypto, currency is always USD. For others, default to CHF.
+  const [currency, setCurrency] = useState<CurrencyCode>(isCrypto ? 'USD' : 'CHF')
   const [platform, setPlatform] = useState('Physical')
   // For date input, use YYYY-MM-DD format (HTML5 date input format)
   const [date, setDate] = useState(() => {
@@ -1038,6 +1096,46 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   })
   const [error, setError] = useState<string | null>(null)
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false)
+  const [priceError, setPriceError] = useState<string | null>(null)
+
+  // Fetch coin price when name is entered for Crypto items
+  useEffect(() => {
+    if (isCrypto && name.trim()) {
+      const ticker = name.trim().toUpperCase()
+      setIsLoadingPrice(true)
+      setPriceError(null)
+
+      fetchCoinPrice(ticker)
+        .then((price) => {
+          if (price !== null) {
+            // Set the USD price directly from API (always in USD for crypto)
+            setPricePerItem(price.toString())
+            setPriceError(null)
+          } else {
+            setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
+          }
+        })
+        .catch((err) => {
+          setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
+        })
+        .finally(() => {
+          setIsLoadingPrice(false)
+        })
+    } else if (isCrypto && !name.trim()) {
+      // Clear price when name is cleared
+      setPricePerItem('')
+      setPriceError(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCrypto, name]) // Run when name changes for crypto items
+
+  // Calculate total balance for all categories
+  const totalBalance = useMemo(() => {
+    const parsedAmount = Number(amount) || 0
+    const parsedPrice = Number(pricePerItem) || 0
+    return parsedAmount * parsedPrice
+  }, [amount, pricePerItem])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -1048,39 +1146,50 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
       return
     }
 
-    const parsedAmount = Number(amount)
-    if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      setError('Please enter a valid amount greater than 0.')
-      return
-    }
-
-    if (!date) {
-      setError('Please enter a date in DD/MM/YYYY format.')
-      return
-    }
-
-    // Date input already provides YYYY-MM-DD format, use it directly
     if (!date) {
       setError('Please select a date.')
       return
     }
     const parsedDate = date // Already in YYYY-MM-DD format
 
+    // For all categories, use the same format
+    const parsedAmount = Number(amount)
+    const parsedPricePerItem = Number(pricePerItem)
+
+    if (!amount || Number.isNaN(parsedAmount) || parsedAmount === 0) {
+      setError('Please enter a valid amount (can be positive for buy or negative for sell).')
+      return
+    }
+
+    if (!pricePerItem || Number.isNaN(parsedPricePerItem) || parsedPricePerItem <= 0) {
+      setError('Please enter a valid price per item greater than 0.')
+      return
+    }
+
+    // For Crypto, currency is always USD
+    const itemCurrency = isCrypto ? 'USD' : currency
+
     // Create the item first and get its ID
     const newItemId = onSubmit(category, {
       name: name.trim(),
-      currency: currency,
+      currency: itemCurrency,
       platform,
     })
 
-    // Create the initial transaction with the amount in the selected currency
-    // For all categories, amount represents the total value in the selected currency
+    // Create the initial transaction
     if (onSaveTransaction && newItemId) {
+      const side: 'buy' | 'sell' = parsedAmount > 0 ? 'buy' : 'sell'
+      const holdingsAmount = Math.abs(parsedAmount)
+      
+      // Convert price per item to CHF for storage
+      const pricePerItemChf = convert(parsedPricePerItem, itemCurrency as CurrencyCode)
+
       onSaveTransaction(newItemId, {
-        side: 'buy',
-        currency: currency,
-        amount: parsedAmount, // Store original amount in original currency
-        pricePerItemChf: 1, // For all items, amount is the total value
+        side,
+        currency: itemCurrency,
+        amount: holdingsAmount, // Holdings quantity
+        pricePerItem: parsedPricePerItem, // Original price in original currency
+        pricePerItemChf, // Price in CHF
         date: parsedDate,
       })
     }
@@ -1088,7 +1197,8 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
     // Reset form
     setName('')
     setAmount('')
-    setCurrency('CHF')
+    setPricePerItem('')
+    setCurrency(isCrypto ? 'USD' : 'CHF')
     setPlatform('Physical')
     // Reset date to today in YYYY-MM-DD format
     const now = new Date()
@@ -1137,25 +1247,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
             />
           </div>
 
-          <div>
-            <label
-              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-              htmlFor="nw-amount"
-            >
-              Amount ({currency})
-            </label>
-            <input
-              id="nw-amount"
-              type="number"
-              step="0.01"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              placeholder="e.g. 1000, 5000, 10000"
-            />
-          </div>
-
+          {/* For all categories - same format */}
           <div>
             <label
               className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
@@ -1163,16 +1255,87 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
             >
               Currency
             </label>
-            <select
-              id="nw-currency"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+            {isCrypto ? (
+              <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-muted text-xs md:text-sm cursor-not-allowed">
+                USD
+              </div>
+            ) : (
+              <select
+                id="nw-currency"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+              >
+                <option value="CHF">CHF</option>
+                <option value="EUR">EUR</option>
+                <option value="USD">USD</option>
+              </select>
+            )}
+          </div>
+
+          <div>
+            <label
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+              htmlFor="nw-amount"
             >
-              <option value="CHF">CHF</option>
-              <option value="EUR">EUR</option>
-              <option value="USD">USD</option>
-            </select>
+              Amount (holdings)
+            </label>
+            <input
+              id="nw-amount"
+              type="number"
+              step={isCrypto ? "0.00000001" : "0.0001"}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+              placeholder="Positive for buy, negative for sell"
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+              htmlFor="nw-price-per-item"
+            >
+              Price per Item ({isCrypto ? 'USD' : currency})
+              {isLoadingPrice && isCrypto && (
+                <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
+              )}
+            </label>
+            <input
+              id="nw-price-per-item"
+              type="number"
+              step={isCrypto ? "any" : "0.01"}
+              min="0"
+              value={pricePerItem}
+              onChange={(e) => setPricePerItem(e.target.value)}
+              className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
+                priceError ? 'border-warning' : 'border-border-subtle'
+              }`}
+              placeholder={isCrypto ? "e.g. 50000, 3000, 1.00" : "e.g. 150.50"}
+              disabled={isLoadingPrice && isCrypto}
+            />
+            {priceError && (
+              <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
+                {priceError}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+              htmlFor="nw-total-balance"
+            >
+              Total balance of this transaction ({isCrypto ? 'USD' : currency})
+            </label>
+            <input
+              id="nw-total-balance"
+              type="text"
+              value={totalBalance !== 0 ? totalBalance.toFixed(2) : ''}
+              readOnly
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-muted text-xs md:text-sm cursor-not-allowed"
+              placeholder="Calculated automatically"
+            />
           </div>
 
           <div>
@@ -1287,7 +1450,6 @@ interface EditNetWorthItemModalProps {
 function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWorthItemModalProps) {
   const isCrypto = item.category === 'Crypto'
   const [name, setName] = useState(item.name)
-  const [currency, setCurrency] = useState(item.currency)
   const [platform, setPlatform] = useState(item.platform)
   const [error, setError] = useState<string | null>(null)
 
@@ -1300,7 +1462,8 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
       return
     }
 
-    onSave(item.id, name.trim(), currency, platform)
+    // Currency cannot be changed - always use item's original currency
+    onSave(item.id, name.trim(), item.currency, platform)
     onClose()
   }
 
@@ -1326,26 +1489,42 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
           </div>
 
           {isCrypto ? (
-            <div>
-              <label
-                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                htmlFor="edit-platform"
-              >
-                Platform
-              </label>
-              <select
-                id="edit-platform"
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              >
-                {platforms.map((p) => (
-                  <option key={p.id} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div>
+                <label
+                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                  htmlFor="edit-currency"
+                >
+                  Currency
+                </label>
+                <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-muted text-xs md:text-sm cursor-not-allowed">
+                  USD
+                </div>
+                <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-text-muted">
+                  Currency cannot be changed after item creation
+                </p>
+              </div>
+              <div>
+                <label
+                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                  htmlFor="edit-platform"
+                >
+                  Platform
+                </label>
+                <select
+                  id="edit-platform"
+                  value={platform}
+                  onChange={(e) => setPlatform(e.target.value)}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  {platforms.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
           ) : (
             <>
               <div>
@@ -1355,16 +1534,12 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
                 >
                   Currency
                 </label>
-                <select
-                  id="edit-currency"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                >
-                  <option value="CHF">CHF</option>
-                  <option value="EUR">EUR</option>
-                  <option value="USD">USD</option>
-                </select>
+                <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-muted text-xs md:text-sm cursor-not-allowed">
+                  {item.currency}
+                </div>
+                <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-text-muted">
+                  Currency cannot be changed after item creation
+                </p>
               </div>
               <div>
                 <label
@@ -1445,18 +1620,16 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const isEditing = !!transaction
-  const needsPricePerItem = !categoriesWithoutPricePerItem.includes(item.category)
   const isCrypto = item.category === 'Crypto'
   
-  // For Crypto transactions being edited, convert stored CHF price back to USD for display
-  // For non-Crypto, use original pricePerItem if available, otherwise convert from CHF
+  // For all categories, use original pricePerItem if available, otherwise convert from CHF
   const getInitialPrice = () => {
-    if (!transaction || !needsPricePerItem) return ''
+    if (!transaction) return ''
     if (isCrypto) {
       // For crypto, always fetch from API (handled in useEffect)
       return ''
     }
-    // For non-crypto: use original pricePerItem if available, otherwise convert from CHF
+    // For all categories: use original pricePerItem if available, otherwise convert from CHF
     if (transaction.pricePerItem !== undefined) {
       return transaction.pricePerItem.toString()
     }
@@ -1495,32 +1668,14 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
       const relevantTransactions = transactions.filter(tx => 
         tx.itemId === item.id && tx.id !== transaction.id
       )
-      let balanceBefore: number
-      if (isCrypto) {
-        // For crypto, use holdings (coin amount)
-        balanceBefore = calculateCoinAmount(item.id, relevantTransactions)
-      } else {
-        // For non-crypto, use balance value
-        balanceBefore = relevantTransactions.reduce((sum, tx) => {
-          return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
-        }, 0)
-      }
+      // For all categories, use holdings (quantity)
+      const balanceBefore = calculateHoldings(item.id, relevantTransactions)
       return (balanceBefore + (transaction.side === 'buy' ? 1 : -1) * transaction.amount).toString()
     }
-    // Default to current balance/holdings for new transactions
-    if (isCrypto) {
-      // For crypto, use holdings (coin amount)
-      const relevantTransactions = transactions.filter(tx => tx.itemId === item.id)
-      const currentHoldings = calculateCoinAmount(item.id, relevantTransactions)
-      return currentHoldings.toString()
-    } else {
-      // For non-crypto, use balance value
-      const relevantTransactions = transactions.filter(tx => tx.itemId === item.id)
-      const currentBal = relevantTransactions.reduce((sum, tx) => {
-        return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
-      }, 0)
-      return currentBal.toString()
-    }
+    // Default to current holdings for new transactions
+    const relevantTransactions = transactions.filter(tx => tx.itemId === item.id)
+    const currentHoldings = calculateHoldings(item.id, relevantTransactions)
+    return currentHoldings.toString()
   })
   const [isUpdatingFromAmount, setIsUpdatingFromAmount] = useState(false)
   const [isUpdatingFromBalance, setIsUpdatingFromBalance] = useState(false)
@@ -1528,9 +1683,14 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   // Derive activeTab from amount
   const activeTab = useMemo(() => getSideFromAmount(amount), [amount, transaction])
   const [pricePerItemChf, setPricePerItemChf] = useState(getInitialPrice())
-  const [priceCurrency, setPriceCurrency] = useState<CurrencyCode>(
-    (transaction?.currency as CurrencyCode) || (item.currency as CurrencyCode) || 'CHF'
-  )
+  // For all categories, always use item's currency (cannot be changed)
+  // For Crypto, currency is always USD
+  const [priceCurrency, setPriceCurrency] = useState<CurrencyCode>(() => {
+    if (isCrypto) {
+      return 'USD'
+    }
+    return (item.currency as CurrencyCode) || 'CHF'
+  })
   // For date input, use YYYY-MM-DD format (HTML5 date input format)
   const [date, setDate] = useState(() => {
     if (transaction?.date) {
@@ -1544,27 +1704,19 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
   
-  // Calculate current balance/holdings for this item, excluding the transaction being edited
-  // For crypto: use coin amount (holdings), for others: use balance value
+  // Calculate current holdings for this item, excluding the transaction being edited
+  // For all categories, use holdings (quantity)
   const currentBalance = useMemo(() => {
     const relevantTransactions = transactions.filter(tx => 
       tx.itemId === item.id && (!transaction || tx.id !== transaction.id)
     )
-    
-    if (isCrypto) {
-      // For crypto, use calculateCoinAmount to get holdings (coin quantity)
-      return calculateCoinAmount(item.id, relevantTransactions)
-    } else {
-      // For non-crypto, calculate balance value
-      return relevantTransactions.reduce((sum, tx) => {
-        return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
-      }, 0)
-    }
-  }, [transactions, item.id, transaction, isCrypto])
+    // For all categories, calculate holdings (quantity)
+    return calculateHoldings(item.id, relevantTransactions)
+  }, [transactions, item.id, transaction])
 
   // Fetch coin price when modal opens for Crypto items (both for new transactions and when editing)
   useEffect(() => {
-    if (isCrypto && needsPricePerItem && item.name) {
+    if (isCrypto && item.name) {
       // For editing, always fetch fresh price from API (in USD)
       // For new transactions, fetch if no price is set
       if (isEditing || !pricePerItemChf) {
@@ -1613,7 +1765,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCrypto, needsPricePerItem, item.name, isEditing]) // Run when modal opens or when editing
+  }, [isCrypto, item.name, isEditing]) // Run when modal opens or when editing
 
   const totalChf = useMemo(() => {
     const parsedAmount = Number(amount)
@@ -1622,17 +1774,14 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
     }
     // Use absolute value for calculation
     const absoluteAmount = Math.abs(parsedAmount)
-    if (needsPricePerItem) {
-      const parsedPrice = Number(pricePerItemChf)
-      if (isNaN(parsedPrice) || parsedPrice <= 0) {
-        return 0
-      }
-      return absoluteAmount * parsedPrice
-    } else {
-      // For categories without price per item, amount directly represents the value in CHF
-      return absoluteAmount
+    const parsedPrice = Number(pricePerItemChf)
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      return 0
     }
-  }, [amount, pricePerItemChf, needsPricePerItem])
+    // For all categories, total is in the selected currency (not converted to CHF for display)
+    // The total will be converted to CHF when saving
+    return absoluteAmount * parsedPrice
+  }, [amount, pricePerItemChf])
 
   // Update target balance when amount changes (only in amount mode)
   useEffect(() => {
@@ -1672,11 +1821,9 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
       setError('Please enter a valid amount (positive for buy, negative for sell).')
       return
     }
-    if (needsPricePerItem) {
-      if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
-        setError(isCrypto ? 'Please enter a valid price per coin (USD) greater than 0.' : 'Please enter a valid price per item greater than 0.')
-        return
-      }
+    if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+      setError('Please enter a valid price per item greater than 0.')
+      return
     }
     if (!date) {
       setError('Please select a date.')
@@ -1691,33 +1838,20 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
     // Store absolute value of amount
     const absoluteAmount = Math.abs(parsedAmount)
 
-    if (isCrypto && needsPricePerItem) {
-      // For Crypto: convert USD price to CHF for storage
-      const pricePerCoinChf = convert(parsedPrice, 'USD')
-      onSave({
-        itemId: item.id,
-        side,
-        currency: 'USD', // Store as USD for crypto
-        amount: absoluteAmount,
-        pricePerItemChf: pricePerCoinChf, // Converted to CHF for storage
-        pricePerItem: parsedPrice, // Original price in USD
-        date: parsedDate,
-      })
-    } else {
-      const transactionCurrency = needsPricePerItem ? priceCurrency : item.currency
-      const pricePerItemChfValue = needsPricePerItem 
-        ? convert(parsedPrice, priceCurrency as CurrencyCode)
-        : 1
-      onSave({
-        itemId: item.id,
-        side,
-        currency: transactionCurrency,
-        amount: absoluteAmount,
-        pricePerItemChf: pricePerItemChfValue, // Converted to CHF for backward compatibility
-        pricePerItem: needsPricePerItem ? parsedPrice : undefined, // Original price per item in original currency
-        date: parsedDate,
-      })
-    }
+    // For all categories, use item's currency (locked at item creation)
+    // For Crypto, currency is always USD
+    const transactionCurrency = isCrypto ? 'USD' : (item.currency as CurrencyCode)
+    const pricePerItemChfValue = convert(parsedPrice, transactionCurrency)
+    
+    onSave({
+      itemId: item.id,
+      side,
+      currency: transactionCurrency,
+      amount: absoluteAmount, // Holdings quantity
+      pricePerItemChf: pricePerItemChfValue, // Converted to CHF for storage
+      pricePerItem: parsedPrice, // Original price per item in original currency
+      date: parsedDate,
+    })
 
     setAmount('0')
     setPricePerItemChf('')
@@ -1760,154 +1894,83 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Fancy toggle switch for input mode */}
-          <div className="mb-4">
-            <div className="relative inline-flex rounded-lg bg-bg-surface-2 border border-border-subtle p-1" role="group">
-              <button
-                type="button"
-                onClick={() => {
-                  setInputMode('amount')
-                  // When switching to amount mode, ensure amount is set
-                  if (!amount || amount === '') {
-                    setAmount('0')
-                  }
-                }}
-                className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
-                  inputMode === 'amount'
-                    ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                Buy/Sell amount
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setInputMode('balance')
-                  // When switching to balance mode, ensure target balance is set to current balance if empty
-                  if (!targetBalance || targetBalance === '') {
-                    setTargetBalance(currentBalance.toString())
-                  }
-                }}
-                className={`px-4 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
-                  inputMode === 'balance'
-                    ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                {isCrypto ? 'Total holdings' : 'Total balance'}
-              </button>
+          {/* For all categories - same format */}
+          <div>
+            <label
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+              htmlFor="tx-currency"
+            >
+              Currency
+            </label>
+            <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-muted text-xs md:text-sm cursor-not-allowed">
+              {isCrypto ? 'USD' : item.currency}
             </div>
           </div>
 
-          {inputMode === 'amount' ? (
-            <div>
-              <label
-                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                htmlFor="tx-amount"
-              >
-                {isCrypto ? 'Amount (coins)' : needsPricePerItem ? 'Amount' : 'Amount (CHF)'}
-                <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">
-                  (positive = buy, negative = sell)
-                </span>
-              </label>
-              <input
-                id="tx-amount"
-                type="number"
-                step={isCrypto ? "0.00000001" : "0.01"}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                placeholder={needsPricePerItem ? "e.g. 0.5, 100, -50" : "e.g. 1000, 5000, -2000"}
-              />
-            </div>
-          ) : (
-            <div>
-              <label
-                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                htmlFor="tx-target-balance"
-              >
-                {isCrypto ? 'Target Total Holdings' : 'Target Total Balance'} (after this transaction)
-              </label>
-              <input
-                id="tx-target-balance"
-                type="number"
-                step={isCrypto ? "0.00000001" : "0.01"}
-                value={targetBalance}
-                onChange={(e) => setTargetBalance(e.target.value)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                placeholder={isCrypto ? "0.00000000" : "0.00"}
-              />
-            </div>
-          )}
+          <div>
+            <label
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+              htmlFor="tx-amount"
+            >
+              Amount (holdings)
+            </label>
+            <input
+              id="tx-amount"
+              type="number"
+              step={isCrypto ? "0.00000001" : "0.0001"}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+              placeholder="Positive for buy, negative for sell"
+            />
+          </div>
 
-          {needsPricePerItem && (
-            <>
-              <div>
-                <label
-                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                  htmlFor="tx-price"
-                >
-                  {isCrypto ? 'Price per coin (USD)' : `Price per item (${priceCurrency})`}
-                  {isLoadingPrice && (
-                    <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
-                  )}
-                </label>
-                <input
-                  id="tx-price"
-                  type="number"
-                  min="0"
-                  step={isCrypto ? "any" : "0.01"}
-                  value={pricePerItemChf}
-                  onChange={(e) => setPricePerItemChf(e.target.value)}
-                  className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
-                    priceError ? 'border-warning' : 'border-border-subtle'
-                  }`}
-                  placeholder={isCrypto ? "e.g. 50000, 3000, 1.00" : "e.g. 40000, 1.5, 100"}
-                  disabled={isLoadingPrice}
-                />
-                {priceError && (
-                  <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
-                    {priceError}
-                  </p>
-                )}
-              </div>
-              {!isCrypto && (
-                <div>
-                  <label
-                    className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                    htmlFor="tx-price-currency"
-                  >
-                    Currency for Price per Item
-                  </label>
-                  <select
-                    id="tx-price-currency"
-                    value={priceCurrency}
-                    onChange={(e) => setPriceCurrency(e.target.value as CurrencyCode)}
-                    className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                  >
-                    <option value="CHF">CHF</option>
-                    <option value="EUR">EUR</option>
-                    <option value="USD">USD</option>
-                  </select>
-                </div>
+          <div>
+            <label
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+              htmlFor="tx-price"
+            >
+              Price per Item ({isCrypto ? 'USD' : item.currency})
+              {isLoadingPrice && isCrypto && (
+                <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
               )}
-            </>
-          )}
+            </label>
+            <input
+              id="tx-price"
+              type="number"
+              min="0"
+              step={isCrypto ? "any" : "0.01"}
+              value={pricePerItemChf}
+              onChange={(e) => setPricePerItemChf(e.target.value)}
+              className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
+                priceError ? 'border-warning' : 'border-border-subtle'
+              }`}
+              placeholder={isCrypto ? "e.g. 50000, 3000, 1.00" : "e.g. 150.50"}
+              disabled={isLoadingPrice && isCrypto}
+            />
+            {priceError && (
+              <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
+                {priceError}
+              </p>
+            )}
+          </div>
 
-          {needsPricePerItem && (
-            <div>
-              <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1">
-                Total {isCrypto ? '(USD)' : `(${priceCurrency})`}
-              </label>
-              <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm">
-                {isCrypto 
-                  ? formatMoney(totalChf, 'USD', 'ch')
-                  : formatMoney(totalChf, priceCurrency, 'ch')
-                }
-              </div>
-            </div>
-          )}
+          <div>
+            <label
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+              htmlFor="tx-total-balance"
+            >
+              Total balance of this transaction ({isCrypto ? 'USD' : item.currency})
+            </label>
+            <input
+              id="tx-total-balance"
+              type="text"
+              value={totalChf !== 0 ? totalChf.toFixed(2) : ''}
+              readOnly
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-muted text-xs md:text-sm cursor-not-allowed"
+              placeholder="Calculated automatically"
+            />
+          </div>
 
           <div>
             <label
