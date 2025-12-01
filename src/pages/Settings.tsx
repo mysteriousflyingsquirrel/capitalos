@@ -31,6 +31,7 @@ function Settings() {
   const [platformError, setPlatformError] = useState<string | null>(null)
   const [showCryptoTaxModal, setShowCryptoTaxModal] = useState(false)
   const [checkingCryptoActivity, setCheckingCryptoActivity] = useState(false)
+  const [showPlatformsList, setShowPlatformsList] = useState(false)
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -417,76 +418,107 @@ function Settings() {
             </div>
           </form>
 
-          {/* Platforms List */}
+          {/* Platforms List - Collapsible */}
           {platformLoading ? (
             <p className="text-text-muted text-[0.567rem] md:text-xs">Loading platforms...</p>
+          ) : platforms.length === 0 ? (
+            <p className="text-text-muted text-[0.567rem] md:text-xs">No platforms yet. Add one above.</p>
           ) : (
-            <div className="space-y-2">
-              {platforms.length === 0 ? (
-                <p className="text-text-muted text-[0.567rem] md:text-xs">No platforms yet. Add one above.</p>
-              ) : (
-                platforms.map((platform) => (
-                  <div
-                    key={platform.id}
-                    className="flex items-center justify-between p-3 bg-bg-surface-2 border border-border-subtle rounded-input"
+            <div className="border-t-2 border-border-strong pt-6 mt-6">
+              <button
+                onClick={() => setShowPlatformsList(!showPlatformsList)}
+                className="w-full flex items-center justify-between bg-bg-surface-2 border border-border-subtle hover:border-[#DAA520] rounded-input px-4 py-3 transition-all duration-200 hover:shadow-card group"
+              >
+                <div className="flex items-center gap-3">
+                  <svg
+                    className={`w-5 h-5 text-[#DAA520] transition-transform duration-200 ${showPlatformsList ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    {editingPlatform?.id === platform.id ? (
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault()
-                          const input = e.currentTarget.querySelector('input') as HTMLInputElement
-                          if (input) {
-                            handleEditPlatform(platform, input.value)
-                          }
-                        }}
-                        className="flex-1 flex gap-2"
-                      >
-                        <input
-                          type="text"
-                          defaultValue={platform.name}
-                          className="flex-1 bg-bg-surface-1 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                          autoFocus
-                        />
-                        <button
-                          type="submit"
-                          className="px-3 py-2 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200"
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingPlatform(null)
-                            setPlatformError(null)
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2.5}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                  <span className="text-text-primary text-xs md:text-sm font-semibold">
+                    Platforms
+                  </span>
+                  <span className="bg-bg-surface-3 text-text-secondary text-[0.567rem] md:text-xs font-medium px-2 py-0.5 rounded-full">
+                    {platforms.length}
+                  </span>
+                </div>
+                <span className="text-text-secondary text-[0.567rem] md:text-xs group-hover:text-[#DAA520] transition-colors">
+                  {showPlatformsList ? 'Hide' : 'Show'}
+                </span>
+              </button>
+              {showPlatformsList && (
+                <div className="space-y-2 mt-6">
+                  {platforms.map((platform) => (
+                    <div
+                      key={platform.id}
+                      className="flex items-center justify-between p-3 bg-bg-surface-2 border border-border-subtle rounded-input"
+                    >
+                      {editingPlatform?.id === platform.id ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault()
+                            const input = e.currentTarget.querySelector('input') as HTMLInputElement
+                            if (input) {
+                              handleEditPlatform(platform, input.value)
+                            }
                           }}
-                          className="px-3 py-2 bg-bg-surface-3 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs rounded-full hover:bg-bg-surface-1 transition-colors"
+                          className="flex-1 flex gap-2"
                         >
-                          Cancel
-                        </button>
-                      </form>
-                    ) : (
-                      <>
-                        <span className="text-text-primary text-xs md:text-sm font-medium">{platform.name}</span>
-                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            defaultValue={platform.name}
+                            className="flex-1 bg-bg-surface-1 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                            autoFocus
+                          />
                           <button
-                            onClick={() => setEditingPlatform(platform)}
-                            className="px-3 py-1.5 bg-bg-surface-3 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs rounded-full hover:bg-bg-surface-1 transition-colors"
-                            title="Edit platform"
+                            type="submit"
+                            className="px-3 py-2 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200"
                           >
-                            Edit
+                            Save
                           </button>
                           <button
-                            onClick={() => handleRemovePlatform(platform)}
-                            className="px-3 py-1.5 bg-bg-surface-3 border border-danger/40 text-danger text-[0.567rem] md:text-xs rounded-full hover:bg-danger/10 transition-colors"
-                            title="Remove platform"
+                            type="button"
+                            onClick={() => {
+                              setEditingPlatform(null)
+                              setPlatformError(null)
+                            }}
+                            className="px-3 py-2 bg-bg-surface-3 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs rounded-full hover:bg-bg-surface-1 transition-colors"
                           >
-                            Remove
+                            Cancel
                           </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))
+                        </form>
+                      ) : (
+                        <>
+                          <span className="text-text-primary text-xs md:text-sm font-medium">{platform.name}</span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setEditingPlatform(platform)}
+                              className="px-3 py-1.5 bg-bg-surface-3 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs rounded-full hover:bg-bg-surface-1 transition-colors"
+                              title="Edit platform"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleRemovePlatform(platform)}
+                              className="px-3 py-1.5 bg-bg-surface-3 border border-danger/40 text-danger text-[0.567rem] md:text-xs rounded-full hover:bg-danger/10 transition-colors"
+                              title="Remove platform"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
