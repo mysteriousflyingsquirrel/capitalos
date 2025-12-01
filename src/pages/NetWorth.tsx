@@ -278,16 +278,29 @@ function NetWorthCategorySection({
       <div className="space-y-3 w-full">
         {/* Table structure for proper column alignment */}
         <div className="w-full overflow-hidden">
+          <style>{`
+            @media (max-width: 767px) {
+              .nw-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
+              .nw-table-holdings-col { width: calc((100% - 80px) * 1 / 6) !important; }
+              .nw-table-balance-col { width: calc((100% - 80px) * 2 / 6) !important; }
+            }
+            @media (min-width: 768px) {
+              .nw-table-item-col { width: calc((100% - 80px) * 3 / 8) !important; }
+              .nw-table-holdings-col { width: calc((100% - 80px) * 1 / 8) !important; }
+              .nw-table-balance-col { width: calc((100% - 80px) * 2 / 8) !important; }
+              .nw-table-platform-col { width: calc((100% - 80px) * 2 / 8) !important; }
+            }
+          `}</style>
           <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
             <colgroup>
-              {/* Item: flexible, takes remaining space, minimum enforced via td, can truncate */}
-              <col style={{ width: 'calc(100% - 350px)' }} />
-              {/* Holdings: fixed width, no truncation */}
-              <col style={{ width: '90px' }} />
-              {/* Balance: fixed width, no truncation */}
-              <col style={{ width: '100px' }} />
-              {/* Platform: fixed width, can truncate */}
-              <col style={{ width: '80px' }} />
+              {/* Item: stretch 3, flexible, can truncate */}
+              <col className="nw-table-item-col" />
+              {/* Holdings: stretch 1, flexible, no truncation */}
+              <col className="nw-table-holdings-col" />
+              {/* Balance: stretch 2, flexible, no truncation */}
+              <col className="nw-table-balance-col" />
+              {/* Platform: stretch 2, flexible, can truncate, hidden on mobile */}
+              <col className="nw-table-platform-col hidden md:table-column" />
               {/* Actions: fixed */}
               <col style={{ width: '80px' }} />
             </colgroup>
@@ -302,7 +315,7 @@ function NetWorthCategorySection({
                 <th className="text-right pb-2">
                   <Heading level={4}>Balance</Heading>
                 </th>
-                <th className="text-right pb-2">
+                <th className="text-right pb-2 hidden md:table-cell">
                   <Heading level={4}>Platform</Heading>
                 </th>
                 <th className="text-right pb-2">
@@ -383,22 +396,22 @@ function NetWorthCategorySection({
                   
                   return (
                     <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
-                      <td className="py-2 pr-2" style={{ minWidth: '150px', maxWidth: '100%', overflow: 'hidden' }}>
-                        <div className="text2 truncate" style={{ maxWidth: '100%' }}>
+                      <td className="py-2 pr-2">
+                        <div className="text2 truncate">
                           {item.name}
                         </div>
                       </td>
-                      <td className="py-2 text-right px-2" style={{ width: '90px', minWidth: '90px', flexShrink: 0 }}>
+                      <td className="py-2 text-right px-2">
                         <div className="text2 whitespace-nowrap">
                           {formatCoinAmount(holdings, isIncognito)}
                         </div>
                       </td>
-                      <td className="py-2 text-right px-2" style={{ width: '100px', minWidth: '100px', flexShrink: 0 }}>
+                      <td className="py-2 text-right px-2">
                         <div className="text2 whitespace-nowrap">
                           {formatCurrency(balanceConverted)}
                         </div>
                       </td>
-                      <td className="py-2 text-right pr-2" style={{ width: '80px', minWidth: '80px', flexShrink: 0 }}>
+                      <td className="py-2 text-right pr-2 hidden md:table-cell">
                         <div className="flex items-center justify-end gap-2">
                           <span className="text2 truncate">
                             {item.platform}
