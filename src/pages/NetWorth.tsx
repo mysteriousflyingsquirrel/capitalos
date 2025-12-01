@@ -241,7 +241,7 @@ function NetWorthCategorySection({
     : (subtotal * (exchangeRates?.rates['USD'] || 1))
 
   return (
-    <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+    <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6 overflow-hidden">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -275,16 +275,20 @@ function NetWorthCategorySection({
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3 w-full">
         {/* Table structure for proper column alignment */}
-        <div className="overflow-x-auto">
-          <table className="w-full" style={{ tableLayout: 'fixed' }}>
+        <div className="w-full overflow-hidden">
+          <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
             <colgroup>
-              {/* All categories have the same column structure */}
-              <col style={{ width: '70px' }} />
-              <col style={{ width: 'calc((100% - 150px) / 3)' }} />
-              <col style={{ width: 'calc((100% - 150px) / 3)' }} />
-              <col style={{ width: 'calc((100% - 150px) / 3)' }} />
+              {/* Item: flexible, takes remaining space, minimum enforced via td, can truncate */}
+              <col style={{ width: 'calc(100% - 390px)' }} />
+              {/* Holdings: fixed width, no truncation */}
+              <col style={{ width: '90px' }} />
+              {/* Balance: fixed width, no truncation */}
+              <col style={{ width: '120px' }} />
+              {/* Platform: fixed width, can truncate */}
+              <col style={{ width: '100px' }} />
+              {/* Actions: fixed */}
               <col style={{ width: '80px' }} />
             </colgroup>
             <thead>
@@ -379,22 +383,26 @@ function NetWorthCategorySection({
                   
                   return (
                     <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
-                      <td className="py-2">
-                        <div className="text2 truncate">{item.name}</div>
+                      <td className="py-2 pr-2" style={{ minWidth: '150px', maxWidth: '100%', overflow: 'hidden' }}>
+                        <div className="text2 truncate" style={{ maxWidth: '100%' }}>
+                          {item.name}
+                        </div>
                       </td>
-                      <td className="py-2 text-right">
+                      <td className="py-2 text-right px-2" style={{ width: '90px', minWidth: '90px', flexShrink: 0 }}>
                         <div className="text2 whitespace-nowrap">
                           {formatCoinAmount(holdings, isIncognito)}
                         </div>
                       </td>
-                      <td className="py-2 text-right">
+                      <td className="py-2 text-right px-2" style={{ width: '120px', minWidth: '120px', flexShrink: 0 }}>
                         <div className="text2 whitespace-nowrap">
                           {formatCurrency(balanceConverted)}
                         </div>
                       </td>
-                      <td className="py-2 text-right">
+                      <td className="py-2 text-right pr-2" style={{ width: '100px', minWidth: '100px', flexShrink: 0 }}>
                         <div className="flex items-center justify-end gap-2">
-                          <span className="text2 truncate">{item.platform}</span>
+                          <span className="text2 truncate">
+                            {item.platform}
+                          </span>
                           {platforms.length > 0 && !platforms.some(p => p.name === item.platform) && (
                             <svg
                               className="w-4 h-4 text-warning flex-shrink-0"
