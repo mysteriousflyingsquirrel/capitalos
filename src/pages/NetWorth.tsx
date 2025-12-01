@@ -281,13 +281,13 @@ function NetWorthCategorySection({
           <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
             <colgroup>
               {/* Item: flexible, takes remaining space, minimum enforced via td, can truncate */}
-              <col style={{ width: 'calc(100% - 390px)' }} />
+              <col style={{ width: 'calc(100% - 350px)' }} />
               {/* Holdings: fixed width, no truncation */}
               <col style={{ width: '90px' }} />
               {/* Balance: fixed width, no truncation */}
-              <col style={{ width: '120px' }} />
-              {/* Platform: fixed width, can truncate */}
               <col style={{ width: '100px' }} />
+              {/* Platform: fixed width, can truncate */}
+              <col style={{ width: '80px' }} />
               {/* Actions: fixed */}
               <col style={{ width: '80px' }} />
             </colgroup>
@@ -393,12 +393,12 @@ function NetWorthCategorySection({
                           {formatCoinAmount(holdings, isIncognito)}
                         </div>
                       </td>
-                      <td className="py-2 text-right px-2" style={{ width: '120px', minWidth: '120px', flexShrink: 0 }}>
+                      <td className="py-2 text-right px-2" style={{ width: '100px', minWidth: '100px', flexShrink: 0 }}>
                         <div className="text2 whitespace-nowrap">
                           {formatCurrency(balanceConverted)}
                         </div>
                       </td>
-                      <td className="py-2 text-right pr-2" style={{ width: '100px', minWidth: '100px', flexShrink: 0 }}>
+                      <td className="py-2 text-right pr-2" style={{ width: '80px', minWidth: '80px', flexShrink: 0 }}>
                         <div className="flex items-center justify-end gap-2">
                           <span className="text2 truncate">
                             {item.platform}
