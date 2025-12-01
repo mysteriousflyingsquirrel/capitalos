@@ -325,11 +325,18 @@ function NetWorthCategorySection({
             </thead>
             <tbody>
               {items.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
-                    No items yet. Click "Add Item" to get started.
-                  </td>
-                </tr>
+                <>
+                  <tr className="hidden md:table-row">
+                    <td colSpan={5} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                      No items yet. Click "Add Item" to get started.
+                    </td>
+                  </tr>
+                  <tr className="md:hidden">
+                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                      No items yet. Click "Add Item" to get started.
+                    </td>
+                  </tr>
+                </>
               ) : (
                 // Sort items by balance (high to low) - all categories converted to CHF
                 [...items].sort((a, b) => {
