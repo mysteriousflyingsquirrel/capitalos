@@ -590,26 +590,79 @@ function Dashboard() {
     return ((totalNetWorthChf - previousMonthNetWorth) / previousMonthNetWorth) * 100
   }, [totalNetWorthChf, snapshots, calculateNetWorthAtDate, convert])
 
-  // Calculate Year-to-Date (YTD) PnL
+  // Calculate Year-to-Date (YTD) PnL (compare latest snapshot from previous year to current state)
   const ytdPnLChf = useMemo(() => {
-    const currentYear = new Date().getFullYear()
-    const firstDayOfYear = new Date(currentYear, 0, 1)
-    firstDayOfYear.setHours(0, 0, 0, 0)
+    if (snapshots.length === 0) {
+      // If no snapshots, consider previous year net worth to be 0
+      return totalNetWorthChf
+    }
+
+    const now = new Date()
+    const currentYear = now.getUTCFullYear()
+    const previousYear = currentYear - 1
     
-    const yearStartNetWorth = calculateNetWorthAtDate(firstDayOfYear)
-    return totalNetWorthChf - yearStartNetWorth
-  }, [totalNetWorthChf, calculateNetWorthAtDate])
+    // Get the first day of the current year in UTC (snapshots before this are from previous year)
+    const firstDayOfCurrentYear = new Date(Date.UTC(currentYear, 0, 1, 0, 0, 0, 0))
+    
+    // Find snapshots from the previous year (before the first day of current year)
+    const previousYearSnapshots = snapshots.filter(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      return snapshotDate < firstDayOfCurrentYear
+    })
+    
+    if (previousYearSnapshots.length === 0) {
+      // If no snapshot from previous year, consider net worth to be 0
+      return totalNetWorthChf
+    }
+    
+    // Get the last snapshot from previous year (most recent one)
+    const lastSnapshot = previousYearSnapshots.reduce((latest, snapshot) => {
+      return snapshot.timestamp > latest.timestamp ? snapshot : latest
+    })
+    
+    // Snapshots are stored in CHF, so we can use the total directly
+    // (convert handles CHF->CHF as identity)
+    const previousYearNetWorth = convert(lastSnapshot.total, 'CHF')
+    return totalNetWorthChf - previousYearNetWorth
+  }, [totalNetWorthChf, snapshots, convert])
 
   // Calculate YTD PnL percentage
   const ytdPnLPercentage = useMemo(() => {
-    const currentYear = new Date().getFullYear()
-    const firstDayOfYear = new Date(currentYear, 0, 1)
-    firstDayOfYear.setHours(0, 0, 0, 0)
+    if (snapshots.length === 0) {
+      // If no snapshots, consider previous year net worth to be 0
+      // Percentage is undefined when starting from 0, return 0 or handle appropriately
+      return 0
+    }
+
+    const now = new Date()
+    const currentYear = now.getUTCFullYear()
     
-    const yearStartNetWorth = calculateNetWorthAtDate(firstDayOfYear)
-    if (yearStartNetWorth === 0) return 0
-    return ((totalNetWorthChf - yearStartNetWorth) / yearStartNetWorth) * 100
-  }, [totalNetWorthChf, calculateNetWorthAtDate])
+    // Get the first day of the current year in UTC (snapshots before this are from previous year)
+    const firstDayOfCurrentYear = new Date(Date.UTC(currentYear, 0, 1, 0, 0, 0, 0))
+    
+    // Find snapshots from the previous year (before the first day of current year)
+    const previousYearSnapshots = snapshots.filter(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      return snapshotDate < firstDayOfCurrentYear
+    })
+    
+    if (previousYearSnapshots.length === 0) {
+      // If no snapshot from previous year, consider net worth to be 0
+      // Percentage is undefined when starting from 0, return 0
+      return 0
+    }
+    
+    // Get the last snapshot from previous year (most recent one)
+    const lastSnapshot = previousYearSnapshots.reduce((latest, snapshot) => {
+      return snapshot.timestamp > latest.timestamp ? snapshot : latest
+    })
+    
+    // Snapshots are stored in CHF, so we can use the total directly
+    // (convert handles CHF->CHF as identity)
+    const previousYearNetWorth = convert(lastSnapshot.total, 'CHF')
+    if (previousYearNetWorth === 0) return 0
+    return ((totalNetWorthChf - previousYearNetWorth) / previousYearNetWorth) * 100
+  }, [totalNetWorthChf, snapshots, convert])
 
   // Convert values from CHF to baseCurrency
   const totalNetWorthConverted = convert(totalNetWorthChf, 'CHF')
