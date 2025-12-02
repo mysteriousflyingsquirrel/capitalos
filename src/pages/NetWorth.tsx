@@ -2340,23 +2340,78 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
             </div>
           </div>
 
+          {/* Input Mode Selection - Switch Button */}
           <div>
-            <label
-              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-              htmlFor="tx-amount"
-            >
-              Amount (holdings)
+            <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
+              Input Mode
             </label>
-            <input
-              id="tx-amount"
-              type="number"
-              step={(isCrypto || isStockCategory) ? "0.00000001" : "0.0001"}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              placeholder="Positive for buy, negative for sell"
-            />
+            <div className="relative inline-flex rounded-lg bg-bg-surface-2 border border-border-subtle p-1 w-full" role="group">
+              <button
+                type="button"
+                onClick={() => setInputMode('amount')}
+                className={`flex-1 px-3 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                  inputMode === 'amount'
+                    ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Amount
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode('balance')}
+                className={`flex-1 px-3 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                  inputMode === 'balance'
+                    ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                End Balance
+              </button>
+            </div>
           </div>
+
+          {/* Amount Input (shown when inputMode === 'amount') */}
+          {inputMode === 'amount' && (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="tx-amount"
+              >
+                Amount (holdings)
+              </label>
+              <input
+                id="tx-amount"
+                type="number"
+                step={(isCrypto || isStockCategory) ? "0.00000001" : "0.0001"}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                placeholder="Positive for buy, negative for sell"
+              />
+            </div>
+          )}
+
+          {/* Target Balance Input (shown when inputMode === 'balance') */}
+          {inputMode === 'balance' && (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="tx-target-balance"
+              >
+                End Balance (holdings)
+              </label>
+              <input
+                id="tx-target-balance"
+                type="number"
+                step={(isCrypto || isStockCategory) ? "0.00000001" : "0.0001"}
+                value={targetBalance}
+                onChange={(e) => setTargetBalance(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                placeholder="Total balance after this transaction"
+              />
+            </div>
+          )}
 
           {/* Only show price per item field for categories that need it */}
           {!hidePricePerItem && (

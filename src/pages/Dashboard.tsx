@@ -26,6 +26,7 @@ import {
   loadCashflowInflowItems,
   loadCashflowOutflowItems,
 } from '../services/storageService'
+import { loadSnapshots, takeDailySnapshotIfNeeded, type NetWorthSnapshot } from '../services/snapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from './NetWorth'
@@ -149,6 +150,7 @@ function Dashboard() {
   const [transactions, setTransactions] = useState([])
   const [inflowItems, setInflowItems] = useState([])
   const [outflowItems, setOutflowItems] = useState([])
+  const [snapshots, setSnapshots] = useState<NetWorthSnapshot[]>([])
   
   // Store current crypto prices (ticker -> USD price)
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
@@ -164,11 +166,13 @@ function Dashboard() {
         loadNetWorthTransactions([], uid),
         loadCashflowInflowItems([], uid),
         loadCashflowOutflowItems([], uid),
-      ]).then(([items, txs, inflow, outflow]) => {
+        loadSnapshots(uid),
+      ]).then(([items, txs, inflow, outflow, loadedSnapshots]) => {
         setNetWorthItems(items)
         setTransactions(txs)
         setInflowItems(inflow)
         setOutflowItems(outflow)
+        setSnapshots(loadedSnapshots)
       })
     }
   }, [uid])
@@ -268,6 +272,63 @@ function Dashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netWorthItems]) // Re-fetch when items change
+
+  // Check and create daily snapshot at 23:59 UTC if needed
+  // Also create initial snapshot if none exist
+  useEffect(() => {
+    if (uid && netWorthItems.length > 0 && convert) {
+      const checkAndCreateSnapshot = async () => {
+        // First, check if we have any snapshots at all
+        const existingSnapshots = await loadSnapshots(uid)
+        
+        // If no snapshots exist, create one immediately with current data
+        if (existingSnapshots.length === 0) {
+          try {
+            const { createSnapshot, saveSnapshots } = await import('../services/snapshotService')
+            const initialSnapshot = createSnapshot(
+              netWorthItems,
+              transactions,
+              cryptoPrices,
+              convert
+            )
+            await saveSnapshots([initialSnapshot], uid)
+            setSnapshots([initialSnapshot])
+          } catch (error) {
+            console.error('Failed to create initial snapshot:', error)
+          }
+        } else {
+          // Otherwise, check if we need to take a snapshot for today at 23:59 UTC
+          takeDailySnapshotIfNeeded(
+            netWorthItems,
+            transactions,
+            uid,
+            cryptoPrices,
+            convert
+          ).then((newSnapshot) => {
+            if (newSnapshot) {
+              // Reload snapshots after creating a new one
+              loadSnapshots(uid).then((updatedSnapshots) => {
+                setSnapshots(updatedSnapshots)
+              })
+            }
+          }).catch((error) => {
+            console.error('Failed to create daily snapshot:', error)
+          })
+        }
+      }
+
+      // Check immediately
+      checkAndCreateSnapshot()
+
+      // Set up interval to check every hour (to catch 23:59 UTC)
+      const interval = setInterval(() => {
+        checkAndCreateSnapshot()
+      }, 3600000) // 1 hour
+
+      return () => clearInterval(interval)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, netWorthItems, transactions, cryptoPrices, convert])
 
   // Pull-to-refresh functionality for mobile
   useEffect(() => {
@@ -438,26 +499,96 @@ function Dashboard() {
     }
   }, [netWorthItems, transactions, cryptoPrices, stockPrices, usdToChfRate, convert])
 
-  // Calculate monthly PnL (difference between current net worth and previous month end)
+  // Calculate monthly PnL (difference between current net worth and last snapshot of previous month)
   const monthlyPnLChf = useMemo(() => {
+    if (snapshots.length === 0) {
+      // If no snapshots, fall back to transaction-based calculation
+      const now = new Date()
+      const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+      lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+      const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+      return totalNetWorthChf - previousMonthNetWorth
+    }
+
+    // Find the last snapshot from the previous month
     const now = new Date()
-    const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-    lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+    const currentYear = now.getUTCFullYear()
+    const currentMonth = now.getUTCMonth()
     
-    const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+    // Get the first day of the current month in UTC (snapshots before this are from previous month)
+    const firstDayOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 1, 0, 0, 0, 0))
+    
+    // Find snapshots from the previous month (before the first day of current month)
+    const previousMonthSnapshots = snapshots.filter(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      return snapshotDate < firstDayOfCurrentMonth
+    })
+    
+    if (previousMonthSnapshots.length === 0) {
+      // If no snapshot from previous month, fall back to transaction-based calculation
+      const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+      lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+      const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+      return totalNetWorthChf - previousMonthNetWorth
+    }
+    
+    // Get the last snapshot from previous month (most recent one)
+    const lastSnapshot = previousMonthSnapshots.reduce((latest, snapshot) => {
+      return snapshot.timestamp > latest.timestamp ? snapshot : latest
+    })
+    
+    // Snapshots are stored in CHF, so we can use the total directly
+    // (convert handles CHF->CHF as identity)
+    const previousMonthNetWorth = convert(lastSnapshot.total, 'CHF')
     return totalNetWorthChf - previousMonthNetWorth
-  }, [totalNetWorthChf, calculateNetWorthAtDate])
+  }, [totalNetWorthChf, snapshots, calculateNetWorthAtDate, convert])
 
   // Calculate monthly PnL percentage
   const monthlyPnLPercentage = useMemo(() => {
+    if (snapshots.length === 0) {
+      // If no snapshots, fall back to transaction-based calculation
+      const now = new Date()
+      const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+      lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+      const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+      if (previousMonthNetWorth === 0) return 0
+      return ((totalNetWorthChf - previousMonthNetWorth) / previousMonthNetWorth) * 100
+    }
+
+    // Find the last snapshot from the previous month
     const now = new Date()
-    const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-    lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+    const currentYear = now.getUTCFullYear()
+    const currentMonth = now.getUTCMonth()
     
-    const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+    // Get the first day of the current month in UTC (snapshots before this are from previous month)
+    const firstDayOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 1, 0, 0, 0, 0))
+    
+    // Find snapshots from the previous month (before the first day of current month)
+    const previousMonthSnapshots = snapshots.filter(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      return snapshotDate < firstDayOfCurrentMonth
+    })
+    
+    if (previousMonthSnapshots.length === 0) {
+      // If no snapshot from previous month, fall back to transaction-based calculation
+      const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+      lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+      const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+      if (previousMonthNetWorth === 0) return 0
+      return ((totalNetWorthChf - previousMonthNetWorth) / previousMonthNetWorth) * 100
+    }
+    
+    // Get the last snapshot from previous month (most recent one)
+    const lastSnapshot = previousMonthSnapshots.reduce((latest, snapshot) => {
+      return snapshot.timestamp > latest.timestamp ? snapshot : latest
+    })
+    
+    // Snapshots are stored in CHF, so we can use the total directly
+    // (convert handles CHF->CHF as identity)
+    const previousMonthNetWorth = convert(lastSnapshot.total, 'CHF')
     if (previousMonthNetWorth === 0) return 0
     return ((totalNetWorthChf - previousMonthNetWorth) / previousMonthNetWorth) * 100
-  }, [totalNetWorthChf, calculateNetWorthAtDate])
+  }, [totalNetWorthChf, snapshots, calculateNetWorthAtDate, convert])
 
   // Calculate Year-to-Date (YTD) PnL
   const ytdPnLChf = useMemo(() => {
@@ -620,68 +751,12 @@ function Dashboard() {
       }))
   }, [outflowItems])
 
-  // Generate net worth evolution data from transactions
+  // Generate net worth evolution data from snapshots
   const netWorthData = useMemo(() => {
-    if (transactions.length === 0) {
-      // If no transactions, just show current state
-      const categoryTotals: Record<NetWorthCategory, number> = {
-        'Cash': 0,
-        'Bank Accounts': 0,
-        'Retirement Funds': 0,
-        'Index Funds': 0,
-        'Stocks': 0,
-        'Commodities': 0,
-        'Crypto': 0,
-        'Real Estate': 0,
-        'Depreciating Assets': 0,
-      }
-
-      netWorthItems.forEach((item: NetWorthItem) => {
-        let balance: number
-        if (item.category === 'Crypto') {
-          const coinAmount = calculateCoinAmount(item.id, transactions)
-          const ticker = item.name.trim().toUpperCase()
-          const currentPriceUsd = cryptoPrices[ticker] || 0
-          if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-            // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
-            const valueUsd = coinAmount * currentPriceUsd
-            balance = valueUsd * usdToChfRate
-          } else {
-            balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-          }
-        } else {
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-        }
-        // Ensure balance is a valid number
-        const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
-        categoryTotals[item.category] += validBalance
-      })
-
-      const total = Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
-
-      return [{
-        month: new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' }),
-        'Total Net Worth': convert(total, 'CHF'),
-        'Cash': convert(categoryTotals['Cash'], 'CHF'),
-        'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
-        'Retirement Funds': convert(categoryTotals['Retirement Funds'], 'CHF'),
-        'Index Funds': convert(categoryTotals['Index Funds'], 'CHF'),
-        'Stocks': convert(categoryTotals['Stocks'], 'CHF'),
-        'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
-        'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
-        'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
-        'Depreciating Assets': convert(categoryTotals['Depreciating Assets'], 'CHF'),
-      }]
+    if (snapshots.length === 0 || !convert) {
+      // If no snapshots or convert function not available, return empty array
+      return []
     }
-
-    // Get all unique month-end dates from transactions
-    const monthEnds = new Set<string>()
-    transactions.forEach((tx: NetWorthTransaction) => {
-      const txDate = new Date(tx.date)
-      // Get last day of the month for this transaction
-      const lastDayOfMonth = new Date(txDate.getFullYear(), txDate.getMonth() + 1, 0)
-      monthEnds.add(lastDayOfMonth.toISOString().split('T')[0])
-    })
 
     // Calculate cutoff date based on timeframe
     const now = new Date()
@@ -709,147 +784,37 @@ function Dashboard() {
         break
     }
 
-    // Filter month ends based on timeframe and sort
-    const sortedMonthEnds = Array.from(monthEnds)
-      .map(dateStr => new Date(dateStr))
-      .filter(date => !cutoffDate || date >= cutoffDate)
-      .sort((a, b) => a.getTime() - b.getTime())
-
-    // Initialize chartData - start at the first transaction
-    const chartData: NetWorthDataPoint[] = []
-
-    // Calculate net worth for each month end
-    const monthEndData = sortedMonthEnds.map(monthEnd => {
-      const transactionsUpToDate = transactions.filter((tx: NetWorthTransaction) => {
-        const txDate = new Date(tx.date)
-        return txDate <= monthEnd
+    // Filter snapshots based on timeframe and sort
+    const filteredSnapshots = snapshots
+      .filter(snapshot => {
+        if (!cutoffDate) return true
+        const snapshotDate = new Date(snapshot.timestamp)
+        return snapshotDate >= cutoffDate
       })
+      .sort((a, b) => a.timestamp - b.timestamp)
 
-      const categoryTotals: Record<NetWorthCategory, number> = {
-        'Cash': 0,
-        'Bank Accounts': 0,
-        'Retirement Funds': 0,
-        'Index Funds': 0,
-        'Stocks': 0,
-        'Commodities': 0,
-        'Crypto': 0,
-        'Real Estate': 0,
-        'Depreciating Assets': 0,
-      }
-
-      netWorthItems.forEach((item: NetWorthItem) => {
-        let balance: number
-        if (item.category === 'Crypto') {
-          const coinAmount = calculateCoinAmount(item.id, transactionsUpToDate)
-          const ticker = item.name.trim().toUpperCase()
-          const currentPriceUsd = cryptoPrices[ticker] || 0
-          if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-            // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
-            const valueUsd = coinAmount * currentPriceUsd
-            balance = valueUsd * usdToChfRate
-          } else {
-            balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
-          }
-        } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
-          const holdings = calculateHoldings(item.id, transactionsUpToDate)
-          const ticker = item.name.trim().toUpperCase()
-          const currentPriceUsd = stockPrices[ticker] || 0
-          if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-            const valueUsd = holdings * currentPriceUsd
-            balance = valueUsd * usdToChfRate
-          } else {
-            balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
-          }
-        } else {
-          balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
-        }
-        // Ensure balance is a valid number
-        const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
-        categoryTotals[item.category] += validBalance
-      })
-
-      const total = Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
-      const month = monthEnd.toLocaleString('en-US', { month: 'short', year: 'numeric' })
+    // Convert snapshots to chart data format
+    const chartData: NetWorthDataPoint[] = filteredSnapshots.map(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      const month = snapshotDate.toLocaleString('en-US', { month: 'short', year: 'numeric' })
 
       return {
         month,
-        'Total Net Worth': convert(total, 'CHF'),
-        'Cash': convert(categoryTotals['Cash'], 'CHF'),
-        'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
-        'Retirement Funds': convert(categoryTotals['Retirement Funds'], 'CHF'),
-        'Index Funds': convert(categoryTotals['Index Funds'], 'CHF'),
-        'Stocks': convert(categoryTotals['Stocks'], 'CHF'),
-        'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
-        'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
-        'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
-        'Depreciating Assets': convert(categoryTotals['Depreciating Assets'], 'CHF'),
+        'Total Net Worth': convert(snapshot.total, 'CHF'),
+        'Cash': convert(snapshot.categories['Cash'] || 0, 'CHF'),
+        'Bank Accounts': convert(snapshot.categories['Bank Accounts'] || 0, 'CHF'),
+        'Retirement Funds': convert(snapshot.categories['Retirement Funds'] || 0, 'CHF'),
+        'Index Funds': convert(snapshot.categories['Index Funds'] || 0, 'CHF'),
+        'Stocks': convert(snapshot.categories['Stocks'] || 0, 'CHF'),
+        'Commodities': convert(snapshot.categories['Commodities'] || 0, 'CHF'),
+        'Crypto': convert(snapshot.categories['Crypto'] || 0, 'CHF'),
+        'Real Estate': convert(snapshot.categories['Real Estate'] || 0, 'CHF'),
+        'Depreciating Assets': convert(snapshot.categories['Depreciating Assets'] || 0, 'CHF'),
       }
-    })
-
-    // Add the month end data to chartData
-    chartData.push(...monthEndData)
-
-    // Add current state
-    const categoryTotals: Record<NetWorthCategory, number> = {
-      'Cash': 0,
-      'Bank Accounts': 0,
-      'Retirement Funds': 0,
-      'Index Funds': 0,
-      'Stocks': 0,
-      'Commodities': 0,
-      'Crypto': 0,
-      'Real Estate': 0,
-      'Depreciating Assets': 0,
-    }
-
-    netWorthItems.forEach((item: NetWorthItem) => {
-      let balance: number
-      if (item.category === 'Crypto') {
-        const coinAmount = calculateCoinAmount(item.id, transactions)
-        const ticker = item.name.trim().toUpperCase()
-        const currentPriceUsd = cryptoPrices[ticker] || 0
-        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-          const valueUsd = coinAmount * currentPriceUsd
-          balance = valueUsd * usdToChfRate
-        } else {
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-        }
-      } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
-        const holdings = calculateHoldings(item.id, transactions)
-        const ticker = item.name.trim().toUpperCase()
-        const currentPriceUsd = stockPrices[ticker] || 0
-        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-          const valueUsd = holdings * currentPriceUsd
-          balance = valueUsd * usdToChfRate
-        } else {
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-        }
-      } else {
-        balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-      }
-      // Ensure balance is a valid number
-      const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
-      categoryTotals[item.category] += validBalance
-    })
-
-    const total = Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
-
-    chartData.push({
-      month: new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' }),
-      'Total Net Worth': convert(total, 'CHF'),
-      'Cash': convert(categoryTotals['Cash'], 'CHF'),
-      'Bank Accounts': convert(categoryTotals['Bank Accounts'], 'CHF'),
-      'Retirement Funds': convert(categoryTotals['Retirement Funds'], 'CHF'),
-      'Index Funds': convert(categoryTotals['Index Funds'], 'CHF'),
-      'Stocks': convert(categoryTotals['Stocks'], 'CHF'),
-      'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
-      'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
-      'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
-      'Depreciating Assets': convert(categoryTotals['Depreciating Assets'], 'CHF'),
     })
 
     return chartData
-  }, [netWorthItems, transactions, totalNetWorthChf, cryptoPrices, stockPrices, usdToChfRate, convert, timeFrame])
+  }, [snapshots, convert, timeFrame])
 
 
   return (

@@ -6,6 +6,12 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/daily-snapshot",
+      "schedule": "59 23 * * *"
+    }
   ]
 }
 

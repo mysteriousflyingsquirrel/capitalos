@@ -173,9 +173,45 @@ export function hasSnapshotForDate(snapshots: NetWorthSnapshot[], date: string):
   return snapshots.some(s => s.date === date)
 }
 
-// Take a snapshot for the previous month if needed (called on app load)
-// This creates a snapshot dated as the last day of the target month (current month if on last day, previous month if on 1st or later)
-export async function takeSnapshotForCurrentMonthIfNeeded(
+// Get today's date in UTC (YYYY-MM-DD format)
+export function getTodayUTCDate(): string {
+  const now = new Date()
+  const year = now.getUTCFullYear()
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(now.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+// Get timestamp for 23:59 UTC today
+export function getToday2359UTCTimestamp(): number {
+  const now = new Date()
+  const year = now.getUTCFullYear()
+  const month = now.getUTCMonth()
+  const day = now.getUTCDate()
+  // Create date for 23:59:59 UTC today
+  const date2359 = new Date(Date.UTC(year, month, day, 23, 59, 59))
+  return date2359.getTime()
+}
+
+// Check if we should take a snapshot for today (at 23:59 UTC)
+// Only create snapshot if it's past 23:59 UTC today
+export function shouldTakeSnapshotToday(snapshots: NetWorthSnapshot[]): boolean {
+  const now = new Date()
+  const currentHourUTC = now.getUTCHours()
+  const currentMinuteUTC = now.getUTCMinutes()
+  
+  // Only take snapshot if it's past 23:59 UTC today
+  if (currentHourUTC < 23 || (currentHourUTC === 23 && currentMinuteUTC < 59)) {
+    return false
+  }
+  
+  const todayDate = getTodayUTCDate()
+  // Check if we already have a snapshot for today
+  return !hasSnapshotForDate(snapshots, todayDate)
+}
+
+// Take a daily snapshot at 23:59 UTC if needed
+export async function takeDailySnapshotIfNeeded(
   items: NetWorthItem[],
   transactions: NetWorthTransaction[],
   uid?: string,
@@ -184,72 +220,20 @@ export async function takeSnapshotForCurrentMonthIfNeeded(
 ): Promise<NetWorthSnapshot | null> {
   const snapshots = await loadSnapshots(uid)
   
-  // Check if we should take a snapshot
-  if (!shouldTakeSnapshotForPreviousMonth(snapshots)) {
+  // Check if we should take a snapshot for today
+  if (!shouldTakeSnapshotToday(snapshots)) {
     return null
   }
+
+  const todayDate = getTodayUTCDate()
+  const todayTimestamp = getToday2359UTCTimestamp()
+
+  // Create snapshot with current data
+  const snapshot = createSnapshot(items, transactions, cryptoPrices, convert)
   
-  // Determine which month to snapshot
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-  
-  let targetMonthDate: string
-  let targetTimestamp: number
-  
-  if (today.getTime() === lastDayOfCurrentMonth.getTime()) {
-    // We're on the last day of the current month - snapshot current month
-    targetMonthDate = getCurrentMonthSnapshotDate()
-    targetTimestamp = lastDayOfCurrentMonth.getTime()
-  } else {
-    // We're on the 1st or later of the current month - snapshot previous month
-    targetMonthDate = getPreviousMonthSnapshotDate()
-    const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-    targetTimestamp = lastDayOfPreviousMonth.getTime()
-  }
-
-  const categories: Record<NetWorthCategory, number> = {
-    'Cash': 0,
-    'Bank Accounts': 0,
-    'Retirement Funds': 0,
-    'Index Funds': 0,
-    'Stocks': 0,
-    'Commodities': 0,
-    'Crypto': 0,
-    'Real Estate': 0,
-    'Depreciating Assets': 0,
-  }
-
-  items.forEach(item => {
-    if (item.category === 'Crypto') {
-      // For Crypto: match Dashboard logic EXACTLY
-      // Dashboard line 289: convert(coinAmount * currentPriceUsd, 'USD')
-      // Dashboard line 292: calculateBalanceChf(...) (no convert call)
-      const coinAmount = calculateCoinAmount(item.id, transactions)
-      const ticker = item.name.trim().toUpperCase()
-      const currentPriceUsd = cryptoPrices && cryptoPrices[ticker] ? cryptoPrices[ticker] : 0
-      
-      if (currentPriceUsd > 0 && convert) {
-        // Match Dashboard line 289: convert USD to CHF
-        categories[item.category] += convert(coinAmount * currentPriceUsd, 'USD')
-      } else {
-        // Match Dashboard line 292: use calculateBalanceChf directly (already in CHF)
-        categories[item.category] += calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-      }
-    } else {
-      // For non-Crypto items, balance is already in CHF
-      categories[item.category] += calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-    }
-  })
-
-  const total = Object.values(categories).reduce((sum, val) => sum + val, 0)
-
-  const snapshot: NetWorthSnapshot = {
-    date: targetMonthDate,
-    timestamp: targetTimestamp,
-    categories,
-    total,
-  }
+  // Override date and timestamp to be today at 23:59 UTC
+  snapshot.date = todayDate
+  snapshot.timestamp = todayTimestamp
   
   const updatedSnapshots = [...snapshots, snapshot].sort((a, b) => a.timestamp - b.timestamp)
   await saveSnapshots(updatedSnapshots, uid)
