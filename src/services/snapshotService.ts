@@ -86,7 +86,7 @@ export function createSnapshot(
     'Commodities': 0,
     'Crypto': 0,
     'Real Estate': 0,
-    'Inventory': 0,
+    'Depreciating Assets': 0,
   }
 
   items.forEach(item => {
@@ -217,7 +217,7 @@ export async function takeSnapshotForCurrentMonthIfNeeded(
     'Commodities': 0,
     'Crypto': 0,
     'Real Estate': 0,
-    'Inventory': 0,
+    'Depreciating Assets': 0,
   }
 
   items.forEach(item => {

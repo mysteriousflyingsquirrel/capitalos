@@ -29,7 +29,7 @@ export type NetWorthCategory =
   | 'Commodities'
   | 'Crypto'
   | 'Real Estate'
-  | 'Inventory'
+  | 'Depreciating Assets'
 
 export interface NetWorthItem {
   id: string
@@ -37,6 +37,7 @@ export interface NetWorthItem {
   name: string
   platform: string
   currency: string
+  monthlyDepreciationChf?: number // Only for Depreciating Assets category
 }
 
 type TransactionSide = 'buy' | 'sell'
@@ -66,7 +67,7 @@ const categoryOrder: NetWorthCategory[] = [
   'Commodities',
   'Crypto',
   'Real Estate',
-  'Inventory',
+  'Depreciating Assets',
 ]
 
 // Helper function to format CHF
@@ -92,6 +93,51 @@ export function calculateBalanceChf(
       // Price is in USD - returns USD value, caller must convert to CHF
       return coinAmount * currentPrice
     }
+  }
+  
+  // For Depreciating Assets, calculate depreciation based on time since purchase
+  if (item?.category === 'Depreciating Assets' && item.monthlyDepreciationChf && item.monthlyDepreciationChf > 0) {
+    // Get all transactions, but exclude any old depreciation transactions (IDs starting with "depr-")
+    const itemTransactions = transactions.filter(tx => 
+      tx.itemId === itemId && !tx.id.startsWith('depr-')
+    )
+    
+    // Calculate base balance from buy/sell transactions only
+    let baseBalance = itemTransactions.reduce((sum, tx) => {
+      const txValue = tx.amount * (tx.side === 'buy' ? 1 : -1)
+      
+      // For all categories, use pricePerItem and currency if available
+      if (tx.pricePerItem !== undefined && tx.currency && convert) {
+        const priceInOriginalCurrency = tx.pricePerItem
+        const totalInOriginalCurrency = txValue * priceInOriginalCurrency
+        // Convert to CHF
+        return sum + convert(totalInOriginalCurrency, tx.currency as CurrencyCode)
+      }
+      // Fallback: use pricePerItemChf (already in CHF)
+      return sum + txValue * tx.pricePerItemChf
+    }, 0)
+    
+    // Find the first buy transaction to determine purchase date
+    const buyTransactions = itemTransactions
+      .filter(tx => tx.side === 'buy')
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    
+    if (buyTransactions.length > 0) {
+      const firstBuyDate = new Date(buyTransactions[0].date)
+      const now = new Date()
+      
+      // Calculate number of full months since purchase
+      const monthsDiff = (now.getFullYear() - firstBuyDate.getFullYear()) * 12 + 
+                        (now.getMonth() - firstBuyDate.getMonth())
+      
+      // Only apply depreciation if at least one month has passed
+      if (monthsDiff > 0) {
+        const totalDepreciation = item.monthlyDepreciationChf * monthsDiff
+        return Math.max(0, baseBalance - totalDepreciation) // Don't go below 0
+      }
+    }
+    
+    return baseBalance
   }
   
   // For non-Crypto items or Crypto without current prices, use transaction-based calculation
@@ -697,6 +743,7 @@ function NetWorth() {
     }
   }, [netWorthItems, uid, dataLoading])
 
+
   // Helper function to remove undefined values from an object (Firestore doesn't allow undefined)
   const removeUndefined = <T extends Record<string, any>>(obj: T): Partial<T> => {
     const cleaned: Partial<T> = {}
@@ -869,7 +916,7 @@ function NetWorth() {
       'Commodities': 0,
       'Crypto': 0,
       'Real Estate': 0,
-      'Inventory': 0,
+      'Depreciating Assets': 0,
     }
 
     netWorthItems.forEach((item) => {
@@ -922,7 +969,7 @@ function NetWorth() {
 
   const handleAddItem = (
     category: NetWorthCategory,
-    data: { name: string; currency: string; platform: string }
+    data: { name: string; currency: string; platform: string; monthlyDepreciationChf?: number }
   ) => {
     const id =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -935,6 +982,7 @@ function NetWorth() {
       name: data.name,
       currency: data.currency,
       platform: data.platform,
+      ...(data.monthlyDepreciationChf !== undefined && { monthlyDepreciationChf: data.monthlyDepreciationChf }),
     }
 
     setNetWorthItems((prev) => [...prev, newItem])
@@ -1101,9 +1149,19 @@ function NetWorth() {
     setEditingItemId(itemId)
   }
 
-  const handleSaveEditItem = (itemId: string, newName: string, currency: string, platform: string) => {
+  const handleSaveEditItem = (itemId: string, newName: string, currency: string, platform: string, monthlyDepreciationChf?: number) => {
     setNetWorthItems((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, name: newName.trim(), currency, platform } : item))
+      prev.map((item) => 
+        item.id === itemId 
+          ? { 
+              ...item, 
+              name: newName.trim(), 
+              currency, 
+              platform,
+              ...(monthlyDepreciationChf !== undefined && { monthlyDepreciationChf })
+            } 
+          : item
+      )
     )
     setEditingItemId(null)
   }
@@ -1237,7 +1295,7 @@ interface AddNetWorthItemModalProps {
   onClose: () => void
   onSubmit: (
     category: NetWorthCategory,
-    data: { name: string; currency: string; platform: string }
+    data: { name: string; currency: string; platform: string; monthlyDepreciationChf?: number }
   ) => string | void // Returns itemId if available
   onSaveTransaction?: (itemId: string, transaction: Omit<NetWorthTransaction, 'id' | 'itemId'>) => void
 }
@@ -1248,15 +1306,17 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   const isCrypto = category === 'Crypto'
   const isStockCategory = category === 'Index Funds' || category === 'Stocks' || category === 'Commodities'
   // Categories where price per item is always 1 (no need to show input)
-  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate', 'Inventory']
+  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate']
   const hidePricePerItem = categoriesWithoutPricePerItem.includes(category)
   
   const [name, setName] = useState('')
   const [amount, setAmount] = useState('')
   const [pricePerItem, setPricePerItem] = useState('')
+  const [monthlyDepreciationChf, setMonthlyDepreciationChf] = useState('')
   // For Crypto, Index Funds, Stocks, and Commodities, currency is always USD. For others, default to CHF.
   const [currency, setCurrency] = useState<CurrencyCode>(isCrypto || isStockCategory ? 'USD' : 'CHF')
   const [platform, setPlatform] = useState('Physical')
+  const isDepreciatingAsset = category === 'Depreciating Assets'
   // For date input, use YYYY-MM-DD format (HTML5 date input format)
   const [date, setDate] = useState(() => {
     const now = new Date()
@@ -1393,11 +1453,21 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
     // For Crypto, Index Funds, Stocks, and Commodities, currency is always USD
     const itemCurrency = isCrypto || isStockCategory ? 'USD' : currency
 
+    // Validate monthly depreciation for Depreciating Assets
+    if (isDepreciatingAsset) {
+      const parsedDepreciation = Number(monthlyDepreciationChf)
+      if (!monthlyDepreciationChf || Number.isNaN(parsedDepreciation) || parsedDepreciation <= 0) {
+        setError('Please enter a valid monthly depreciation amount greater than 0.')
+        return
+      }
+    }
+
     // Create the item first and get its ID
     const newItemId = onSubmit(category, {
       name: name.trim(),
       currency: itemCurrency,
       platform,
+      ...(isDepreciatingAsset && { monthlyDepreciationChf: Number(monthlyDepreciationChf) }),
     })
 
     // Create the initial transaction
@@ -1423,6 +1493,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
     setName('')
     setAmount('')
     setPricePerItem('')
+    setMonthlyDepreciationChf('')
     setCurrency(isCrypto ? 'USD' : 'CHF')
     setPlatform('Physical')
     // Reset date to today in YYYY-MM-DD format
@@ -1549,6 +1620,28 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
                   </div>
           )}
 
+          {/* Monthly depreciation field for Depreciating Assets */}
+          {isDepreciatingAsset && (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="nw-monthly-depreciation"
+              >
+                Monthly Depreciation (CHF)
+              </label>
+              <input
+                id="nw-monthly-depreciation"
+                type="number"
+                step="0.01"
+                min="0"
+                value={monthlyDepreciationChf}
+                onChange={(e) => setMonthlyDepreciationChf(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                placeholder="e.g. 100.00"
+              />
+            </div>
+          )}
+
                 <div>
                   <label
                     className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
@@ -1672,14 +1765,18 @@ interface EditNetWorthItemModalProps {
   item: NetWorthItem
   platforms: Platform[]
   onClose: () => void
-  onSave: (itemId: string, newName: string, currency: string, platform: string) => void
+  onSave: (itemId: string, newName: string, currency: string, platform: string, monthlyDepreciationChf?: number) => void
 }
 
 function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWorthItemModalProps) {
   const isCrypto = item.category === 'Crypto'
   const isStockCategory = item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities'
+  const isDepreciatingAsset = item.category === 'Depreciating Assets'
   const [name, setName] = useState(item.name)
   const [platform, setPlatform] = useState(item.platform)
+  const [monthlyDepreciationChf, setMonthlyDepreciationChf] = useState(
+    item.monthlyDepreciationChf?.toString() || ''
+  )
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = (e: FormEvent) => {
@@ -1691,8 +1788,23 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
       return
     }
 
+    // Validate monthly depreciation for Depreciating Assets
+    if (isDepreciatingAsset) {
+      const parsedDepreciation = Number(monthlyDepreciationChf)
+      if (!monthlyDepreciationChf || Number.isNaN(parsedDepreciation) || parsedDepreciation <= 0) {
+        setError('Please enter a valid monthly depreciation amount greater than 0.')
+        return
+      }
+    }
+
     // Currency cannot be changed - always use item's original currency
-    onSave(item.id, name.trim(), item.currency, platform)
+    onSave(
+      item.id, 
+      name.trim(), 
+      item.currency, 
+      platform,
+      isDepreciatingAsset ? Number(monthlyDepreciationChf) : undefined
+    )
     onClose()
   }
 
@@ -1810,6 +1922,28 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
             />
           </div>
 
+          {/* Monthly depreciation field for Depreciating Assets */}
+          {isDepreciatingAsset && (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="edit-monthly-depreciation"
+              >
+                Monthly Depreciation (CHF)
+              </label>
+              <input
+                id="edit-monthly-depreciation"
+                type="number"
+                step="0.01"
+                min="0"
+                value={monthlyDepreciationChf}
+                onChange={(e) => setMonthlyDepreciationChf(e.target.value)}
+                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                placeholder="e.g. 100.00"
+              />
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
@@ -1841,7 +1975,7 @@ interface AddTransactionModalProps {
 }
 
 // Categories that don't need price per item (1 unit = 1 CHF equivalent)
-const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Real Estate', 'Inventory']
+const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Real Estate']
 
 type TransactionTab = 'buy' | 'sell'
 
@@ -1853,7 +1987,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   const isCrypto = item.category === 'Crypto'
   const isStockCategory = item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities'
   // Categories where price per item is always 1 (no need to show input)
-  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate', 'Inventory']
+  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate']
   const hidePricePerItem = categoriesWithoutPricePerItem.includes(item.category)
   
   // For all categories, use original pricePerItem if available, otherwise convert from CHF

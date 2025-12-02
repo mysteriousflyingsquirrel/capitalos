@@ -45,7 +45,7 @@ interface NetWorthDataPoint {
   'Commodities': number
   'Crypto': number
   'Real Estate': number
-  'Inventory': number
+  'Depreciating Assets': number
 }
 
 interface AssetAllocationItem {
@@ -332,7 +332,7 @@ function Dashboard() {
       'Commodities': 0,
       'Crypto': 0,
       'Real Estate': 0,
-      'Inventory': 0,
+      'Depreciating Assets': 0,
     }
 
     netWorthItems.forEach((item: NetWorthItem) => {
@@ -406,7 +406,7 @@ function Dashboard() {
         'Commodities': 0,
         'Crypto': 0,
         'Real Estate': 0,
-        'Inventory': 0,
+        'Depreciating Assets': 0,
       }
 
       netWorthItems.forEach((item: NetWorthItem) => {
@@ -530,7 +530,7 @@ function Dashboard() {
       'Commodities': 0,
       'Crypto': 0,
       'Real Estate': 0,
-      'Inventory': 0,
+      'Depreciating Assets': 0,
     }
 
     netWorthItems.forEach((item: NetWorthItem) => {
@@ -633,7 +633,7 @@ function Dashboard() {
         'Commodities': 0,
         'Crypto': 0,
         'Real Estate': 0,
-        'Inventory': 0,
+        'Depreciating Assets': 0,
       }
 
       netWorthItems.forEach((item: NetWorthItem) => {
@@ -670,7 +670,7 @@ function Dashboard() {
         'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
         'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
         'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
-        'Inventory': convert(categoryTotals['Inventory'], 'CHF'),
+        'Depreciating Assets': convert(categoryTotals['Depreciating Assets'], 'CHF'),
       }]
     }
 
@@ -734,7 +734,7 @@ function Dashboard() {
         'Commodities': 0,
         'Crypto': 0,
         'Real Estate': 0,
-        'Inventory': 0,
+        'Depreciating Assets': 0,
       }
 
       netWorthItems.forEach((item: NetWorthItem) => {
@@ -782,7 +782,7 @@ function Dashboard() {
         'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
         'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
         'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
-        'Inventory': convert(categoryTotals['Inventory'], 'CHF'),
+        'Depreciating Assets': convert(categoryTotals['Depreciating Assets'], 'CHF'),
       }
     })
 
@@ -799,7 +799,7 @@ function Dashboard() {
       'Commodities': 0,
       'Crypto': 0,
       'Real Estate': 0,
-      'Inventory': 0,
+      'Depreciating Assets': 0,
     }
 
     netWorthItems.forEach((item: NetWorthItem) => {
@@ -845,7 +845,7 @@ function Dashboard() {
       'Commodities': convert(categoryTotals['Commodities'], 'CHF'),
       'Crypto': convert(categoryTotals['Crypto'], 'CHF'),
       'Real Estate': convert(categoryTotals['Real Estate'], 'CHF'),
-      'Inventory': convert(categoryTotals['Inventory'], 'CHF'),
+      'Depreciating Assets': convert(categoryTotals['Depreciating Assets'], 'CHF'),
     })
 
     return chartData
@@ -1057,7 +1057,7 @@ function Dashboard() {
                 />
                 <Line
                   type="monotone"
-                  dataKey="Inventory"
+                  dataKey="Depreciating Assets"
                   stroke={CHART_COLORS.cyan}
                   strokeWidth={2}
                   dot={false}
