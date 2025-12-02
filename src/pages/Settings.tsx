@@ -2,6 +2,7 @@ import React, { useState, useEffect, FormEvent } from 'react'
 import Heading from '../components/Heading'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useApiKeys } from '../contexts/ApiKeysContext'
 import type { CurrencyCode } from '../lib/currency'
 import { supportedCurrencies } from '../lib/currency'
 import {
@@ -17,6 +18,7 @@ import { generateCryptoTaxReportPDF } from '../services/pdfService'
 function Settings() {
   const { baseCurrency, exchangeRates, isLoading, error, convert } = useCurrency()
   const { uid, user } = useAuth()
+  const { rapidApiKey, setRapidApiKey, isLoading: apiKeysLoading } = useApiKeys()
   const [exportLoading, setExportLoading] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [exportSuccess, setExportSuccess] = useState(false)
@@ -35,6 +37,11 @@ function Settings() {
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const [loadingYears, setLoadingYears] = useState(false)
+  // API Keys
+  const [rapidApiKeyInput, setRapidApiKeyInput] = useState('')
+  const [apiKeySaving, setApiKeySaving] = useState(false)
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null)
+  const [apiKeySuccess, setApiKeySuccess] = useState(false)
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -149,6 +156,13 @@ function Settings() {
     input.click()
   }
 
+
+  // Load API key into input when it's loaded
+  useEffect(() => {
+    if (rapidApiKey !== null && !apiKeysLoading) {
+      setRapidApiKeyInput(rapidApiKey || '')
+    }
+  }, [rapidApiKey, apiKeysLoading])
 
   // Load platforms on mount
   // Load available years for crypto tax report
@@ -290,6 +304,25 @@ function Settings() {
     }
   }
 
+  const handleSaveRapidApiKey = async (e: FormEvent) => {
+    e.preventDefault()
+    setApiKeyError(null)
+    setApiKeySuccess(false)
+    setApiKeySaving(true)
+
+    try {
+      await setRapidApiKey(rapidApiKeyInput)
+      setApiKeySuccess(true)
+      setTimeout(() => setApiKeySuccess(false), 3000)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save API key'
+      setApiKeyError(errorMessage)
+      setTimeout(() => setApiKeyError(null), 5000)
+    } finally {
+      setApiKeySaving(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#050A1A] px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -330,6 +363,77 @@ function Settings() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* API Keys Section */}
+        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
+          <Heading level={2} className="mb-4">API Keys</Heading>
+          
+          <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
+            Configure API keys for fetching real-time prices. These keys are stored securely and only used for price updates.
+          </p>
+
+          {apiKeyError && (
+            <div className="mb-4 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+              {apiKeyError}
+            </div>
+          )}
+
+          {apiKeySuccess && (
+            <div className="mb-4 text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
+              API key saved successfully!
+            </div>
+          )}
+
+          <div className="space-y-6">
+            {/* RapidAPI Key */}
+            <div>
+              <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
+                RapidAPI Key (for Yahoo Finance)
+              </label>
+              <p className="text-text-muted text-[0.567rem] md:text-xs mb-3">
+                Required for fetching stock, index fund, and commodity prices. Get your key from{' '}
+                <a 
+                  href="https://rapidapi.com/apidojo/api/yahoo-finance1" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-accent-blue hover:underline"
+                >
+                  RapidAPI
+                </a>
+                .
+              </p>
+              <form onSubmit={handleSaveRapidApiKey} className="space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={rapidApiKeyInput}
+                    onChange={(e) => setRapidApiKeyInput(e.target.value)}
+                    placeholder="Enter your RapidAPI key"
+                    className="flex-1 bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                    disabled={apiKeysLoading || apiKeySaving}
+                  />
+                  <button
+                    type="submit"
+                    disabled={apiKeysLoading || apiKeySaving || rapidApiKeyInput.trim() === (rapidApiKey || '')}
+                    className="px-4 py-2 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {apiKeySaving ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+                {rapidApiKey && (
+                  <p className="text-text-muted text-[0.567rem] md:text-xs">
+                    ✓ API key is configured. Prices will be fetched automatically.
+                  </p>
+                )}
+                {!rapidApiKey && !apiKeysLoading && (
+                  <p className="text-warning text-[0.567rem] md:text-xs">
+                    ⚠️ No API key configured. Stock, index fund, and commodity prices will not be updated.
+                  </p>
+                )}
+              </form>
             </div>
           </div>
         </div>

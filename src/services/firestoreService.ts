@@ -230,19 +230,26 @@ export async function loadPlatforms(uid: string): Promise<Platform[]> {
 }
 
 // Settings storage
+export interface UserSettings {
+  baseCurrency?: string
+  apiKeys?: {
+    rapidApiKey?: string
+  }
+}
+
 export async function saveUserSettings(
   uid: string,
-  settings: { baseCurrency: string }
+  settings: UserSettings
 ): Promise<void> {
   const docRef = doc(db, `users/${uid}/settings/user`)
   await setDoc(docRef, settings)
 }
 
-export async function loadUserSettings(uid: string): Promise<{ baseCurrency: string } | null> {
+export async function loadUserSettings(uid: string): Promise<UserSettings | null> {
   const docRef = doc(db, `users/${uid}/settings/user`)
   const docSnap = await getDoc(docRef)
   if (docSnap.exists()) {
-    return docSnap.data() as { baseCurrency: string }
+    return docSnap.data() as UserSettings
   }
   return null
 }

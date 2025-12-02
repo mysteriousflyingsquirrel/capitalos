@@ -17,6 +17,7 @@ import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useIncognito } from '../contexts/IncognitoContext'
+import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney } from '../lib/currency'
 import type { CurrencyCode } from '../lib/currency'
 import {
@@ -27,9 +28,10 @@ import {
 } from '../services/storageService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
-import { calculateBalanceChf, calculateCoinAmount } from './NetWorth'
+import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from './NetWorth'
 import type { InflowItem, OutflowItem } from './Cashflow'
-import { fetchCoinPrice } from '../services/coinGeckoService'
+import { fetchCryptoData } from '../services/cryptoCompareService'
+import { fetchStockPrices } from '../services/yahooFinanceService'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -139,6 +141,7 @@ function formatCHFTick(value: number): string {
 function Dashboard() {
   const [timeFrame, setTimeFrame] = useState<'YTD' | '1M' | '3M' | '1Y' | '5Y' | 'MAX'>('MAX')
   const { baseCurrency, convert, exchangeRates } = useCurrency()
+  const { rapidApiKey } = useApiKeys()
 
   // Load data from Firestore
   const { uid } = useAuth()
@@ -149,6 +152,10 @@ function Dashboard() {
   
   // Store current crypto prices (ticker -> USD price)
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
+  // Store current stock/index fund/commodity prices (ticker -> USD price)
+  const [stockPrices, setStockPrices] = useState<Record<string, number>>({})
+  const [usdToChfRate, setUsdToChfRate] = useState<number | null>(null)
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
   
   useEffect(() => {
     if (uid) {
@@ -166,48 +173,152 @@ function Dashboard() {
     }
   }, [uid])
 
-  // Fetch crypto prices for all crypto items
-  useEffect(() => {
-    const fetchAllCryptoPrices = async () => {
+  // Fetch crypto prices and USD→CHF rate for all crypto items
+  const fetchAllCryptoPrices = async (showLoading = false) => {
+    if (showLoading) {
+      setIsRefreshingPrices(true)
+    }
+    
+    try {
       const cryptoItems = netWorthItems.filter((item: NetWorthItem) => item.category === 'Crypto')
-      if (cryptoItems.length === 0) return
-
       const tickers = cryptoItems.map((item: NetWorthItem) => item.name.trim().toUpperCase())
       const uniqueTickers = [...new Set(tickers)]
       
-      const pricePromises = uniqueTickers.map(async (ticker) => {
-        try {
-          const price = await fetchCoinPrice(ticker)
-          return { ticker, price: price || null }
-        } catch (error) {
-          return { ticker, price: null }
-        }
-      })
-
-      const results = await Promise.all(pricePromises)
-      const newPrices: Record<string, number> = {}
+      const { prices, usdToChfRate: rate } = await fetchCryptoData(uniqueTickers)
       
-      results.forEach(({ ticker, price }) => {
-        if (price !== null) {
-          newPrices[ticker] = price
-        }
-      })
-
-      setCryptoPrices(prev => ({ ...prev, ...newPrices }))
+      // Update crypto prices
+      setCryptoPrices(prev => ({ ...prev, ...prices }))
+      
+      // Update USD→CHF rate
+      if (rate !== null) {
+        setUsdToChfRate(rate)
+      }
+    } catch (error) {
+      console.error('Error fetching crypto data:', error)
+    } finally {
+      if (showLoading) {
+        setIsRefreshingPrices(false)
+      }
     }
+  }
 
-    if (netWorthItems.length > 0) {
-      fetchAllCryptoPrices()
+  // Fetch stock/index fund/commodity prices for all relevant items
+  const fetchAllStockPrices = async (showLoading = false) => {
+    if (showLoading) {
+      setIsRefreshingPrices(true)
+    }
+    
+    try {
+      const stockItems = netWorthItems.filter((item: NetWorthItem) => 
+        item.category === 'Index Funds' || 
+        item.category === 'Stocks' || 
+        item.category === 'Commodities'
+      )
       
-      // Set up interval to fetch every hour (3600000 ms)
+      if (stockItems.length === 0) {
+        return
+      }
+
+      const tickers = stockItems.map((item: NetWorthItem) => item.name.trim().toUpperCase())
+      const uniqueTickers = [...new Set(tickers)]
+      
+      const prices = await fetchStockPrices(uniqueTickers, rapidApiKey)
+      
+      // Update stock prices
+      setStockPrices(prev => ({ ...prev, ...prices }))
+    } catch (error) {
+      console.error('Error fetching stock prices:', error)
+    } finally {
+      if (showLoading) {
+        setIsRefreshingPrices(false)
+      }
+    }
+  }
+
+  // Fetch all prices (crypto and stocks)
+  const fetchAllPrices = async (showLoading = false) => {
+    if (showLoading) {
+      setIsRefreshingPrices(true)
+    }
+    
+    try {
+      // Fetch both in parallel
+      await Promise.all([
+        fetchAllCryptoPrices(false),
+        fetchAllStockPrices(false),
+      ])
+    } finally {
+      if (showLoading) {
+        setIsRefreshingPrices(false)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (netWorthItems.length > 0) {
+      // Fetch immediately on page load
+      fetchAllPrices()
+      
+      // Set up interval to fetch every 5 minutes (300000 ms)
       const interval = setInterval(() => {
-        fetchAllCryptoPrices()
-      }, 3600000) // 1 hour
+        fetchAllPrices()
+      }, 300000) // 5 minutes
 
       return () => clearInterval(interval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netWorthItems]) // Re-fetch when crypto items change
+  }, [netWorthItems]) // Re-fetch when items change
+
+  // Pull-to-refresh functionality for mobile
+  useEffect(() => {
+    let touchStartY = 0
+    let touchEndY = 0
+    let isPulling = false
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartY = e.touches[0].clientY
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      touchEndY = e.touches[0].clientY
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+      
+      // Only trigger pull-to-refresh if at the top of the page and pulling down
+      if (scrollTop === 0 && touchEndY > touchStartY && touchEndY - touchStartY > 50) {
+        isPulling = true
+        // Prevent default scrolling while pulling
+        if (touchEndY - touchStartY > 100) {
+          e.preventDefault()
+        }
+      } else {
+        isPulling = false
+      }
+    }
+
+    const handleTouchEnd = () => {
+      if (isPulling && touchEndY - touchStartY > 100) {
+        // Trigger refresh
+        fetchAllPrices(true)
+      }
+      isPulling = false
+      touchStartY = 0
+      touchEndY = 0
+    }
+
+    // Only add listeners on mobile devices
+    if (window.innerWidth <= 768) {
+      document.addEventListener('touchstart', handleTouchStart, { passive: true })
+      document.addEventListener('touchmove', handleTouchMove, { passive: false })
+      document.addEventListener('touchend', handleTouchEnd, { passive: true })
+    }
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart)
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleTouchEnd)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount
 
 
   // Calculate total net worth by summing all category subtotals (same logic as NetWorth page)
@@ -227,20 +338,33 @@ function Dashboard() {
     netWorthItems.forEach((item: NetWorthItem) => {
       let balance: number
       if (item.category === 'Crypto') {
-        // For Crypto: use current price * coin amount, convert USD to CHF
+        // For Crypto: use current price * coin amount, convert USD to CHF using CryptoCompare rate
         const coinAmount = calculateCoinAmount(item.id, transactions)
         const ticker = item.name.trim().toUpperCase()
         const currentPriceUsd = cryptoPrices[ticker] || 0
-        if (currentPriceUsd > 0) {
-          // Convert USD to CHF
-          const cryptoValueUsd = coinAmount * currentPriceUsd
-          balance = convert(cryptoValueUsd, 'USD')
+        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+          // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
+          const valueUsd = coinAmount * currentPriceUsd
+          balance = valueUsd * usdToChfRate
         } else {
           // Fallback: calculateBalanceChf returns CHF for crypto fallback
           balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
         }
+      } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
+        // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance
+        const holdings = calculateHoldings(item.id, transactions)
+        const ticker = item.name.trim().toUpperCase()
+        const currentPriceUsd = stockPrices[ticker] || 0
+        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+          // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
+          const valueUsd = holdings * currentPriceUsd
+          balance = valueUsd * usdToChfRate
+        } else {
+          // Fallback: calculateBalanceChf returns CHF
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+        }
       } else {
-        // For non-Crypto items, calculateBalanceChf returns CHF
+        // For all other items, calculateBalanceChf returns CHF
         balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
       }
       // Ensure balance is a valid number
@@ -250,7 +374,7 @@ function Dashboard() {
 
     // Sum all category totals
     return Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
-  }, [netWorthItems, transactions, cryptoPrices, convert])
+  }, [netWorthItems, transactions, cryptoPrices, stockPrices, usdToChfRate, convert])
 
   // Calculate monthly inflow/outflow from cashflow items
   const monthlyInflowChf = useMemo(() => {
@@ -292,10 +416,10 @@ function Dashboard() {
           const coinAmount = calculateCoinAmount(item.id, transactionsUpToDate)
           const ticker = item.name.trim().toUpperCase()
           const currentPriceUsd = cryptoPrices[ticker] || 0
-          if (currentPriceUsd > 0) {
-            // Convert USD to CHF
-            const cryptoValueUsd = coinAmount * currentPriceUsd
-            balance = convert(cryptoValueUsd, 'USD')
+          if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+            // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
+            const valueUsd = coinAmount * currentPriceUsd
+            balance = valueUsd * usdToChfRate
           } else {
             // Fallback: calculateBalanceChf returns CHF for crypto fallback
             balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
@@ -312,7 +436,7 @@ function Dashboard() {
       // Sum all category totals
       return Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
     }
-  }, [netWorthItems, transactions, cryptoPrices, convert])
+  }, [netWorthItems, transactions, cryptoPrices, stockPrices, usdToChfRate, convert])
 
   // Calculate monthly PnL (difference between current net worth and previous month end)
   const monthlyPnLChf = useMemo(() => {
@@ -416,16 +540,28 @@ function Dashboard() {
         const coinAmount = calculateCoinAmount(item.id, transactions)
         const ticker = item.name.trim().toUpperCase()
         const currentPriceUsd = cryptoPrices[ticker] || 0
-        if (currentPriceUsd > 0) {
-          // Convert USD to CHF for balance
-          const usdValue = coinAmount * currentPriceUsd
-          balance = isNaN(usdValue) ? 0 : convert(usdValue, 'USD')
+        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+          // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
+          const valueUsd = coinAmount * currentPriceUsd
+          balance = isNaN(valueUsd) ? 0 : valueUsd * usdToChfRate
+        } else {
+          // Fallback to transaction-based calculation if price not available
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+        }
+      } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
+        // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance
+        const holdings = calculateHoldings(item.id, transactions)
+        const ticker = item.name.trim().toUpperCase()
+        const currentPriceUsd = stockPrices[ticker] || 0
+        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+          const valueUsd = holdings * currentPriceUsd
+          balance = isNaN(valueUsd) ? 0 : valueUsd * usdToChfRate
         } else {
           // Fallback to transaction-based calculation if price not available
           balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
         }
       } else {
-        // For non-Crypto items, balance is already in CHF
+        // For all other items, balance is already in CHF
         balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
       }
       // Ensure balance is a valid number
@@ -444,7 +580,7 @@ function Dashboard() {
         value: isNaN(value) || !isFinite(value) ? 0 : Math.max(0, value),
       }))
       .filter(({ value }) => value > 0) // Only show categories with positive values in the chart
-  }, [netWorthItems, transactions, cryptoPrices, convert])
+  }, [netWorthItems, transactions, cryptoPrices, stockPrices, usdToChfRate, convert])
 
   // Calculate inflow breakdown
   const inflowBreakdownData = useMemo(() => {
@@ -506,8 +642,10 @@ function Dashboard() {
           const coinAmount = calculateCoinAmount(item.id, transactions)
           const ticker = item.name.trim().toUpperCase()
           const currentPriceUsd = cryptoPrices[ticker] || 0
-          if (currentPriceUsd > 0) {
-            balance = convert(coinAmount * currentPriceUsd, 'USD')
+          if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+            // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
+            const valueUsd = coinAmount * currentPriceUsd
+            balance = valueUsd * usdToChfRate
           } else {
             balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
           }
@@ -605,8 +743,20 @@ function Dashboard() {
           const coinAmount = calculateCoinAmount(item.id, transactionsUpToDate)
           const ticker = item.name.trim().toUpperCase()
           const currentPriceUsd = cryptoPrices[ticker] || 0
-          if (currentPriceUsd > 0) {
-            balance = convert(coinAmount * currentPriceUsd, 'USD')
+          if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+            // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
+            const valueUsd = coinAmount * currentPriceUsd
+            balance = valueUsd * usdToChfRate
+          } else {
+            balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
+          }
+        } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
+          const holdings = calculateHoldings(item.id, transactionsUpToDate)
+          const ticker = item.name.trim().toUpperCase()
+          const currentPriceUsd = stockPrices[ticker] || 0
+          if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+            const valueUsd = holdings * currentPriceUsd
+            balance = valueUsd * usdToChfRate
           } else {
             balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
           }
@@ -658,8 +808,19 @@ function Dashboard() {
         const coinAmount = calculateCoinAmount(item.id, transactions)
         const ticker = item.name.trim().toUpperCase()
         const currentPriceUsd = cryptoPrices[ticker] || 0
-        if (currentPriceUsd > 0) {
-          balance = convert(coinAmount * currentPriceUsd, 'USD')
+        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+          const valueUsd = coinAmount * currentPriceUsd
+          balance = valueUsd * usdToChfRate
+        } else {
+          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+        }
+      } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
+        const holdings = calculateHoldings(item.id, transactions)
+        const ticker = item.name.trim().toUpperCase()
+        const currentPriceUsd = stockPrices[ticker] || 0
+        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
+          const valueUsd = holdings * currentPriceUsd
+          balance = valueUsd * usdToChfRate
         } else {
           balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
         }
@@ -688,7 +849,7 @@ function Dashboard() {
     })
 
     return chartData
-  }, [netWorthItems, transactions, totalNetWorthChf, cryptoPrices, convert, timeFrame])
+  }, [netWorthItems, transactions, totalNetWorthChf, cryptoPrices, stockPrices, usdToChfRate, convert, timeFrame])
 
 
   return (
@@ -703,7 +864,9 @@ function Dashboard() {
           <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <div className="flex flex-col">
-                <Heading level={2}>Total Net Worth</Heading>
+                <div className="flex items-center justify-between mb-2">
+                  <Heading level={2}>Total Net Worth</Heading>
+                </div>
                 <TotalText variant={totalNetWorthConverted >= 0 ? 'inflow' : 'outflow'} className="mt-1">
                   {formatCurrencyValue(totalNetWorthConverted)}
                 </TotalText>

@@ -9,6 +9,7 @@ import Login from './pages/Login'
 import { CurrencyProvider } from './contexts/CurrencyContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { IncognitoProvider } from './contexts/IncognitoContext'
+import { ApiKeysProvider } from './contexts/ApiKeysContext'
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth()
@@ -42,11 +43,13 @@ function App() {
   return (
     <AuthProvider>
       <CurrencyProvider>
-        <IncognitoProvider>
-          <Router>
-            <ProtectedRoutes />
-          </Router>
-        </IncognitoProvider>
+        <ApiKeysProvider>
+          <IncognitoProvider>
+            <Router>
+              <ProtectedRoutes />
+            </Router>
+          </IncognitoProvider>
+        </ApiKeysProvider>
       </CurrencyProvider>
     </AuthProvider>
   )
