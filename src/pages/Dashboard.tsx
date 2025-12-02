@@ -664,11 +664,89 @@ function Dashboard() {
     return ((totalNetWorthChf - previousYearNetWorth) / previousYearNetWorth) * 100
   }, [totalNetWorthChf, snapshots, convert])
 
+  // Calculate Daily PnL (compare latest snapshot from previous day to current state)
+  const dailyPnLChf = useMemo(() => {
+    if (snapshots.length === 0) {
+      // If no snapshots, consider previous day net worth to be 0
+      return totalNetWorthChf
+    }
+
+    const now = new Date()
+    const currentYear = now.getUTCFullYear()
+    const currentMonth = now.getUTCMonth()
+    const currentDay = now.getUTCDate()
+    
+    // Get the first moment of the current day in UTC (snapshots before this are from previous day)
+    const firstMomentOfCurrentDay = new Date(Date.UTC(currentYear, currentMonth, currentDay, 0, 0, 0, 0))
+    
+    // Find snapshots from the previous day (before the first moment of current day)
+    const previousDaySnapshots = snapshots.filter(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      return snapshotDate < firstMomentOfCurrentDay
+    })
+    
+    if (previousDaySnapshots.length === 0) {
+      // If no snapshot from previous day, consider net worth to be 0
+      return totalNetWorthChf
+    }
+    
+    // Get the last snapshot from previous day (most recent one)
+    const lastSnapshot = previousDaySnapshots.reduce((latest, snapshot) => {
+      return snapshot.timestamp > latest.timestamp ? snapshot : latest
+    })
+    
+    // Snapshots are stored in CHF, so we can use the total directly
+    // (convert handles CHF->CHF as identity)
+    const previousDayNetWorth = convert(lastSnapshot.total, 'CHF')
+    return totalNetWorthChf - previousDayNetWorth
+  }, [totalNetWorthChf, snapshots, convert])
+
+  // Calculate Daily PnL percentage
+  const dailyPnLPercentage = useMemo(() => {
+    if (snapshots.length === 0) {
+      // If no snapshots, consider previous day net worth to be 0
+      // Percentage is undefined when starting from 0, return 0
+      return 0
+    }
+
+    const now = new Date()
+    const currentYear = now.getUTCFullYear()
+    const currentMonth = now.getUTCMonth()
+    const currentDay = now.getUTCDate()
+    
+    // Get the first moment of the current day in UTC (snapshots before this are from previous day)
+    const firstMomentOfCurrentDay = new Date(Date.UTC(currentYear, currentMonth, currentDay, 0, 0, 0, 0))
+    
+    // Find snapshots from the previous day (before the first moment of current day)
+    const previousDaySnapshots = snapshots.filter(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      return snapshotDate < firstMomentOfCurrentDay
+    })
+    
+    if (previousDaySnapshots.length === 0) {
+      // If no snapshot from previous day, consider net worth to be 0
+      // Percentage is undefined when starting from 0, return 0
+      return 0
+    }
+    
+    // Get the last snapshot from previous day (most recent one)
+    const lastSnapshot = previousDaySnapshots.reduce((latest, snapshot) => {
+      return snapshot.timestamp > latest.timestamp ? snapshot : latest
+    })
+    
+    // Snapshots are stored in CHF, so we can use the total directly
+    // (convert handles CHF->CHF as identity)
+    const previousDayNetWorth = convert(lastSnapshot.total, 'CHF')
+    if (previousDayNetWorth === 0) return 0
+    return ((totalNetWorthChf - previousDayNetWorth) / previousDayNetWorth) * 100
+  }, [totalNetWorthChf, snapshots, convert])
+
   // Convert values from CHF to baseCurrency
   const totalNetWorthConverted = convert(totalNetWorthChf, 'CHF')
   const monthlyInflowConverted = convert(monthlyInflowChf, 'CHF')
   const monthlyOutflowConverted = convert(monthlyOutflowChf, 'CHF')
   const monthlyPnLConverted = convert(monthlyPnLChf, 'CHF')
+  const dailyPnLConverted = convert(dailyPnLChf, 'CHF')
   const ytdPnLConverted = convert(ytdPnLChf, 'CHF')
 
   // Calculate USD value for total net worth
@@ -681,6 +759,11 @@ function Dashboard() {
   const monthlyPnLInUsd = useMemo(
     () => monthlyPnLChf * (exchangeRates?.rates['USD'] || 1),
     [monthlyPnLChf, exchangeRates]
+  )
+
+  const dailyPnLInUsd = useMemo(
+    () => dailyPnLChf * (exchangeRates?.rates['USD'] || 1),
+    [dailyPnLChf, exchangeRates]
   )
 
   const ytdPnLInUsd = useMemo(
@@ -894,6 +977,22 @@ function Dashboard() {
               </div>
             </div>
             <div className="space-y-2">
+              <div>
+                <div className="text-xs md:text-sm text-text-muted mb-1">Daily PnL</div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-baseline gap-2">
+                    <TotalText variant={dailyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
+                      {formatCurrencyValue(dailyPnLConverted)}
+                    </TotalText>
+                    <span className={`text-xs md:text-sm ${dailyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
+                      {isIncognito ? '(****)' : `(${dailyPnLPercentage >= 0 ? '+' : ''}${dailyPnLPercentage.toFixed(2)}%)`}
+                    </span>
+                  </div>
+                  <TotalText variant={dailyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
+                    {formatUsd(dailyPnLInUsd)}
+                  </TotalText>
+                </div>
+              </div>
               <div>
                 <div className="text-xs md:text-sm text-text-muted mb-1">Monthly PnL</div>
                 <div className="flex flex-col gap-1">
