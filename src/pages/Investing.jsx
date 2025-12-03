@@ -2,7 +2,7 @@ import Heading from '../components/Heading'
 
 function Investing() {
   return (
-    <div className="min-h-screen bg-[#050A1A] px-2 py-4 lg:p-6">
+    <div className="min-h-screen px-2 py-4 lg:p-6">
       <div className="max-w-7xl mx-auto">
         <Heading level={1}>Investing</Heading>
         <div className="mt-8">

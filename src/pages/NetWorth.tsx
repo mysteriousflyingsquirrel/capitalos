@@ -1175,7 +1175,7 @@ function NetWorth() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050A1A] px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
+    <div className="min-h-screen px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Net Worth</Heading>

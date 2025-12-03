@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import Heading from '../components/Heading'
+import FloatingLines from '../components/FloatingLines'
 import { isIosSafari } from '../utils/browserDetection'
 
 function Login() {
@@ -45,8 +46,19 @@ function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050A1A] flex items-center justify-center px-4">
-      <div className="max-w-md w-full">
+    <div className="min-h-screen flex items-center justify-center px-4 relative">
+      <div className="fixed inset-0 z-0">
+        <FloatingLines
+          linesGradient={['#4A56FF', '#AD33FF', '#A45CFF', '#3CC8C0']}
+          enabledWaves={['top', 'middle', 'bottom']}
+          lineCount={[4, 6, 4]}
+          animationSpeed={0.5}
+          interactive={true}
+          parallax={true}
+          mixBlendMode="screen"
+        />
+      </div>
+      <div className="max-w-md w-full relative z-10">
         <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card p-8">
           <Heading level={1} className="mb-6 text-center">
             Capitalos
