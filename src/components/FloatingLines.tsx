@@ -89,7 +89,7 @@ vec3 getLineColor(float t, vec3 baseColor) {
 float wave(vec2 uv, float offset, vec2 screenUv, vec2 mouseUv, bool shouldBend) {
   float time = iTime * animationSpeed;
   float x_offset   = offset;
-  float x_movement = time * 0.1;
+  float x_movement = time * 0.9;
   float amp        = sin(offset + time * 0.2) * 0.3;
   float y          = sin(uv.x + x_offset + x_movement) * amp;
   if (shouldBend) {
