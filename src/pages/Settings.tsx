@@ -14,6 +14,9 @@ import {
 import { savePlatforms, loadPlatforms, saveCashflowAccountflowMappings, loadCashflowAccountflowMappings, type Platform } from '../services/storageService'
 import { getYearsWithCryptoActivity, generateCryptoTaxReport } from '../services/cryptoTaxReportService'
 import { generateCryptoTaxReportPDF } from '../services/pdfService'
+import { loadNetWorthItems, loadNetWorthTransactions } from '../services/storageService'
+import { createSnapshot, saveSnapshots } from '../services/snapshotService'
+import { fetchCryptoPrices } from '../services/cryptoCompareService'
 
 function Settings() {
   const { baseCurrency, exchangeRates, isLoading, error, convert } = useCurrency()
@@ -42,6 +45,10 @@ function Settings() {
   const [apiKeySaving, setApiKeySaving] = useState(false)
   const [apiKeyError, setApiKeyError] = useState<string | null>(null)
   const [apiKeySuccess, setApiKeySuccess] = useState(false)
+  // Snapshot creation
+  const [creatingSnapshot, setCreatingSnapshot] = useState(false)
+  const [snapshotError, setSnapshotError] = useState<string | null>(null)
+  const [snapshotSuccess, setSnapshotSuccess] = useState(false)
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -217,6 +224,69 @@ function Settings() {
     }
     loadPlatformsData()
   }, [uid])
+
+  const handleCreateSnapshot = async () => {
+    if (!uid || !convert) {
+      setSnapshotError('Please sign in and ensure currency data is loaded.')
+      return
+    }
+
+    setCreatingSnapshot(true)
+    setSnapshotError(null)
+    setSnapshotSuccess(false)
+
+    try {
+      // Load net worth items and transactions
+      const [items, transactions] = await Promise.all([
+        loadNetWorthItems([], uid),
+        loadNetWorthTransactions([], uid),
+      ])
+
+      if (items.length === 0) {
+        setSnapshotError('No net worth items found. Add items in the Net Worth page first.')
+        return
+      }
+
+      // Get crypto tickers
+      const cryptoTickers = items
+        .filter(item => item.category === 'Crypto' && item.name)
+        .map(item => item.name.trim().toUpperCase())
+
+      // Fetch crypto prices and USD to CHF rate if needed
+      let cryptoPrices: Record<string, number> = {}
+      let usdToChfRate: number | null = null
+      if (cryptoTickers.length > 0) {
+        const { fetchCryptoData } = await import('../services/cryptoCompareService')
+        const { prices, usdToChfRate: rate } = await fetchCryptoData(cryptoTickers)
+        cryptoPrices = prices
+        usdToChfRate = rate
+      } else {
+        // Still fetch USD to CHF rate even if no crypto items
+        const { fetchUsdToChfRate } = await import('../services/cryptoCompareService')
+        usdToChfRate = await fetchUsdToChfRate()
+      }
+
+      // Create snapshot
+      const snapshot = createSnapshot(items, transactions, cryptoPrices, convert, usdToChfRate)
+
+      // Load existing snapshots and add the new one
+      const { loadSnapshots } = await import('../services/snapshotService')
+      const existingSnapshots = await loadSnapshots(uid)
+      const updatedSnapshots = [...existingSnapshots, snapshot].sort((a, b) => a.timestamp - b.timestamp)
+
+      // Save snapshots
+      await saveSnapshots(updatedSnapshots, uid)
+
+      setSnapshotSuccess(true)
+      setTimeout(() => setSnapshotSuccess(false), 3000)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create snapshot'
+      setSnapshotError(errorMessage)
+      setTimeout(() => setSnapshotError(null), 5000)
+    } finally {
+      setCreatingSnapshot(false)
+    }
+  }
 
   const handleAddPlatform = async (e: FormEvent) => {
     e.preventDefault()
@@ -541,6 +611,37 @@ function Settings() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Test Snapshot Creation */}
+            <div>
+              <Heading level={3} className="mb-3 text-sm">Test Snapshot Creation</Heading>
+              <p className="text-text-secondary text-[0.567rem] md:text-xs mb-4">
+                Create a snapshot of your current net worth state for testing purposes.
+              </p>
+              
+              {snapshotError && (
+                <div className="mb-4 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+                  {snapshotError}
+                </div>
+              )}
+
+              {snapshotSuccess && (
+                <div className="mb-4 text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
+                  Snapshot created successfully!
+                </div>
+              )}
+
+              <button
+                onClick={handleCreateSnapshot}
+                disabled={creatingSnapshot || !uid || !convert}
+                className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed w-full"
+              >
+                {creatingSnapshot ? 'Creating Snapshot...' : 'Create Test Snapshot'}
+              </button>
+              <p className="mt-2 text-warning text-[0.567rem] md:text-xs">
+                ⚠️ This creates a snapshot with the current timestamp. For daily snapshots, use the cron job.
+              </p>
             </div>
 
           </div>

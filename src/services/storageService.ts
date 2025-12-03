@@ -1,4 +1,7 @@
-// Storage keys for localStorage fallback (for backwards compatibility)
+/**
+ * localStorage keys used as fallback when Firestore is unavailable.
+ * Maintained for backwards compatibility with older versions.
+ */
 const STORAGE_KEYS = {
   NET_WORTH_ITEMS: 'capitalos_net_worth_items_v1',
   NET_WORTH_TRANSACTIONS: 'capitalos_net_worth_transactions_v1',
@@ -8,7 +11,6 @@ const STORAGE_KEYS = {
   PLATFORMS: 'capitalos_platforms_v1',
 } as const
 
-// Generic storage functions for localStorage (fallback)
 function saveToStorage<T>(key: string, data: T): void {
   try {
     localStorage.setItem(key, JSON.stringify(data))
@@ -30,7 +32,6 @@ function loadFromStorage<T>(key: string, defaultValue: T): T {
   }
 }
 
-// Import Firestore functions
 import {
   saveNetWorthItems as saveNetWorthItemsFirestore,
   loadNetWorthItems as loadNetWorthItemsFirestore,
@@ -46,14 +47,16 @@ import {
   loadPlatforms as loadPlatformsFirestore,
 } from './firestoreService'
 
-// Net Worth storage - now async and uses Firestore when uid is provided
+/**
+ * Saves net worth items to Firestore (if uid provided) or localStorage.
+ * When Firestore is used, data is also synced to localStorage as backup.
+ */
 export async function saveNetWorthItems<T extends { id: string }>(
   items: T[],
   uid?: string
 ): Promise<void> {
   if (uid) {
     await saveNetWorthItemsFirestore(uid, items)
-    // Also save to localStorage as backup
     saveToStorage(STORAGE_KEYS.NET_WORTH_ITEMS, items)
   } else {
     saveToStorage(STORAGE_KEYS.NET_WORTH_ITEMS, items)
@@ -67,9 +70,7 @@ export async function loadNetWorthItems<T>(
   if (uid) {
     try {
       const items = await loadNetWorthItemsFirestore<T>(uid)
-      // If Firestore has data, use it; otherwise fall back to localStorage
       if (items.length > 0) {
-        // Sync to localStorage as backup
         saveToStorage(STORAGE_KEYS.NET_WORTH_ITEMS, items)
         return items
       }
@@ -110,7 +111,6 @@ export async function loadNetWorthTransactions<T>(
   return loadFromStorage(STORAGE_KEYS.NET_WORTH_TRANSACTIONS, defaultValue)
 }
 
-// Cashflow storage
 export async function saveCashflowInflowItems<T extends { id: string }>(
   items: T[],
   uid?: string
@@ -201,11 +201,11 @@ export async function loadCashflowAccountflowMappings<T>(
   return loadFromStorage(STORAGE_KEYS.CASHFLOW_ACCOUNTFLOW_MAPPINGS, defaultValue)
 }
 
-// Platform storage
 export interface Platform {
   id: string
   name: string
-  order: number // For sorting by usage (higher = more used)
+  /** Higher values indicate more frequently used platforms */
+  order: number
 }
 
 export async function savePlatforms(
@@ -236,15 +236,4 @@ export async function loadPlatforms(
     }
   }
   return loadFromStorage(STORAGE_KEYS.PLATFORMS, defaultValue)
-}
-
-// Clear all data (useful for testing or reset)
-export function clearAllData(): void {
-  Object.values(STORAGE_KEYS).forEach(key => {
-    try {
-      localStorage.removeItem(key)
-    } catch (error) {
-      console.error(`Failed to clear localStorage (${key}):`, error)
-    }
-  })
 }

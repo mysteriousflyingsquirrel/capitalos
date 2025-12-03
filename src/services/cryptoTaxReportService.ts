@@ -1,7 +1,5 @@
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
-import { calculateCoinAmount } from '../pages/NetWorth'
 import { loadNetWorthItems, loadNetWorthTransactions } from './storageService'
-import { fetchCoinPrice } from './coinGeckoService'
 import type { CurrencyCode } from '../lib/currency'
 
 export interface CryptoTransaction {
@@ -39,8 +37,8 @@ export interface CryptoTaxReport {
  */
 export async function getYearsWithCryptoActivity(uid?: string): Promise<number[]> {
   const [items, transactions] = await Promise.all([
-    loadNetWorthItems([], uid),
-    loadNetWorthTransactions([], uid),
+    loadNetWorthItems<NetWorthItem>([], uid),
+    loadNetWorthTransactions<NetWorthTransaction>([], uid),
   ])
 
   const cryptoItems = items.filter(item => item.category === 'Crypto')
@@ -112,7 +110,6 @@ async function fetchHistoricalPrice(
 
     const coinId = matchingCoin.id
     const date = new Date(timestamp)
-    // CoinGecko expects DD-MM-YYYY format (with leading zeros)
     const day = date.getDate().toString().padStart(2, '0')
     const month = (date.getMonth() + 1).toString().padStart(2, '0')
     const year = date.getFullYear()
@@ -127,24 +124,69 @@ async function fetchHistoricalPrice(
       const historyData = await historyResponse.json()
       if (historyData.market_data?.current_price?.usd) {
         const priceUsd = historyData.market_data.current_price.usd
-        // Convert USD to CHF
         return convert(priceUsd, 'USD')
       }
     }
 
-    // Fallback to current price
-    const currentPriceUsd = await fetchCoinPrice(ticker)
-    if (currentPriceUsd !== null) {
-      return convert(currentPriceUsd, 'USD')
+    const normalizedFallback = ticker.trim().toUpperCase()
+    const searchResponse2 = await fetch(
+      `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(normalizedFallback)}`
+    )
+    
+    if (searchResponse2.ok) {
+      const searchData2 = await searchResponse2.json()
+      if (searchData2.coins && Array.isArray(searchData2.coins)) {
+        const matchingCoin2 = searchData2.coins.find(
+          (coin: any) => coin.symbol && coin.symbol.toUpperCase() === normalizedFallback
+        )
+        
+        if (matchingCoin2) {
+          const priceResponse = await fetch(
+            `https://api.coingecko.com/api/v3/simple/price?ids=${matchingCoin2.id}&vs_currencies=usd`
+          )
+          
+          if (priceResponse.ok) {
+            const priceData = await priceResponse.json()
+            if (priceData[matchingCoin2.id]?.usd) {
+              return convert(priceData[matchingCoin2.id].usd, 'USD')
+            }
+          }
+        }
+      }
     }
 
     throw new Error('Price not available')
   } catch (error) {
     console.warn(`Failed to fetch historical price for ${ticker} at ${timestamp}:`, error)
-    // Final fallback: try current price
-    const currentPriceUsd = await fetchCoinPrice(ticker)
-    if (currentPriceUsd !== null) {
-      return convert(currentPriceUsd, 'USD')
+    try {
+      const normalizedFinal = ticker.trim().toUpperCase()
+      const searchResponse = await fetch(
+        `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(normalizedFinal)}`
+      )
+      
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json()
+        if (searchData.coins && Array.isArray(searchData.coins)) {
+          const matchingCoin = searchData.coins.find(
+            (coin: any) => coin.symbol && coin.symbol.toUpperCase() === normalizedFinal
+          )
+          
+          if (matchingCoin) {
+            const priceResponse = await fetch(
+              `https://api.coingecko.com/api/v3/simple/price?ids=${matchingCoin.id}&vs_currencies=usd`
+            )
+            
+            if (priceResponse.ok) {
+              const priceData = await priceResponse.json()
+              if (priceData[matchingCoin.id]?.usd) {
+                return convert(priceData[matchingCoin.id].usd, 'USD')
+              }
+            }
+          }
+        }
+      }
+    } catch (fallbackError) {
+      console.warn('Fallback price fetch also failed:', fallbackError)
     }
     return 0
   }
@@ -159,17 +201,15 @@ export async function generateCryptoTaxReport(
   convert: (amount: number, from: CurrencyCode) => number
 ): Promise<CryptoTaxReport> {
   const [items, transactions] = await Promise.all([
-    loadNetWorthItems([], uid),
-    loadNetWorthTransactions([], uid),
+    loadNetWorthItems<NetWorthItem>([], uid),
+    loadNetWorthTransactions<NetWorthTransaction>([], uid),
   ])
 
   const cryptoItems = items.filter(item => item.category === 'Crypto')
   
-  // Year boundaries
   const yearStart = new Date(year, 0, 1, 0, 0, 0, 0).getTime()
   const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999).getTime()
 
-  // Get all unique coins
   const coinMap = new Map<string, { item: NetWorthItem; transactions: NetWorthTransaction[] }>()
 
   cryptoItems.forEach(item => {
@@ -185,31 +225,25 @@ export async function generateCryptoTaxReport(
   const coinReports: CoinReport[] = []
 
   for (const [ticker, { item, transactions: coinTransactions }] of coinMap) {
-    // Filter transactions for this year
     const yearTransactions = coinTransactions.filter(tx => {
       const txDate = new Date(tx.date)
       return !isNaN(txDate.getTime()) && txDate.getTime() >= yearStart && txDate.getTime() <= yearEnd
     })
 
-    // Only include buy/sell transactions
     const buySellTransactions = yearTransactions.filter(tx => tx.side === 'buy' || tx.side === 'sell')
 
-    // Calculate balances
     const balanceStart = calculateBalanceAtTimestamp(item.id, coinTransactions, yearStart)
     const balanceEnd = calculateBalanceAtTimestamp(item.id, coinTransactions, yearEnd)
 
-    // Check if coin should be included
     const hasActivity = balanceStart !== 0 || balanceEnd !== 0 || buySellTransactions.length > 0
     
     if (!hasActivity) continue
 
-    // Fetch prices for start and end of year
     const [priceStart, priceEnd] = await Promise.all([
       fetchHistoricalPrice(ticker, yearStart, convert),
       fetchHistoricalPrice(ticker, yearEnd, convert),
     ])
 
-    // Process buys and sells
     const buys: CryptoTransaction[] = []
     const sells: CryptoTransaction[] = []
 
@@ -217,19 +251,14 @@ export async function generateCryptoTaxReport(
       const txDate = new Date(tx.date)
       const txTimestamp = txDate.getTime()
       
-      // Get price at transaction time
       const txPriceChf = await fetchHistoricalPrice(ticker, txTimestamp, convert)
       
-      // Calculate total CHF value
       let totalChf = 0
       if (tx.pricePerItem !== undefined && tx.currency) {
-        // Use original price and convert to CHF
         totalChf = convert(tx.amount * tx.pricePerItem, tx.currency as CurrencyCode)
       } else if (tx.pricePerItemChf !== undefined && tx.pricePerItemChf !== 1) {
-        // Use stored CHF price
         totalChf = tx.amount * tx.pricePerItemChf
       } else {
-        // Fallback: use historical price
         totalChf = tx.amount * txPriceChf
       }
 
@@ -247,7 +276,6 @@ export async function generateCryptoTaxReport(
       }
     }
 
-    // Sort transactions by date
     buys.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     sells.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
@@ -269,7 +297,6 @@ export async function generateCryptoTaxReport(
     })
   }
 
-  // Sort by coin symbol
   coinReports.sort((a, b) => a.coin.localeCompare(b.coin))
 
   return {

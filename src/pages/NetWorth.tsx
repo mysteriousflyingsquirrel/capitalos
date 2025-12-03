@@ -269,12 +269,10 @@ function NetWorthCategorySection({
         return sum + (coinAmount * currentPriceUsd)
       }
       // Fallback to transaction-based if price not available
-      // For crypto fallback, calculateBalanceChf returns CHF
-      const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-      // Convert CHF back to USD for the subtotal (which should be in USD for Crypto)
-      // Since balanceChf is in CHF, we need to get USD: USD = CHF / rate
-      const usdValue = exchangeRates?.rates['USD'] ? balanceChf / exchangeRates.rates['USD'] : balanceChf
-      return sum + (isNaN(usdValue) || !isFinite(usdValue) ? 0 : usdValue)
+      // For crypto fallback, calculateBalanceChf returns USD (not CHF!)
+      const balanceUsd = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+      // balanceUsd is already in USD, so use it directly for the subtotal
+      return sum + (isNaN(balanceUsd) || !isFinite(balanceUsd) ? 0 : balanceUsd)
     }
     // For non-Crypto, calculateBalanceChf already returns CHF (converts from original currency internally)
     const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
@@ -283,7 +281,10 @@ function NetWorthCategorySection({
   
   // For Crypto, also calculate the subtotal in baseCurrency
   // For non-Crypto, subtotal is already in baseCurrency
-  const subtotalInBaseCurrency = category === 'Crypto' ? convert(subtotal, 'USD') : subtotal
+  // Use usdToChfRate (from CryptoCompare) to match Dashboard calculation, fallback to convert if not available
+  const subtotalInBaseCurrency = category === 'Crypto' 
+    ? (usdToChfRate && usdToChfRate > 0 ? subtotal * usdToChfRate : convert(subtotal, 'USD'))
+    : subtotal
   
   // Calculate USD value for all categories
   // For Crypto, subtotal is already in USD
@@ -931,8 +932,15 @@ function NetWorth() {
           const valueUsd = coinAmount * currentPriceUsd
           balance = valueUsd * usdToChfRate
         } else {
-          // Fallback: calculateBalanceChf returns CHF for crypto fallback
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+          // Fallback: calculateBalanceChf returns USD for crypto, need to convert to CHF
+          const balanceUsd = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+          // Convert USD to CHF
+          if (usdToChfRate && usdToChfRate > 0) {
+            balance = balanceUsd * usdToChfRate
+          } else {
+            // Use convert function to convert USD to CHF (baseCurrency)
+            balance = convert(balanceUsd, 'USD')
+          }
         }
       } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
         // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance

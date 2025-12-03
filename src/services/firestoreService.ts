@@ -7,8 +7,6 @@ import {
   deleteDoc,
   writeBatch,
   query,
-  QueryDocumentSnapshot,
-  DocumentData
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 
@@ -17,19 +15,10 @@ function getUserCollectionPath(uid: string, collectionName: string): string {
   return `users/${uid}/${collectionName}`
 }
 
-// Generic function to save a single document
-export async function saveDocument<T extends { id: string }>(
-  uid: string,
-  collectionName: string,
-  item: T
-): Promise<void> {
-  const collectionPath = getUserCollectionPath(uid, collectionName)
-  const docRef = doc(db, collectionPath, item.id)
-  await setDoc(docRef, item)
-}
-
-// Generic function to save multiple documents in a batch
-// Firestore has a limit of 500 operations per batch, so we need to chunk large arrays
+/**
+ * Saves multiple documents to Firestore in batches.
+ * Firestore has a limit of 500 operations per batch, so large arrays are chunked.
+ */
 export async function saveDocuments<T extends { id: string }>(
   uid: string,
   collectionName: string,
@@ -37,7 +26,7 @@ export async function saveDocuments<T extends { id: string }>(
 ): Promise<void> {
   console.log(`[saveDocuments] Saving ${items.length} items to ${collectionName} for uid: ${uid}`)
   const collectionPath = getUserCollectionPath(uid, collectionName)
-  const BATCH_SIZE = 500 // Firestore batch limit
+  const BATCH_SIZE = 500
 
   // If items array is empty, delete all documents in the collection
   if (items.length === 0) {
@@ -49,7 +38,6 @@ export async function saveDocuments<T extends { id: string }>(
       return
     }
     
-    // Delete in batches
     const docs = querySnapshot.docs
     console.log(`[saveDocuments] Deleting ${docs.length} existing documents from ${collectionName}`)
     for (let i = 0; i < docs.length; i += BATCH_SIZE) {
@@ -78,7 +66,6 @@ export async function saveDocuments<T extends { id: string }>(
   const idsToDelete = Array.from(existingIds).filter(id => !newIds.has(id))
   console.log(`[saveDocuments] IDs to delete: ${idsToDelete.length}`)
 
-  // Process saves in chunks of 500
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const chunk = items.slice(i, i + BATCH_SIZE)
     const batch = writeBatch(db)
@@ -92,7 +79,6 @@ export async function saveDocuments<T extends { id: string }>(
     console.log(`[saveDocuments] Saved chunk ${i / BATCH_SIZE + 1} (${chunk.length} items) to ${collectionName}`)
   }
 
-  // Delete removed documents in batches
   if (idsToDelete.length > 0) {
     console.log(`[saveDocuments] Deleting ${idsToDelete.length} removed documents from ${collectionName}`)
     for (let i = 0; i < idsToDelete.length; i += BATCH_SIZE) {
@@ -112,7 +98,9 @@ export async function saveDocuments<T extends { id: string }>(
   console.log(`[saveDocuments] Successfully saved all ${items.length} items to ${collectionName}`)
 }
 
-// Generic function to load all documents from a collection
+/**
+ * Loads all documents from a Firestore collection.
+ */
 export async function loadDocuments<T>(
   uid: string,
   collectionName: string
@@ -130,8 +118,10 @@ export async function loadDocuments<T>(
   return items
 }
 
-// Generic function to delete all documents in a collection
-// Firestore has a limit of 500 operations per batch, so we need to chunk large deletions
+/**
+ * Deletes all documents in a Firestore collection.
+ * Firestore has a limit of 500 operations per batch, so large deletions are chunked.
+ */
 export async function deleteAllDocuments(
   uid: string,
   collectionName: string
@@ -142,10 +132,9 @@ export async function deleteAllDocuments(
   
   if (querySnapshot.empty) return
   
-  const BATCH_SIZE = 500 // Firestore batch limit
+  const BATCH_SIZE = 500
   const docs = querySnapshot.docs
   
-  // Process deletions in chunks of 500
   for (let i = 0; i < docs.length; i += BATCH_SIZE) {
     const chunk = docs.slice(i, i + BATCH_SIZE)
     const batch = writeBatch(db)
@@ -158,7 +147,6 @@ export async function deleteAllDocuments(
   }
 }
 
-// Specific functions for each data type
 export async function saveNetWorthItems<T extends { id: string }>(
   uid: string,
   items: T[]
@@ -214,7 +202,6 @@ export async function loadCashflowAccountflowMappings<T>(uid: string): Promise<T
   return loadDocuments<T>(uid, 'cashflowAccountflowMappings')
 }
 
-// Platform storage
 export interface Platform {
   id: string
   name: string
@@ -229,7 +216,6 @@ export async function loadPlatforms(uid: string): Promise<Platform[]> {
   return loadDocuments<Platform>(uid, 'platforms')
 }
 
-// Settings storage
 export interface UserSettings {
   baseCurrency?: string
   apiKeys?: {
@@ -254,8 +240,10 @@ export async function loadUserSettings(uid: string): Promise<UserSettings | null
   return null
 }
 
-// Snapshots storage
-// Snapshots use 'date' as their unique identifier, not 'id'
+/**
+ * Saves snapshots to Firestore.
+ * Snapshots use 'date' as their unique document identifier instead of 'id'.
+ */
 export async function saveSnapshotsFirestore<T extends { date: string }>(
   uid: string,
   snapshots: T[]
@@ -263,15 +251,13 @@ export async function saveSnapshotsFirestore<T extends { date: string }>(
   if (snapshots.length === 0) return
 
   const collectionPath = getUserCollectionPath(uid, 'snapshots')
-  const BATCH_SIZE = 500 // Firestore batch limit
+  const BATCH_SIZE = 500
 
-  // Process in chunks of 500
   for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
     const chunk = snapshots.slice(i, i + BATCH_SIZE)
     const batch = writeBatch(db)
 
     chunk.forEach((snapshot) => {
-      // Use 'date' as the document ID
       const docRef = doc(db, collectionPath, snapshot.date)
       batch.set(docRef, snapshot)
     })
@@ -284,37 +270,9 @@ export async function loadSnapshotsFirestore<T>(uid: string): Promise<T[]> {
   return loadDocuments<T>(uid, 'snapshots')
 }
 
-// Cashflow snapshots storage
-// Cashflow snapshots use 'date' as their unique identifier, not 'id'
-export async function saveCashflowSnapshotsFirestore<T extends { date: string }>(
-  uid: string,
-  snapshots: T[]
-): Promise<void> {
-  if (snapshots.length === 0) return
-
-  const collectionPath = getUserCollectionPath(uid, 'cashflowSnapshots')
-  const BATCH_SIZE = 500 // Firestore batch limit
-
-  // Process in chunks of 500
-  for (let i = 0; i < snapshots.length; i += BATCH_SIZE) {
-    const chunk = snapshots.slice(i, i + BATCH_SIZE)
-    const batch = writeBatch(db)
-
-    chunk.forEach((snapshot) => {
-      // Use 'date' as the document ID
-      const docRef = doc(db, collectionPath, snapshot.date)
-      batch.set(docRef, snapshot)
-    })
-
-    await batch.commit()
-  }
-}
-
-export async function loadCashflowSnapshotsFirestore<T>(uid: string): Promise<T[]> {
-  return loadDocuments<T>(uid, 'cashflowSnapshots')
-}
-
-// Clear all user data
+/**
+ * Deletes all user data from Firestore, including collections and settings document.
+ */
 export async function clearAllUserData(uid: string): Promise<void> {
   const collections = [
     'netWorthItems',
@@ -323,13 +281,11 @@ export async function clearAllUserData(uid: string): Promise<void> {
     'cashflowOutflowItems',
     'cashflowAccountflowMappings',
     'snapshots',
-    'cashflowSnapshots',
     'platforms',
   ]
 
   await Promise.all([
     ...collections.map((collectionName) => deleteAllDocuments(uid, collectionName)),
-    // Delete settings document (it's a single document, not a collection)
     (async () => {
       const settingsDocRef = doc(db, `users/${uid}/settings/user`)
       try {

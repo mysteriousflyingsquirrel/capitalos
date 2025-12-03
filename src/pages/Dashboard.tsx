@@ -26,7 +26,7 @@ import {
   loadCashflowInflowItems,
   loadCashflowOutflowItems,
 } from '../services/storageService'
-import { loadSnapshots, takeDailySnapshotIfNeeded, type NetWorthSnapshot } from '../services/snapshotService'
+import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from './NetWorth'
@@ -273,62 +273,6 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netWorthItems]) // Re-fetch when items change
 
-  // Check and create daily snapshot at 23:59 UTC if needed
-  // Also create initial snapshot if none exist
-  useEffect(() => {
-    if (uid && netWorthItems.length > 0 && convert) {
-      const checkAndCreateSnapshot = async () => {
-        // First, check if we have any snapshots at all
-        const existingSnapshots = await loadSnapshots(uid)
-        
-        // If no snapshots exist, create one immediately with current data
-        if (existingSnapshots.length === 0) {
-          try {
-            const { createSnapshot, saveSnapshots } = await import('../services/snapshotService')
-            const initialSnapshot = createSnapshot(
-              netWorthItems,
-              transactions,
-              cryptoPrices,
-              convert
-            )
-            await saveSnapshots([initialSnapshot], uid)
-            setSnapshots([initialSnapshot])
-          } catch (error) {
-            console.error('Failed to create initial snapshot:', error)
-          }
-        } else {
-          // Otherwise, check if we need to take a snapshot for today at 23:59 UTC
-          takeDailySnapshotIfNeeded(
-            netWorthItems,
-            transactions,
-            uid,
-            cryptoPrices,
-            convert
-          ).then((newSnapshot) => {
-            if (newSnapshot) {
-              // Reload snapshots after creating a new one
-              loadSnapshots(uid).then((updatedSnapshots) => {
-                setSnapshots(updatedSnapshots)
-              })
-            }
-          }).catch((error) => {
-            console.error('Failed to create daily snapshot:', error)
-          })
-        }
-      }
-
-      // Check immediately
-      checkAndCreateSnapshot()
-
-      // Set up interval to check every hour (to catch 23:59 UTC)
-      const interval = setInterval(() => {
-        checkAndCreateSnapshot()
-      }, 3600000) // 1 hour
-
-      return () => clearInterval(interval)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, netWorthItems, transactions, cryptoPrices, convert])
 
   // Pull-to-refresh functionality for mobile
   useEffect(() => {
@@ -408,8 +352,15 @@ function Dashboard() {
           const valueUsd = coinAmount * currentPriceUsd
           balance = valueUsd * usdToChfRate
         } else {
-          // Fallback: calculateBalanceChf returns CHF for crypto fallback
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+          // Fallback: calculateBalanceChf returns USD for crypto, need to convert to CHF
+          const balanceUsd = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+          // Convert USD to CHF
+          if (usdToChfRate && usdToChfRate > 0) {
+            balance = balanceUsd * usdToChfRate
+          } else {
+            // Use convert function to convert USD to CHF (baseCurrency)
+            balance = convert(balanceUsd, 'USD')
+          }
         }
       } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
         // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance
@@ -482,8 +433,15 @@ function Dashboard() {
             const valueUsd = coinAmount * currentPriceUsd
             balance = valueUsd * usdToChfRate
           } else {
-            // Fallback: calculateBalanceChf returns CHF for crypto fallback
-            balance = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
+            // Fallback: calculateBalanceChf returns USD for crypto, need to convert to CHF
+            const balanceUsd = calculateBalanceChf(item.id, transactionsUpToDate, item, cryptoPrices, convert)
+            // Convert USD to CHF
+            if (usdToChfRate && usdToChfRate > 0) {
+              balance = balanceUsd * usdToChfRate
+            } else {
+              // Use convert function to convert USD to CHF (baseCurrency)
+              balance = convert(balanceUsd, 'USD')
+            }
           }
         } else {
           // For non-Crypto items, calculateBalanceChf returns CHF
@@ -812,8 +770,15 @@ function Dashboard() {
           const valueUsd = coinAmount * currentPriceUsd
           balance = isNaN(valueUsd) ? 0 : valueUsd * usdToChfRate
         } else {
-          // Fallback to transaction-based calculation if price not available
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+          // Fallback: calculateBalanceChf returns USD for crypto, need to convert to CHF
+          const balanceUsd = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+          // Convert USD to CHF
+          if (usdToChfRate && usdToChfRate > 0) {
+            balance = balanceUsd * usdToChfRate
+          } else {
+            // Use convert function to convert USD to CHF (baseCurrency)
+            balance = convert(balanceUsd, 'USD')
+          }
         }
       } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
         // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance

@@ -118,6 +118,36 @@ async function fetchCryptoPrices(tickers: string[]): Promise<Record<string, numb
   }
 }
 
+// Fetch USD to CHF rate from CryptoCompare (server-side version)
+async function fetchUsdToChfRate(): Promise<number | null> {
+  try {
+    const response = await fetch(
+      `https://min-api.cryptocompare.com/data/price?fsym=USD&tsyms=CHF`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      }
+    )
+
+    if (!response.ok) {
+      throw new Error(`CryptoCompare API returned ${response.status}`)
+    }
+
+    const data = await response.json()
+
+    if (data.CHF && typeof data.CHF === 'number') {
+      return data.CHF
+    }
+
+    throw new Error('Invalid response format from CryptoCompare API')
+  } catch (error) {
+    console.error('Failed to fetch USD to CHF rate:', error)
+    return null
+  }
+}
+
 // Get all user IDs from Firestore
 async function getAllUserIds(): Promise<string[]> {
   try {
@@ -184,16 +214,25 @@ async function processUserSnapshot(uid: string): Promise<{ success: boolean; err
       return { success: true }
     }
 
-    // Check if snapshot already exists for today
-    const existingSnapshots = await loadUserSnapshots(uid)
-    const todayDate = getTodayUTCDate()
+    // When cron runs at 00:00 UTC, create snapshot for yesterday (previous day) at 23:59 UTC
+    const now = new Date()
+    const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1))
+    const yesterdayYear = yesterday.getUTCFullYear()
+    const yesterdayMonth = yesterday.getUTCMonth()
+    const yesterdayDay = yesterday.getUTCDate()
     
-    if (hasSnapshotForDate(existingSnapshots, todayDate)) {
-      console.log(`User ${uid} already has a snapshot for today, skipping`)
+    // Get yesterday's date in YYYY-MM-DD format
+    const yesterdayDate = `${yesterdayYear}-${String(yesterdayMonth + 1).padStart(2, '0')}-${String(yesterdayDay).padStart(2, '0')}`
+    
+    // Check if snapshot already exists for yesterday
+    const existingSnapshots = await loadUserSnapshots(uid)
+    
+    if (hasSnapshotForDate(existingSnapshots, yesterdayDate)) {
+      console.log(`User ${uid} already has a snapshot for yesterday (${yesterdayDate}), skipping`)
       return { success: true }
     }
 
-    // Fetch exchange rates and crypto prices
+    // Fetch exchange rates, crypto prices, and USD to CHF rate
     const [exchangeRates, cryptoTickers] = await Promise.all([
       getExchangeRates('CHF'),
       Promise.resolve(
@@ -203,20 +242,23 @@ async function processUserSnapshot(uid: string): Promise<{ success: boolean; err
       ),
     ])
 
-    const cryptoPrices = await fetchCryptoPrices(cryptoTickers)
+    const [cryptoPrices, usdToChfRate] = await Promise.all([
+      fetchCryptoPrices(cryptoTickers),
+      fetchUsdToChfRate(),
+    ])
     const convert = createConvertFunction(exchangeRates)
 
-    // Create snapshot
-    const snapshot = createSnapshot(items, transactions, cryptoPrices, convert)
+    // Create snapshot with current data
+    const snapshot = createSnapshot(items, transactions, cryptoPrices, convert, usdToChfRate)
     
-    // Override date and timestamp to be today at 23:59 UTC
-    snapshot.date = todayDate
-    snapshot.timestamp = getToday2359UTCTimestamp()
+    // Override date and timestamp to be yesterday at 23:59:59 UTC
+    snapshot.date = yesterdayDate
+    snapshot.timestamp = new Date(Date.UTC(yesterdayYear, yesterdayMonth, yesterdayDay, 23, 59, 59)).getTime()
 
     // Save snapshot
     await saveSnapshot(uid, snapshot)
 
-    console.log(`Successfully created snapshot for user ${uid}`)
+    console.log(`Successfully created snapshot for user ${uid} for ${yesterdayDate} at 23:59:59 UTC`)
     return { success: true }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'

@@ -11,12 +11,11 @@ import {
   saveCashflowOutflowItems,
   saveCashflowAccountflowMappings,
   savePlatforms,
-  clearAllData,
   type Platform,
 } from './storageService'
 import { clearAllUserData, loadUserSettings, saveUserSettings } from './firestoreService'
+import { loadSnapshots, saveSnapshots, type NetWorthSnapshot } from './snapshotService'
 
-// Backup schema version
 const BACKUP_SCHEMA_VERSION = '1.0.0'
 
 export interface BackupData {
@@ -31,6 +30,7 @@ export interface BackupData {
     cashflowAccountflowMappings: unknown[]
     platforms: unknown[]
     settings: { baseCurrency: string } | null
+    snapshots: unknown[]
   }
 }
 
@@ -47,6 +47,7 @@ export async function createBackup(uid: string): Promise<BackupData> {
     cashflowAccountflowMappings,
     platforms,
     settings,
+    snapshots,
   ] = await Promise.all([
     loadNetWorthItems([], uid),
     loadNetWorthTransactions([], uid),
@@ -55,6 +56,7 @@ export async function createBackup(uid: string): Promise<BackupData> {
     loadCashflowAccountflowMappings([], uid),
     loadPlatforms([], uid),
     loadUserSettings(uid),
+    loadSnapshots(uid),
   ])
 
   return {
@@ -68,7 +70,8 @@ export async function createBackup(uid: string): Promise<BackupData> {
       cashflowOutflowItems,
       cashflowAccountflowMappings,
       platforms,
-      settings,
+      settings: settings && settings.baseCurrency ? { baseCurrency: settings.baseCurrency } : null,
+      snapshots,
     },
   }
 }
@@ -124,6 +127,11 @@ export function validateBackup(backup: unknown): backup is BackupData {
     }
   }
 
+  // snapshots is optional for backward compatibility
+  if (data.snapshots !== undefined && !Array.isArray(data.snapshots)) {
+    return false
+  }
+
   return true
 }
 
@@ -140,20 +148,16 @@ export async function restoreBackup(
     throw new Error('Invalid backup format')
   }
 
-  // Warn if user IDs don't match
   if (backup.userId && backup.userId !== currentUid) {
-    // This is just a warning, we'll still restore to current user
     console.warn(
       `Backup was exported by user ${backup.userId}, but restoring to user ${currentUid}`
     )
   }
 
-  // Clear existing data if requested
   if (options.clearExisting) {
     await clearAllUserData(currentUid)
   }
 
-  // Restore all data
   await Promise.all([
     saveNetWorthItems(backup.data.netWorthItems as { id: string }[], currentUid),
     saveNetWorthTransactions(
@@ -173,10 +177,10 @@ export async function restoreBackup(
       currentUid
     ),
     savePlatforms((backup.data.platforms as Platform[]) || [], currentUid),
-    // Only restore settings if they exist in the backup
     backup.data.settings
       ? saveUserSettings(currentUid, backup.data.settings as { baseCurrency: string })
       : Promise.resolve(),
+    saveSnapshots((backup.data.snapshots as NetWorthSnapshot[]) || [], currentUid),
   ])
 }
 
@@ -189,9 +193,8 @@ export function downloadBackup(backup: BackupData): void {
   const blob = new Blob([jsonString], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
 
-  // Create filename with date
   const date = new Date(backup.exportedAt)
-  const dateStr = date.toISOString().split('T')[0] // YYYY-MM-DD
+  const dateStr = date.toISOString().split('T')[0]
   const filename = `capitalos-backup-${dateStr}.json`
 
   const link = document.createElement('a')
