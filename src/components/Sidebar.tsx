@@ -48,7 +48,7 @@ function Sidebar() {
   return (
     <>
       {/* Mobile Top Bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-[60] bg-bg-surface-1 border-b border-border-subtle px-4 py-3 flex items-center">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-[60] bg-bg-surface-1 border-b border-border-subtle px-4 py-3 flex items-center justify-between">
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
           className="p-2 text-text-primary hover:bg-bg-surface-2 rounded-input transition-colors"
@@ -77,6 +77,10 @@ function Sidebar() {
             )}
           </svg>
         </button>
+        {/* Incognito button on mobile top bar */}
+        <div className="lg:hidden">
+          <IncognitoToggle />
+        </div>
       </div>
 
       {/* Mobile overlay */}
@@ -114,7 +118,10 @@ function Sidebar() {
               </span>
             </div>
           </div>
-          <IncognitoToggle />
+          {/* Incognito button - only visible on desktop when sidebar is visible */}
+          <div className="hidden lg:block">
+            <IncognitoToggle />
+          </div>
         </div>
 
         {/* Navigation */}
