@@ -927,14 +927,7 @@ function Dashboard() {
             </div>
             <div className="space-y-2">
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-xs md:text-sm text-text-muted">Monthly PnL</div>
-                  {snapshots.length > 0 && (
-                    <div className="text-xs text-text-muted">
-                      Last snapshot: {formatDate(snapshots[snapshots.length - 1].date)}
-                    </div>
-                  )}
-                </div>
+                <div className="text-xs md:text-sm text-text-muted mb-1">Monthly PnL</div>
                 <div className="flex flex-col gap-1">
                   <div className="flex items-baseline gap-2">
                     <TotalText variant={monthlyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
@@ -992,7 +985,14 @@ function Dashboard() {
         <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
           <div className="mb-6 pb-4 border-b border-border-strong">
             <div className="flex items-center justify-between">
-              <Heading level={2}>Net Worth Evolution</Heading>
+              <div>
+                <Heading level={2}>Net Worth Evolution</Heading>
+                {snapshots.length > 0 && (
+                  <div className="text-xs text-text-muted mt-1">
+                    Last snapshot: {formatDate(snapshots[snapshots.length - 1].date)}
+                  </div>
+                )}
+              </div>
               <select
                 value={timeFrame}
                 onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '6M' | '1Y' | '5Y' | 'MAX')}
