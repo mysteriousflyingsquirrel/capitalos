@@ -3,9 +3,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/cron/daily-snapshot.ts": {
+      "maxDuration": 60
+    }
+  }
 }
 

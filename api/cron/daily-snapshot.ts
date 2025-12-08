@@ -268,48 +268,54 @@ async function processUserSnapshot(uid: string): Promise<{ success: boolean; err
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Check Firebase initialization
-  if (!db) {
-    console.error('Firebase Admin SDK not initialized')
-    return res.status(500).json({ 
-      error: 'Server configuration error',
-      message: 'Firebase Admin SDK initialization failed'
-    })
-  }
-
-  // Check for authorization (cron secret)
-  const cronSecret = process.env.CRON_SECRET
-
-  if (!cronSecret) {
-    console.error('CRON_SECRET environment variable is not set')
-    return res.status(500).json({ 
-      error: 'Server configuration error',
-      message: 'CRON_SECRET not configured'
-    })
-  }
-
-  // Verify the request is from Vercel Cron
-  // Check Authorization header (Bearer token) or x-vercel-signature header
-  const authHeader = req.headers.authorization
-  const vercelSignature = req.headers['x-vercel-signature'] as string | undefined
-  
-  const isAuthorized = 
-    authHeader === `Bearer ${cronSecret}` ||
-    vercelSignature === cronSecret ||
-    // Allow if no secret is provided in headers (for testing, but warn)
-    (!authHeader && !vercelSignature && process.env.NODE_ENV === 'development')
-
-  if (!isAuthorized) {
-    console.warn('Unauthorized cron request - missing or invalid secret')
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-
-  // Only allow POST requests (Vercel Cron uses POST)
-  if (req.method !== 'POST' && req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-
   try {
+    // Check Firebase initialization
+    if (!db) {
+      const errorMsg = 'Firebase Admin SDK not initialized. Check FIREBASE_SERVICE_ACCOUNT environment variable.'
+      console.error(errorMsg)
+      return res.status(500).json({ 
+        error: 'Server configuration error',
+        message: errorMsg,
+        details: 'Firebase Admin SDK initialization failed. Ensure FIREBASE_SERVICE_ACCOUNT is set in Vercel environment variables.'
+      })
+    }
+
+    // Check for authorization (cron secret)
+    const cronSecret = process.env.CRON_SECRET
+
+    if (!cronSecret) {
+      const errorMsg = 'CRON_SECRET environment variable is not set'
+      console.error(errorMsg)
+      return res.status(500).json({ 
+        error: 'Server configuration error',
+        message: errorMsg,
+        details: 'CRON_SECRET must be set in Vercel environment variables.'
+      })
+    }
+
+    // Verify the request is from Vercel Cron
+    // Check Authorization header (Bearer token) or x-vercel-signature header
+    const authHeader = req.headers.authorization
+    const vercelSignature = req.headers['x-vercel-signature'] as string | undefined
+    
+    const isAuthorized = 
+      authHeader === `Bearer ${cronSecret}` ||
+      vercelSignature === cronSecret ||
+      // Allow if no secret is provided in headers (for testing, but warn)
+      (!authHeader && !vercelSignature && process.env.NODE_ENV === 'development')
+
+    if (!isAuthorized) {
+      console.warn('Unauthorized cron request - missing or invalid secret')
+      return res.status(401).json({ 
+        error: 'Unauthorized',
+        message: 'Invalid or missing CRON_SECRET in Authorization header'
+      })
+    }
+
+    // Only allow POST requests (Vercel Cron uses POST)
+    if (req.method !== 'POST' && req.method !== 'GET') {
+      return res.status(405).json({ error: 'Method not allowed' })
+    }
     console.log('Starting daily snapshot process...')
     
     // Get all user IDs
@@ -343,10 +349,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorStack = error instanceof Error ? error.stack : undefined
     console.error('Daily snapshot process failed:', errorMessage)
+    console.error('Error stack:', errorStack)
     return res.status(500).json({ 
       error: 'Failed to process snapshots',
       message: errorMessage,
+      details: errorStack ? errorStack.split('\n').slice(0, 5).join('\n') : undefined,
     })
   }
 }
