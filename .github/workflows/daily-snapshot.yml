@@ -1,0 +1,19 @@
+name: Daily Snapshot
+
+on:
+  schedule:
+    - cron: "0 0 * * *"   
+  workflow_dispatch:      # Allow manual trigger from GitHub UI
+
+jobs:
+  call-daily-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call daily snapshot endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://capitalos.vercel.app/api/cron/daily-snapshot
+
