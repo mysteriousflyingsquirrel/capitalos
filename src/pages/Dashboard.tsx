@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney } from '../lib/currency'
+import { formatDate } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import {
   loadNetWorthItems,
@@ -26,7 +27,7 @@ import {
   loadCashflowInflowItems,
   loadCashflowOutflowItems,
 } from '../services/storageService'
-import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotService'
+import { loadSnapshots, saveSnapshots, createSnapshot, hasSnapshotForDate, getTodayUTCDate, type NetWorthSnapshot } from '../services/snapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from './NetWorth'
@@ -140,7 +141,7 @@ function formatCHFTick(value: number): string {
 }
 
 function Dashboard() {
-  const [timeFrame, setTimeFrame] = useState<'YTD' | '1M' | '3M' | '1Y' | '5Y' | 'MAX'>('MAX')
+  const [timeFrame, setTimeFrame] = useState<'YTD' | '6M' | '1Y' | '5Y' | 'MAX'>('MAX')
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { rapidApiKey } = useApiKeys()
 
@@ -272,6 +273,56 @@ function Dashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netWorthItems]) // Re-fetch when items change
+
+  // Create today's snapshot if it doesn't exist
+  useEffect(() => {
+    if (!uid || netWorthItems.length === 0) {
+      return
+    }
+
+    const createTodaySnapshot = async () => {
+      try {
+        const todayDate = getTodayUTCDate()
+        
+        // Check if snapshot for today already exists
+        if (hasSnapshotForDate(snapshots, todayDate)) {
+          return // Snapshot already exists for today
+        }
+
+        // Create snapshot for today (prices may still be loading, but createSnapshot handles that)
+        const newSnapshot = createSnapshot(
+          netWorthItems,
+          transactions,
+          cryptoPrices,
+          convert,
+          usdToChfRate
+        )
+
+        // Ensure the snapshot date is today
+        newSnapshot.date = todayDate
+        const now = new Date()
+        newSnapshot.timestamp = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59)).getTime()
+
+        // Add to snapshots array and save
+        const updatedSnapshots = [...snapshots, newSnapshot]
+        await saveSnapshots(updatedSnapshots, uid)
+        setSnapshots(updatedSnapshots)
+        
+        console.log(`Created snapshot for ${todayDate}`)
+      } catch (error) {
+        console.error('Failed to create today\'s snapshot:', error)
+      }
+    }
+
+    // Wait a bit for prices to load, but don't block if they're not ready
+    // The snapshot will be created with available data
+    const timeoutId = setTimeout(() => {
+      createTodaySnapshot()
+    }, 3000) // Wait 3 seconds for prices to load
+
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, netWorthItems, transactions, snapshots, cryptoPrices, stockPrices, usdToChfRate, convert])
 
 
   // Pull-to-refresh functionality for mobile
@@ -622,89 +673,12 @@ function Dashboard() {
     return ((totalNetWorthChf - previousYearNetWorth) / previousYearNetWorth) * 100
   }, [totalNetWorthChf, snapshots, convert])
 
-  // Calculate Daily PnL (compare latest snapshot from previous day to current state)
-  const dailyPnLChf = useMemo(() => {
-    if (snapshots.length === 0) {
-      // If no snapshots, consider previous day net worth to be 0
-      return totalNetWorthChf
-    }
-
-    const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth()
-    const currentDay = now.getUTCDate()
-    
-    // Get the first moment of the current day in UTC (snapshots before this are from previous day)
-    const firstMomentOfCurrentDay = new Date(Date.UTC(currentYear, currentMonth, currentDay, 0, 0, 0, 0))
-    
-    // Find snapshots from the previous day (before the first moment of current day)
-    const previousDaySnapshots = snapshots.filter(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      return snapshotDate < firstMomentOfCurrentDay
-    })
-    
-    if (previousDaySnapshots.length === 0) {
-      // If no snapshot from previous day, consider net worth to be 0
-      return totalNetWorthChf
-    }
-    
-    // Get the last snapshot from previous day (most recent one)
-    const lastSnapshot = previousDaySnapshots.reduce((latest, snapshot) => {
-      return snapshot.timestamp > latest.timestamp ? snapshot : latest
-    })
-    
-    // Snapshots are stored in CHF, so we can use the total directly
-    // (convert handles CHF->CHF as identity)
-    const previousDayNetWorth = convert(lastSnapshot.total, 'CHF')
-    return totalNetWorthChf - previousDayNetWorth
-  }, [totalNetWorthChf, snapshots, convert])
-
-  // Calculate Daily PnL percentage
-  const dailyPnLPercentage = useMemo(() => {
-    if (snapshots.length === 0) {
-      // If no snapshots, consider previous day net worth to be 0
-      // Percentage is undefined when starting from 0, return 0
-      return 0
-    }
-
-    const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth()
-    const currentDay = now.getUTCDate()
-    
-    // Get the first moment of the current day in UTC (snapshots before this are from previous day)
-    const firstMomentOfCurrentDay = new Date(Date.UTC(currentYear, currentMonth, currentDay, 0, 0, 0, 0))
-    
-    // Find snapshots from the previous day (before the first moment of current day)
-    const previousDaySnapshots = snapshots.filter(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      return snapshotDate < firstMomentOfCurrentDay
-    })
-    
-    if (previousDaySnapshots.length === 0) {
-      // If no snapshot from previous day, consider net worth to be 0
-      // Percentage is undefined when starting from 0, return 0
-      return 0
-    }
-    
-    // Get the last snapshot from previous day (most recent one)
-    const lastSnapshot = previousDaySnapshots.reduce((latest, snapshot) => {
-      return snapshot.timestamp > latest.timestamp ? snapshot : latest
-    })
-    
-    // Snapshots are stored in CHF, so we can use the total directly
-    // (convert handles CHF->CHF as identity)
-    const previousDayNetWorth = convert(lastSnapshot.total, 'CHF')
-    if (previousDayNetWorth === 0) return 0
-    return ((totalNetWorthChf - previousDayNetWorth) / previousDayNetWorth) * 100
-  }, [totalNetWorthChf, snapshots, convert])
 
   // Convert values from CHF to baseCurrency
   const totalNetWorthConverted = convert(totalNetWorthChf, 'CHF')
   const monthlyInflowConverted = convert(monthlyInflowChf, 'CHF')
   const monthlyOutflowConverted = convert(monthlyOutflowChf, 'CHF')
   const monthlyPnLConverted = convert(monthlyPnLChf, 'CHF')
-  const dailyPnLConverted = convert(dailyPnLChf, 'CHF')
   const ytdPnLConverted = convert(ytdPnLChf, 'CHF')
 
   // Calculate USD value for total net worth
@@ -717,11 +691,6 @@ function Dashboard() {
   const monthlyPnLInUsd = useMemo(
     () => monthlyPnLChf * (exchangeRates?.rates['USD'] || 1),
     [monthlyPnLChf, exchangeRates]
-  )
-
-  const dailyPnLInUsd = useMemo(
-    () => dailyPnLChf * (exchangeRates?.rates['USD'] || 1),
-    [dailyPnLChf, exchangeRates]
   )
 
   const ytdPnLInUsd = useMemo(
@@ -852,7 +821,7 @@ function Dashboard() {
       }))
   }, [outflowItems])
 
-  // Generate net worth evolution data from snapshots
+  // Generate net worth evolution data from snapshots (only last snapshot per month)
   const netWorthData = useMemo(() => {
     if (snapshots.length === 0 || !convert) {
       // If no snapshots or convert function not available, return empty array
@@ -867,11 +836,8 @@ function Dashboard() {
       case 'YTD':
         cutoffDate = new Date(now.getFullYear(), 0, 1)
         break
-      case '1M':
-        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
-        break
-      case '3M':
-        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+      case '6M':
+        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate())
         break
       case '1Y':
         cutoffDate = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate())
@@ -894,8 +860,26 @@ function Dashboard() {
       })
       .sort((a, b) => a.timestamp - b.timestamp)
 
+    // Group snapshots by month and keep only the last snapshot of each month
+    const snapshotsByMonth = new Map<string, NetWorthSnapshot>()
+    
+    filteredSnapshots.forEach(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      const monthKey = `${snapshotDate.getUTCFullYear()}-${snapshotDate.getUTCMonth()}`
+      
+      // If we already have a snapshot for this month, keep the one with the latest timestamp
+      const existingSnapshot = snapshotsByMonth.get(monthKey)
+      if (!existingSnapshot || snapshot.timestamp > existingSnapshot.timestamp) {
+        snapshotsByMonth.set(monthKey, snapshot)
+      }
+    })
+
+    // Convert to array and sort by timestamp
+    const monthlySnapshots = Array.from(snapshotsByMonth.values())
+      .sort((a, b) => a.timestamp - b.timestamp)
+
     // Convert snapshots to chart data format
-    const chartData: NetWorthDataPoint[] = filteredSnapshots.map(snapshot => {
+    const chartData: NetWorthDataPoint[] = monthlySnapshots.map(snapshot => {
       const snapshotDate = new Date(snapshot.timestamp)
       const month = snapshotDate.toLocaleString('en-US', { month: 'short', year: 'numeric' })
 
@@ -943,23 +927,14 @@ function Dashboard() {
             </div>
             <div className="space-y-2">
               <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1">Daily PnL</div>
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-baseline gap-2">
-                    <TotalText variant={dailyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
-                      {formatCurrencyValue(dailyPnLConverted)}
-                    </TotalText>
-                    <span className={`text-xs md:text-sm ${dailyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {isIncognito ? '(****)' : `(${dailyPnLPercentage >= 0 ? '+' : ''}${dailyPnLPercentage.toFixed(2)}%)`}
-                    </span>
-                  </div>
-                  <TotalText variant={dailyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
-                    {formatUsd(dailyPnLInUsd)}
-                  </TotalText>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs md:text-sm text-text-muted">Monthly PnL</div>
+                  {snapshots.length > 0 && (
+                    <div className="text-xs text-text-muted">
+                      Last snapshot: {formatDate(snapshots[snapshots.length - 1].date)}
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1">Monthly PnL</div>
                 <div className="flex flex-col gap-1">
                   <div className="flex items-baseline gap-2">
                     <TotalText variant={monthlyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
@@ -1020,12 +995,11 @@ function Dashboard() {
               <Heading level={2}>Net Worth Evolution</Heading>
               <select
                 value={timeFrame}
-                onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '1M' | '3M' | '1Y' | '5Y' | 'MAX')}
+                onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '6M' | '1Y' | '5Y' | 'MAX')}
                 className="bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text2 focus:outline-none focus:border-accent-blue"
               >
                 <option value="YTD">YTD</option>
-                <option value="1M">1M</option>
-                <option value="3M">3M</option>
+                <option value="6M">6M</option>
                 <option value="1Y">1Y</option>
                 <option value="5Y">5Y</option>
                 <option value="MAX">MAX</option>
