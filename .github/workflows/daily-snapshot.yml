@@ -13,7 +13,22 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -X POST \
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Error: CRON_SECRET is not set in GitHub secrets"
+            exit 1
+          fi
+          echo "Calling daily snapshot endpoint..."
+          response=$(curl -X POST \
             -H "Authorization: Bearer $CRON_SECRET" \
-            https://capitalos.vercel.app/api/cron/daily-snapshot
+            -H "Content-Type: application/json" \
+            -w "\nHTTP Status: %{http_code}\n" \
+            -v \
+            https://capitalos.vercel.app/api/cron/daily-snapshot 2>&1)
+          echo "$response"
+          if echo "$response" | grep -q "HTTP Status: 200"; then
+            echo "✅ Success: Daily snapshot triggered successfully"
+          else
+            echo "❌ Error: Request failed"
+            exit 1
+          fi
 

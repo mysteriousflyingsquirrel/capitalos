@@ -6,8 +6,9 @@ import { calculateBalanceChf, calculateCoinAmount } from '../../src/pages/NetWor
 import type { CurrencyCode } from '../../src/lib/currency'
 
 // Initialize Firebase Admin SDK
-if (!admin.apps.length) {
-  try {
+let db: admin.firestore.Firestore
+try {
+  if (!admin.apps.length) {
     // Try to use service account from environment variable
     const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
     if (serviceAccount) {
@@ -18,12 +19,12 @@ if (!admin.apps.length) {
       // Fallback: use default credentials (for Vercel, this uses Application Default Credentials)
       admin.initializeApp()
     }
-  } catch (error) {
-    console.error('Failed to initialize Firebase Admin:', error)
   }
+  db = admin.firestore()
+} catch (error) {
+  console.error('Failed to initialize Firebase Admin:', error)
+  // db will be undefined, will be caught in handler
 }
-
-const db = admin.firestore()
 
 // Fetch exchange rates (server-side version)
 async function getExchangeRates(base: CurrencyCode = 'CHF'): Promise<{ base: CurrencyCode; rates: Record<CurrencyCode, number> }> {
@@ -267,12 +268,24 @@ async function processUserSnapshot(uid: string): Promise<{ success: boolean; err
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Check Firebase initialization
+  if (!db) {
+    console.error('Firebase Admin SDK not initialized')
+    return res.status(500).json({ 
+      error: 'Server configuration error',
+      message: 'Firebase Admin SDK initialization failed'
+    })
+  }
+
   // Check for authorization (cron secret)
   const cronSecret = process.env.CRON_SECRET
 
   if (!cronSecret) {
     console.error('CRON_SECRET environment variable is not set')
-    return res.status(500).json({ error: 'Server configuration error' })
+    return res.status(500).json({ 
+      error: 'Server configuration error',
+      message: 'CRON_SECRET not configured'
+    })
   }
 
   // Verify the request is from Vercel Cron
