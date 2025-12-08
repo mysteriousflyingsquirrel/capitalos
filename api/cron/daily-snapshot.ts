@@ -34,20 +34,19 @@ async function getExchangeRates(base: CurrencyCode = 'CHF'): Promise<{ base: Cur
     }
     const data = await response.json()
     
+    // Initialize with all required properties
     const rates: Record<CurrencyCode, number> = {
-      [base]: 1,
+      CHF: base === 'CHF' ? 1 : (data.rates?.CHF || 1),
+      USD: base === 'USD' ? 1 : (data.rates?.USD || (base === 'CHF' ? 0.92 : 1.08)),
+      EUR: base === 'EUR' ? 1 : (data.rates?.EUR || (base === 'CHF' ? 0.95 : 1.05)),
     }
     
+    // Override with API data if available
     if (data.rates) {
       if (data.rates.USD) rates.USD = data.rates.USD
       if (data.rates.EUR) rates.EUR = data.rates.EUR
       if (data.rates.CHF) rates.CHF = data.rates.CHF
     }
-    
-    // Ensure all currencies are present
-    if (!rates.CHF) rates.CHF = 1
-    if (!rates.USD) rates.USD = base === 'USD' ? 1 : (base === 'CHF' ? 0.92 : 1.08)
-    if (!rates.EUR) rates.EUR = base === 'EUR' ? 1 : (base === 'CHF' ? 0.95 : 1.05)
     
     return { base, rates }
   } catch (error) {
