@@ -400,7 +400,7 @@ function Settings() {
         <Heading level={1}>Settings</Heading>
 
         {/* General Section */}
-        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card p-4 lg:p-6">
           <Heading level={2} className="mb-4">General</Heading>
           
           <div>
@@ -438,7 +438,7 @@ function Settings() {
         </div>
 
         {/* API Keys Section */}
-        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card p-4 lg:p-6">
           <Heading level={2} className="mb-4">API Keys</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
@@ -509,7 +509,7 @@ function Settings() {
         </div>
 
         {/* Reports Section */}
-        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card p-4 lg:p-6">
           <Heading level={2} className="mb-4">Reports</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
@@ -556,7 +556,7 @@ function Settings() {
         </div>
 
         {/* Data Section */}
-        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card p-4 lg:p-6">
           <Heading level={2} className="mb-4">Data</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
@@ -648,7 +648,7 @@ function Settings() {
         </div>
 
         {/* Platforms Section */}
-        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card p-4 lg:p-6">
           <Heading level={2} className="mb-4">Platforms</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
@@ -787,7 +787,7 @@ function Settings() {
         </div>
 
         {/* About Section */}
-        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card p-4 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card p-4 lg:p-6">
           <Heading level={2} className="mb-4">About</Heading>
           
           <div className="space-y-4">

@@ -911,7 +911,7 @@ function Dashboard() {
         {/* First Row: Total Net Worth (with PnL) + Monthly Cashflow (Inflow/Outflow) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Total Net Worth KPI with Monthly PnL */}
-          <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <div className="flex flex-col">
                 <div className="flex items-center justify-between mb-2">
@@ -962,7 +962,7 @@ function Dashboard() {
           </div>
 
           {/* Monthly Cashflow KPI with Inflow, Outflow, and Spare Change */}
-          <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-2">Monthly Cashflow</Heading>
             <div className="space-y-2">
               <div>
@@ -982,7 +982,7 @@ function Dashboard() {
         </div>
 
         {/* Second Row: Net Worth Evolution (Full Width) */}
-        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <div className="mb-6 pb-4 border-b border-border-strong">
             <div className="flex items-center justify-between">
               <div>
@@ -1126,7 +1126,7 @@ function Dashboard() {
         {/* Third Row: Asset Allocation + Inflow Breakdown + Outflow Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Asset Allocation Pie Chart */}
-          <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <Heading level={2}>Asset Allocation</Heading>
             </div>
@@ -1181,7 +1181,7 @@ function Dashboard() {
           </div>
 
           {/* Inflow Breakdown Pie Chart */}
-          <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <Heading level={2}>Inflow Breakdown</Heading>
             </div>
@@ -1235,7 +1235,7 @@ function Dashboard() {
           </div>
 
           {/* Outflow Breakdown Pie Chart */}
-          <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <Heading level={2}>Outflow Breakdown</Heading>
             </div>
