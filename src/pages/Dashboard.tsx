@@ -27,7 +27,7 @@ import {
   loadCashflowInflowItems,
   loadCashflowOutflowItems,
 } from '../services/storageService'
-import { loadSnapshots, saveSnapshots, createSnapshot, hasSnapshotForDate, getTodayUTCDate, type NetWorthSnapshot } from '../services/snapshotService'
+import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from './NetWorth'
@@ -274,57 +274,6 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netWorthItems]) // Re-fetch when items change
 
-  // Create today's snapshot if it doesn't exist
-  useEffect(() => {
-    if (!uid || netWorthItems.length === 0) {
-      return
-    }
-
-    const createTodaySnapshot = async () => {
-      try {
-        const todayDate = getTodayUTCDate()
-        
-        // Check if snapshot for today already exists
-        if (hasSnapshotForDate(snapshots, todayDate)) {
-          return // Snapshot already exists for today
-        }
-
-        // Create snapshot for today (prices may still be loading, but createSnapshot handles that)
-        const newSnapshot = createSnapshot(
-          netWorthItems,
-          transactions,
-          cryptoPrices,
-          convert,
-          usdToChfRate
-        )
-
-        // Ensure the snapshot date is today
-        newSnapshot.date = todayDate
-        const now = new Date()
-        newSnapshot.timestamp = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59)).getTime()
-
-        // Add to snapshots array and save
-        const updatedSnapshots = [...snapshots, newSnapshot]
-        await saveSnapshots(updatedSnapshots, uid)
-        setSnapshots(updatedSnapshots)
-        
-        console.log(`Created snapshot for ${todayDate}`)
-      } catch (error) {
-        console.error('Failed to create today\'s snapshot:', error)
-      }
-    }
-
-    // Wait a bit for prices to load, but don't block if they're not ready
-    // The snapshot will be created with available data
-    const timeoutId = setTimeout(() => {
-      createTodaySnapshot()
-    }, 3000) // Wait 3 seconds for prices to load
-
-    return () => clearTimeout(timeoutId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, netWorthItems, transactions, snapshots, cryptoPrices, stockPrices, usdToChfRate, convert])
-
-
   // Pull-to-refresh functionality for mobile
   useEffect(() => {
     let touchStartY = 0
@@ -508,6 +457,64 @@ function Dashboard() {
     }
   }, [netWorthItems, transactions, cryptoPrices, stockPrices, usdToChfRate, convert])
 
+  // Calculate daily PnL (difference between current net worth and previous day's snapshot)
+  const dailyPnLChf = useMemo(() => {
+    if (snapshots.length === 0) {
+      return null // No snapshots available
+    }
+
+    const now = new Date()
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const yesterday = new Date(today)
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+    
+    // Format yesterday's date as YYYY-MM-DD
+    const yesterdayYear = yesterday.getUTCFullYear()
+    const yesterdayMonth = String(yesterday.getUTCMonth() + 1).padStart(2, '0')
+    const yesterdayDay = String(yesterday.getUTCDate()).padStart(2, '0')
+    const yesterdayDate = `${yesterdayYear}-${yesterdayMonth}-${yesterdayDay}`
+    
+    // Find snapshot for yesterday
+    const yesterdaySnapshot = snapshots.find(snapshot => snapshot.date === yesterdayDate)
+    
+    if (!yesterdaySnapshot) {
+      return null // No snapshot for previous day
+    }
+    
+    // Snapshots are stored in CHF, so we can use the total directly
+    const yesterdayNetWorth = convert(yesterdaySnapshot.total, 'CHF')
+    return totalNetWorthChf - yesterdayNetWorth
+  }, [totalNetWorthChf, snapshots, convert])
+
+  // Calculate daily PnL percentage
+  const dailyPnLPercentage = useMemo(() => {
+    if (snapshots.length === 0 || dailyPnLChf === null) {
+      return null
+    }
+
+    const now = new Date()
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const yesterday = new Date(today)
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+    
+    // Format yesterday's date as YYYY-MM-DD
+    const yesterdayYear = yesterday.getUTCFullYear()
+    const yesterdayMonth = String(yesterday.getUTCMonth() + 1).padStart(2, '0')
+    const yesterdayDay = String(yesterday.getUTCDate()).padStart(2, '0')
+    const yesterdayDate = `${yesterdayYear}-${yesterdayMonth}-${yesterdayDay}`
+    
+    // Find snapshot for yesterday
+    const yesterdaySnapshot = snapshots.find(snapshot => snapshot.date === yesterdayDate)
+    
+    if (!yesterdaySnapshot) {
+      return null
+    }
+    
+    const yesterdayNetWorth = convert(yesterdaySnapshot.total, 'CHF')
+    if (yesterdayNetWorth === 0) return 0
+    return ((totalNetWorthChf - yesterdayNetWorth) / yesterdayNetWorth) * 100
+  }, [totalNetWorthChf, snapshots, dailyPnLChf, convert])
+
   // Calculate monthly PnL (difference between current net worth and last snapshot of previous month)
   const monthlyPnLChf = useMemo(() => {
     if (snapshots.length === 0) {
@@ -678,6 +685,7 @@ function Dashboard() {
   const totalNetWorthConverted = convert(totalNetWorthChf, 'CHF')
   const monthlyInflowConverted = convert(monthlyInflowChf, 'CHF')
   const monthlyOutflowConverted = convert(monthlyOutflowChf, 'CHF')
+  const dailyPnLConverted = dailyPnLChf !== null ? convert(dailyPnLChf, 'CHF') : null
   const monthlyPnLConverted = convert(monthlyPnLChf, 'CHF')
   const ytdPnLConverted = convert(ytdPnLChf, 'CHF')
 
@@ -688,6 +696,10 @@ function Dashboard() {
   )
 
   // Calculate USD values for PnL
+  const dailyPnLInUsd = useMemo(
+    () => dailyPnLChf !== null ? dailyPnLChf * (exchangeRates?.rates['USD'] || 1) : null,
+    [dailyPnLChf, exchangeRates]
+  )
   const monthlyPnLInUsd = useMemo(
     () => monthlyPnLChf * (exchangeRates?.rates['USD'] || 1),
     [monthlyPnLChf, exchangeRates]
@@ -926,6 +938,32 @@ function Dashboard() {
               </div>
             </div>
             <div className="space-y-2">
+              <div>
+                <div className="text-xs md:text-sm text-text-muted mb-1">Daily PnL</div>
+                {dailyPnLChf === null ? (
+                  <div className="text-xs md:text-sm text-warning">
+                    ⚠️ No snapshot available for previous day
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-baseline gap-2">
+                      <TotalText variant={dailyPnLConverted! >= 0 ? 'inflow' : 'outflow'}>
+                        {formatCurrencyValue(dailyPnLConverted!)}
+                      </TotalText>
+                      {dailyPnLPercentage !== null && (
+                        <span className={`text-xs md:text-sm ${dailyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
+                          {isIncognito ? '(****)' : `(${dailyPnLPercentage >= 0 ? '+' : ''}${dailyPnLPercentage.toFixed(2)}%)`}
+                        </span>
+                      )}
+                    </div>
+                    {dailyPnLInUsd !== null && (
+                      <TotalText variant={dailyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
+                        {formatUsd(dailyPnLInUsd)}
+                      </TotalText>
+                    )}
+                  </div>
+                )}
+              </div>
               <div>
                 <div className="text-xs md:text-sm text-text-muted mb-1">Monthly PnL</div>
                 <div className="flex flex-col gap-1">
