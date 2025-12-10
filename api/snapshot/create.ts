@@ -379,12 +379,28 @@ function createSnapshot(
   })
 
   const total = Object.values(categories).reduce((sum, val) => sum + val, 0)
+  
+  // Use UTC explicitly to avoid timezone issues
+  // When cron runs at 00:00 UTC, we want to create snapshot for yesterday at 23:59:59 UTC
   const now = new Date()
-  const date = now.toISOString().split('T')[0]
+  const nowUTC = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    now.getUTCHours(),
+    now.getUTCMinutes(),
+    now.getUTCSeconds()
+  ))
+  
+  // Calculate date in UTC (YYYY-MM-DD format)
+  const year = nowUTC.getUTCFullYear()
+  const month = String(nowUTC.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(nowUTC.getUTCDate()).padStart(2, '0')
+  const date = `${year}-${month}-${day}`
 
   return {
     date,
-    timestamp: now.getTime(),
+    timestamp: nowUTC.getTime(),
     categories,
     total,
   }
@@ -450,6 +466,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       exchangeRates,
       usdToChfRate
     )
+
+    // If called around 00:00 UTC (cron job), create snapshot for yesterday at 23:59:59 UTC
+    // This ensures the snapshot represents the end of the previous day, not the start of the new day
+    const now = new Date()
+    const utcHour = now.getUTCHours()
+    const utcMinutes = now.getUTCMinutes()
+    
+    // If between 00:00 and 00:05 UTC, assume this is the daily cron and use yesterday's date
+    if (utcHour === 0 && utcMinutes < 5) {
+      const yesterday = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() - 1
+      ))
+      const yesterdayYear = yesterday.getUTCFullYear()
+      const yesterdayMonth = yesterday.getUTCMonth()
+      const yesterdayDay = yesterday.getUTCDate()
+      
+      // Override snapshot date and timestamp to be yesterday at 23:59:59 UTC
+      snapshot.date = `${yesterdayYear}-${String(yesterdayMonth + 1).padStart(2, '0')}-${String(yesterdayDay).padStart(2, '0')}`
+      snapshot.timestamp = new Date(Date.UTC(yesterdayYear, yesterdayMonth, yesterdayDay, 23, 59, 59)).getTime()
+    }
+
+    // Check if snapshot already exists for this date
+    const existingSnapshotRef = db.collection(`users/${uid}/snapshots`).doc(snapshot.date)
+    const existingSnapshot = await existingSnapshotRef.get()
+    
+    if (existingSnapshot.exists) {
+      return res.status(200).json({
+        success: true,
+        message: `Snapshot already exists for ${snapshot.date}, skipping creation`,
+        snapshot: {
+          date: snapshot.date,
+          timestamp: existingSnapshot.data()?.timestamp,
+          total: existingSnapshot.data()?.total,
+          categories: existingSnapshot.data()?.categories,
+        },
+      })
+    }
 
     // Save snapshot to Firestore
     const snapshotRef = db.collection(`users/${uid}/snapshots`).doc(snapshot.date)
