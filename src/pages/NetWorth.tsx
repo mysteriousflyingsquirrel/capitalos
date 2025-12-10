@@ -294,7 +294,7 @@ function NetWorthCategorySection({
     : (subtotal * (exchangeRates?.rates['USD'] || 1))
 
   return (
-    <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6 overflow-hidden">
+    <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6 overflow-hidden">
       <div className="mb-6 pb-4 border-b border-border-strong">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -1181,7 +1181,7 @@ function NetWorth() {
         <Heading level={1}>Net Worth</Heading>
         
         {/* Total Net Worth */}
-        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <div className="mb-6 pb-4 border-b border-border-strong">
             <div className="flex flex-col">
               <div className="flex items-center justify-between mb-2">

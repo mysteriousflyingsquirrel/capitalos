@@ -172,7 +172,7 @@ function SectionCard({ title, children, total, totalColor = 'success' }: Section
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   
   return (
-    <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+      <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
         <div className="flex flex-col">
           <Heading level={2}>{title}</Heading>
@@ -874,7 +874,7 @@ function AccountflowSection({ mappings, platforms, onAddMapping, onEditMapping, 
 
   return (
     <>
-      <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+      <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
         <div className="mb-6 pb-4 border-b border-border-strong">
           <Heading level={2}>Platformflow</Heading>
         </div>

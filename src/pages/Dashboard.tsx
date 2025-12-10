@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney } from '../lib/currency'
+import { formatDate } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import {
   loadNetWorthItems,
@@ -140,7 +141,7 @@ function formatCHFTick(value: number): string {
 }
 
 function Dashboard() {
-  const [timeFrame, setTimeFrame] = useState<'YTD' | '1M' | '3M' | '1Y' | '5Y' | 'MAX'>('MAX')
+  const [timeFrame, setTimeFrame] = useState<'YTD' | '6M' | '1Y' | '5Y' | 'MAX'>('MAX')
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { rapidApiKey } = useApiKeys()
 
@@ -272,7 +273,6 @@ function Dashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netWorthItems]) // Re-fetch when items change
-
 
   // Pull-to-refresh functionality for mobile
   useEffect(() => {
@@ -457,6 +457,64 @@ function Dashboard() {
     }
   }, [netWorthItems, transactions, cryptoPrices, stockPrices, usdToChfRate, convert])
 
+  // Calculate daily PnL (difference between current net worth and previous day's snapshot)
+  const dailyPnLChf = useMemo(() => {
+    if (snapshots.length === 0) {
+      return null // No snapshots available
+    }
+
+    const now = new Date()
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const yesterday = new Date(today)
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+    
+    // Format yesterday's date as YYYY-MM-DD
+    const yesterdayYear = yesterday.getUTCFullYear()
+    const yesterdayMonth = String(yesterday.getUTCMonth() + 1).padStart(2, '0')
+    const yesterdayDay = String(yesterday.getUTCDate()).padStart(2, '0')
+    const yesterdayDate = `${yesterdayYear}-${yesterdayMonth}-${yesterdayDay}`
+    
+    // Find snapshot for yesterday
+    const yesterdaySnapshot = snapshots.find(snapshot => snapshot.date === yesterdayDate)
+    
+    if (!yesterdaySnapshot) {
+      return null // No snapshot for previous day
+    }
+    
+    // Snapshots are stored in CHF, so we can use the total directly
+    const yesterdayNetWorth = convert(yesterdaySnapshot.total, 'CHF')
+    return totalNetWorthChf - yesterdayNetWorth
+  }, [totalNetWorthChf, snapshots, convert])
+
+  // Calculate daily PnL percentage
+  const dailyPnLPercentage = useMemo(() => {
+    if (snapshots.length === 0 || dailyPnLChf === null) {
+      return null
+    }
+
+    const now = new Date()
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const yesterday = new Date(today)
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+    
+    // Format yesterday's date as YYYY-MM-DD
+    const yesterdayYear = yesterday.getUTCFullYear()
+    const yesterdayMonth = String(yesterday.getUTCMonth() + 1).padStart(2, '0')
+    const yesterdayDay = String(yesterday.getUTCDate()).padStart(2, '0')
+    const yesterdayDate = `${yesterdayYear}-${yesterdayMonth}-${yesterdayDay}`
+    
+    // Find snapshot for yesterday
+    const yesterdaySnapshot = snapshots.find(snapshot => snapshot.date === yesterdayDate)
+    
+    if (!yesterdaySnapshot) {
+      return null
+    }
+    
+    const yesterdayNetWorth = convert(yesterdaySnapshot.total, 'CHF')
+    if (yesterdayNetWorth === 0) return 0
+    return ((totalNetWorthChf - yesterdayNetWorth) / yesterdayNetWorth) * 100
+  }, [totalNetWorthChf, snapshots, dailyPnLChf, convert])
+
   // Calculate monthly PnL (difference between current net worth and last snapshot of previous month)
   const monthlyPnLChf = useMemo(() => {
     if (snapshots.length === 0) {
@@ -622,89 +680,13 @@ function Dashboard() {
     return ((totalNetWorthChf - previousYearNetWorth) / previousYearNetWorth) * 100
   }, [totalNetWorthChf, snapshots, convert])
 
-  // Calculate Daily PnL (compare latest snapshot from previous day to current state)
-  const dailyPnLChf = useMemo(() => {
-    if (snapshots.length === 0) {
-      // If no snapshots, consider previous day net worth to be 0
-      return totalNetWorthChf
-    }
-
-    const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth()
-    const currentDay = now.getUTCDate()
-    
-    // Get the first moment of the current day in UTC (snapshots before this are from previous day)
-    const firstMomentOfCurrentDay = new Date(Date.UTC(currentYear, currentMonth, currentDay, 0, 0, 0, 0))
-    
-    // Find snapshots from the previous day (before the first moment of current day)
-    const previousDaySnapshots = snapshots.filter(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      return snapshotDate < firstMomentOfCurrentDay
-    })
-    
-    if (previousDaySnapshots.length === 0) {
-      // If no snapshot from previous day, consider net worth to be 0
-      return totalNetWorthChf
-    }
-    
-    // Get the last snapshot from previous day (most recent one)
-    const lastSnapshot = previousDaySnapshots.reduce((latest, snapshot) => {
-      return snapshot.timestamp > latest.timestamp ? snapshot : latest
-    })
-    
-    // Snapshots are stored in CHF, so we can use the total directly
-    // (convert handles CHF->CHF as identity)
-    const previousDayNetWorth = convert(lastSnapshot.total, 'CHF')
-    return totalNetWorthChf - previousDayNetWorth
-  }, [totalNetWorthChf, snapshots, convert])
-
-  // Calculate Daily PnL percentage
-  const dailyPnLPercentage = useMemo(() => {
-    if (snapshots.length === 0) {
-      // If no snapshots, consider previous day net worth to be 0
-      // Percentage is undefined when starting from 0, return 0
-      return 0
-    }
-
-    const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth()
-    const currentDay = now.getUTCDate()
-    
-    // Get the first moment of the current day in UTC (snapshots before this are from previous day)
-    const firstMomentOfCurrentDay = new Date(Date.UTC(currentYear, currentMonth, currentDay, 0, 0, 0, 0))
-    
-    // Find snapshots from the previous day (before the first moment of current day)
-    const previousDaySnapshots = snapshots.filter(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      return snapshotDate < firstMomentOfCurrentDay
-    })
-    
-    if (previousDaySnapshots.length === 0) {
-      // If no snapshot from previous day, consider net worth to be 0
-      // Percentage is undefined when starting from 0, return 0
-      return 0
-    }
-    
-    // Get the last snapshot from previous day (most recent one)
-    const lastSnapshot = previousDaySnapshots.reduce((latest, snapshot) => {
-      return snapshot.timestamp > latest.timestamp ? snapshot : latest
-    })
-    
-    // Snapshots are stored in CHF, so we can use the total directly
-    // (convert handles CHF->CHF as identity)
-    const previousDayNetWorth = convert(lastSnapshot.total, 'CHF')
-    if (previousDayNetWorth === 0) return 0
-    return ((totalNetWorthChf - previousDayNetWorth) / previousDayNetWorth) * 100
-  }, [totalNetWorthChf, snapshots, convert])
 
   // Convert values from CHF to baseCurrency
   const totalNetWorthConverted = convert(totalNetWorthChf, 'CHF')
   const monthlyInflowConverted = convert(monthlyInflowChf, 'CHF')
   const monthlyOutflowConverted = convert(monthlyOutflowChf, 'CHF')
+  const dailyPnLConverted = dailyPnLChf !== null ? convert(dailyPnLChf, 'CHF') : null
   const monthlyPnLConverted = convert(monthlyPnLChf, 'CHF')
-  const dailyPnLConverted = convert(dailyPnLChf, 'CHF')
   const ytdPnLConverted = convert(ytdPnLChf, 'CHF')
 
   // Calculate USD value for total net worth
@@ -714,14 +696,13 @@ function Dashboard() {
   )
 
   // Calculate USD values for PnL
+  const dailyPnLInUsd = useMemo(
+    () => dailyPnLChf !== null ? dailyPnLChf * (exchangeRates?.rates['USD'] || 1) : null,
+    [dailyPnLChf, exchangeRates]
+  )
   const monthlyPnLInUsd = useMemo(
     () => monthlyPnLChf * (exchangeRates?.rates['USD'] || 1),
     [monthlyPnLChf, exchangeRates]
-  )
-
-  const dailyPnLInUsd = useMemo(
-    () => dailyPnLChf * (exchangeRates?.rates['USD'] || 1),
-    [dailyPnLChf, exchangeRates]
   )
 
   const ytdPnLInUsd = useMemo(
@@ -852,7 +833,7 @@ function Dashboard() {
       }))
   }, [outflowItems])
 
-  // Generate net worth evolution data from snapshots
+  // Generate net worth evolution data from snapshots (only last snapshot per month)
   const netWorthData = useMemo(() => {
     if (snapshots.length === 0 || !convert) {
       // If no snapshots or convert function not available, return empty array
@@ -867,11 +848,8 @@ function Dashboard() {
       case 'YTD':
         cutoffDate = new Date(now.getFullYear(), 0, 1)
         break
-      case '1M':
-        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
-        break
-      case '3M':
-        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+      case '6M':
+        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate())
         break
       case '1Y':
         cutoffDate = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate())
@@ -894,8 +872,26 @@ function Dashboard() {
       })
       .sort((a, b) => a.timestamp - b.timestamp)
 
+    // Group snapshots by month and keep only the last snapshot of each month
+    const snapshotsByMonth = new Map<string, NetWorthSnapshot>()
+    
+    filteredSnapshots.forEach(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      const monthKey = `${snapshotDate.getUTCFullYear()}-${snapshotDate.getUTCMonth()}`
+      
+      // If we already have a snapshot for this month, keep the one with the latest timestamp
+      const existingSnapshot = snapshotsByMonth.get(monthKey)
+      if (!existingSnapshot || snapshot.timestamp > existingSnapshot.timestamp) {
+        snapshotsByMonth.set(monthKey, snapshot)
+      }
+    })
+
+    // Convert to array and sort by timestamp
+    const monthlySnapshots = Array.from(snapshotsByMonth.values())
+      .sort((a, b) => a.timestamp - b.timestamp)
+
     // Convert snapshots to chart data format
-    const chartData: NetWorthDataPoint[] = filteredSnapshots.map(snapshot => {
+    const chartData: NetWorthDataPoint[] = monthlySnapshots.map(snapshot => {
       const snapshotDate = new Date(snapshot.timestamp)
       const month = snapshotDate.toLocaleString('en-US', { month: 'short', year: 'numeric' })
 
@@ -927,7 +923,7 @@ function Dashboard() {
         {/* First Row: Total Net Worth (with PnL) + Monthly Cashflow (Inflow/Outflow) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Total Net Worth KPI with Monthly PnL */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <div className="flex flex-col">
                 <div className="flex items-center justify-between mb-2">
@@ -944,19 +940,29 @@ function Dashboard() {
             <div className="space-y-2">
               <div>
                 <div className="text-xs md:text-sm text-text-muted mb-1">Daily PnL</div>
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-baseline gap-2">
-                    <TotalText variant={dailyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
-                      {formatCurrencyValue(dailyPnLConverted)}
-                    </TotalText>
-                    <span className={`text-xs md:text-sm ${dailyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {isIncognito ? '(****)' : `(${dailyPnLPercentage >= 0 ? '+' : ''}${dailyPnLPercentage.toFixed(2)}%)`}
-                    </span>
+                {dailyPnLChf === null ? (
+                  <div className="text-xs md:text-sm text-warning">
+                    ⚠️ No snapshot available for previous day
                   </div>
-                  <TotalText variant={dailyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
-                    {formatUsd(dailyPnLInUsd)}
-                  </TotalText>
-                </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-baseline gap-2">
+                      <TotalText variant={dailyPnLConverted! >= 0 ? 'inflow' : 'outflow'}>
+                        {formatCurrencyValue(dailyPnLConverted!)}
+                      </TotalText>
+                      {dailyPnLPercentage !== null && (
+                        <span className={`text-xs md:text-sm ${dailyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
+                          {isIncognito ? '(****)' : `(${dailyPnLPercentage >= 0 ? '+' : ''}${dailyPnLPercentage.toFixed(2)}%)`}
+                        </span>
+                      )}
+                    </div>
+                    {dailyPnLInUsd !== null && (
+                      <TotalText variant={dailyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
+                        {formatUsd(dailyPnLInUsd)}
+                      </TotalText>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <div className="text-xs md:text-sm text-text-muted mb-1">Monthly PnL</div>
@@ -994,7 +1000,7 @@ function Dashboard() {
           </div>
 
           {/* Monthly Cashflow KPI with Inflow, Outflow, and Spare Change */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <Heading level={2} className="mb-2">Monthly Cashflow</Heading>
             <div className="space-y-2">
               <div>
@@ -1014,18 +1020,24 @@ function Dashboard() {
         </div>
 
         {/* Second Row: Net Worth Evolution (Full Width) */}
-        <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <div className="mb-6 pb-4 border-b border-border-strong">
             <div className="flex items-center justify-between">
-              <Heading level={2}>Net Worth Evolution</Heading>
+              <div>
+                <Heading level={2}>Net Worth Evolution</Heading>
+                {snapshots.length > 0 && (
+                  <div className="text-xs text-text-muted mt-1">
+                    Last snapshot: {formatDate(snapshots[snapshots.length - 1].date)}
+                  </div>
+                )}
+              </div>
               <select
                 value={timeFrame}
-                onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '1M' | '3M' | '1Y' | '5Y' | 'MAX')}
+                onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '6M' | '1Y' | '5Y' | 'MAX')}
                 className="bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text2 focus:outline-none focus:border-accent-blue"
               >
                 <option value="YTD">YTD</option>
-                <option value="1M">1M</option>
-                <option value="3M">3M</option>
+                <option value="6M">6M</option>
                 <option value="1Y">1Y</option>
                 <option value="5Y">5Y</option>
                 <option value="MAX">MAX</option>
@@ -1152,7 +1164,7 @@ function Dashboard() {
         {/* Third Row: Asset Allocation + Inflow Breakdown + Outflow Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Asset Allocation Pie Chart */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <Heading level={2}>Asset Allocation</Heading>
             </div>
@@ -1207,7 +1219,7 @@ function Dashboard() {
           </div>
 
           {/* Inflow Breakdown Pie Chart */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <Heading level={2}>Inflow Breakdown</Heading>
             </div>
@@ -1261,7 +1273,7 @@ function Dashboard() {
           </div>
 
           {/* Outflow Breakdown Pie Chart */}
-          <div className="bg-bg-surface-1 border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+          <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <Heading level={2}>Outflow Breakdown</Heading>
             </div>

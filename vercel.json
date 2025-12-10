@@ -3,14 +3,8 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api).*)",
       "destination": "/index.html"
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/daily-snapshot",
-      "schedule": "0 0 * * *"
     }
   ]
 }
