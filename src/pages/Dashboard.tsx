@@ -457,228 +457,187 @@ function Dashboard() {
     }
   }, [netWorthItems, transactions, cryptoPrices, stockPrices, usdToChfRate, convert])
 
-  // Calculate daily PnL (difference between current net worth and previous day's snapshot)
-  const dailyPnLChf = useMemo(() => {
+  // Find the latest snapshot (by timestamp)
+  const latestSnapshot = useMemo(() => {
     if (snapshots.length === 0) {
-      return null // No snapshots available
+      return null
     }
+    // Find snapshot with the highest timestamp
+    return snapshots.reduce((latest, snapshot) => 
+      snapshot.timestamp > latest.timestamp ? snapshot : latest
+    )
+  }, [snapshots])
 
-    const now = new Date()
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-    const yesterday = new Date(today)
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
-    
-    // Format yesterday's date as YYYY-MM-DD
-    const yesterdayYear = yesterday.getUTCFullYear()
-    const yesterdayMonth = String(yesterday.getUTCMonth() + 1).padStart(2, '0')
-    const yesterdayDay = String(yesterday.getUTCDate()).padStart(2, '0')
-    const yesterdayDate = `${yesterdayYear}-${yesterdayMonth}-${yesterdayDay}`
-    
-    // Find snapshot for yesterday
-    const yesterdaySnapshot = snapshots.find(snapshot => snapshot.date === yesterdayDate)
-    
-    if (!yesterdaySnapshot) {
-      return null // No snapshot for previous day
+  // Calculate daily PnL (difference between current net worth and latest snapshot)
+  const dailyPnLChf = useMemo(() => {
+    if (!latestSnapshot) {
+      return null // No snapshots available
     }
     
     // Snapshots are stored in CHF, so we can use the total directly
-    const yesterdayNetWorth = convert(yesterdaySnapshot.total, 'CHF')
-    return totalNetWorthChf - yesterdayNetWorth
-  }, [totalNetWorthChf, snapshots, convert])
+    const latestNetWorth = convert(latestSnapshot.total, 'CHF')
+    return totalNetWorthChf - latestNetWorth
+  }, [totalNetWorthChf, latestSnapshot, convert])
 
   // Calculate daily PnL percentage
   const dailyPnLPercentage = useMemo(() => {
-    if (snapshots.length === 0 || dailyPnLChf === null) {
+    if (!latestSnapshot || dailyPnLChf === null) {
+      return null
+    }
+    
+    const latestNetWorth = convert(latestSnapshot.total, 'CHF')
+    if (latestNetWorth === 0) return 0
+    return ((totalNetWorthChf - latestNetWorth) / latestNetWorth) * 100
+  }, [totalNetWorthChf, latestSnapshot, dailyPnLChf, convert])
+
+  // Format the latest snapshot's timestamp as UTC date/time (DD/MM/YYYY - hh:mm UTC)
+  const latestSnapshotDateTime = useMemo(() => {
+    if (!latestSnapshot) {
+      return null
+    }
+    const date = new Date(latestSnapshot.timestamp)
+    const year = date.getUTCFullYear()
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(date.getUTCDate()).padStart(2, '0')
+    const hours = String(date.getUTCHours()).padStart(2, '0')
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0')
+    return `${day}/${month}/${year} - ${hours}:${minutes} UTC`
+  }, [latestSnapshot])
+
+  // Helper function to format snapshot timestamp as UTC date/time (DD/MM/YYYY - hh:mm UTC)
+  const formatSnapshotDateTime = (snapshot: NetWorthSnapshot | null): string | null => {
+    if (!snapshot) {
+      return null
+    }
+    const date = new Date(snapshot.timestamp)
+    const year = date.getUTCFullYear()
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+    const day = String(date.getUTCDate()).padStart(2, '0')
+    const hours = String(date.getUTCHours()).padStart(2, '0')
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0')
+    return `${day}/${month}/${year} - ${hours}:${minutes} UTC`
+  }
+
+  // Find the snapshot used for Monthly PnL (last snapshot from previous month)
+  const monthlyPnLSnapshot = useMemo(() => {
+    if (snapshots.length === 0) {
       return null
     }
 
     const now = new Date()
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-    const yesterday = new Date(today)
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+    const currentYear = now.getUTCFullYear()
+    const currentMonth = now.getUTCMonth()
     
-    // Format yesterday's date as YYYY-MM-DD
-    const yesterdayYear = yesterday.getUTCFullYear()
-    const yesterdayMonth = String(yesterday.getUTCMonth() + 1).padStart(2, '0')
-    const yesterdayDay = String(yesterday.getUTCDate()).padStart(2, '0')
-    const yesterdayDate = `${yesterdayYear}-${yesterdayMonth}-${yesterdayDay}`
+    // Get the first day of the current month in UTC (snapshots before this are from previous month)
+    const firstDayOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 1, 0, 0, 0, 0))
     
-    // Find snapshot for yesterday
-    const yesterdaySnapshot = snapshots.find(snapshot => snapshot.date === yesterdayDate)
+    // Find snapshots from the previous month (before the first day of current month)
+    const previousMonthSnapshots = snapshots.filter(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      return snapshotDate < firstDayOfCurrentMonth
+    })
     
-    if (!yesterdaySnapshot) {
+    if (previousMonthSnapshots.length === 0) {
       return null
     }
     
-    const yesterdayNetWorth = convert(yesterdaySnapshot.total, 'CHF')
-    if (yesterdayNetWorth === 0) return 0
-    return ((totalNetWorthChf - yesterdayNetWorth) / yesterdayNetWorth) * 100
-  }, [totalNetWorthChf, snapshots, dailyPnLChf, convert])
+    // Get the last snapshot from previous month (most recent one)
+    return previousMonthSnapshots.reduce((latest, snapshot) => {
+      return snapshot.timestamp > latest.timestamp ? snapshot : latest
+    })
+  }, [snapshots])
+
+  // Find the snapshot used for YTD PnL (last snapshot from previous year)
+  const ytdPnLSnapshot = useMemo(() => {
+    if (snapshots.length === 0) {
+      return null
+    }
+
+    const now = new Date()
+    const currentYear = now.getUTCFullYear()
+    
+    // Get the first day of the current year in UTC (snapshots before this are from previous year)
+    const firstDayOfCurrentYear = new Date(Date.UTC(currentYear, 0, 1, 0, 0, 0, 0))
+    
+    // Find snapshots from the previous year (before the first day of current year)
+    const previousYearSnapshots = snapshots.filter(snapshot => {
+      const snapshotDate = new Date(snapshot.timestamp)
+      return snapshotDate < firstDayOfCurrentYear
+    })
+    
+    if (previousYearSnapshots.length === 0) {
+      return null
+    }
+    
+    // Get the last snapshot from previous year (most recent one)
+    return previousYearSnapshots.reduce((latest, snapshot) => {
+      return snapshot.timestamp > latest.timestamp ? snapshot : latest
+    })
+  }, [snapshots])
+
+  // Format timestamps for Monthly and YTD PnL
+  const monthlyPnLSnapshotDateTime = useMemo(() => formatSnapshotDateTime(monthlyPnLSnapshot), [monthlyPnLSnapshot])
+  const ytdPnLSnapshotDateTime = useMemo(() => formatSnapshotDateTime(ytdPnLSnapshot), [ytdPnLSnapshot])
 
   // Calculate monthly PnL (difference between current net worth and last snapshot of previous month)
   const monthlyPnLChf = useMemo(() => {
-    if (snapshots.length === 0) {
-      // If no snapshots, fall back to transaction-based calculation
-      const now = new Date()
-      const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-      lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
-      const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+    if (monthlyPnLSnapshot) {
+      // Use snapshot if available
+      const previousMonthNetWorth = convert(monthlyPnLSnapshot.total, 'CHF')
       return totalNetWorthChf - previousMonthNetWorth
     }
-
-    // Find the last snapshot from the previous month
+    
+    // If no snapshots, fall back to transaction-based calculation
     const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth()
-    
-    // Get the first day of the current month in UTC (snapshots before this are from previous month)
-    const firstDayOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 1, 0, 0, 0, 0))
-    
-    // Find snapshots from the previous month (before the first day of current month)
-    const previousMonthSnapshots = snapshots.filter(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      return snapshotDate < firstDayOfCurrentMonth
-    })
-    
-    if (previousMonthSnapshots.length === 0) {
-      // If no snapshot from previous month, fall back to transaction-based calculation
-      const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-      lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
-      const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
-      return totalNetWorthChf - previousMonthNetWorth
-    }
-    
-    // Get the last snapshot from previous month (most recent one)
-    const lastSnapshot = previousMonthSnapshots.reduce((latest, snapshot) => {
-      return snapshot.timestamp > latest.timestamp ? snapshot : latest
-    })
-    
-    // Snapshots are stored in CHF, so we can use the total directly
-    // (convert handles CHF->CHF as identity)
-    const previousMonthNetWorth = convert(lastSnapshot.total, 'CHF')
+    const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+    lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+    const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
     return totalNetWorthChf - previousMonthNetWorth
-  }, [totalNetWorthChf, snapshots, calculateNetWorthAtDate, convert])
+  }, [totalNetWorthChf, monthlyPnLSnapshot, calculateNetWorthAtDate, convert])
 
   // Calculate monthly PnL percentage
   const monthlyPnLPercentage = useMemo(() => {
-    if (snapshots.length === 0) {
-      // If no snapshots, fall back to transaction-based calculation
-      const now = new Date()
-      const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-      lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
-      const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
+    if (monthlyPnLSnapshot) {
+      // Use snapshot if available
+      const previousMonthNetWorth = convert(monthlyPnLSnapshot.total, 'CHF')
       if (previousMonthNetWorth === 0) return 0
       return ((totalNetWorthChf - previousMonthNetWorth) / previousMonthNetWorth) * 100
     }
-
-    // Find the last snapshot from the previous month
+    
+    // If no snapshots, fall back to transaction-based calculation
     const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth()
-    
-    // Get the first day of the current month in UTC (snapshots before this are from previous month)
-    const firstDayOfCurrentMonth = new Date(Date.UTC(currentYear, currentMonth, 1, 0, 0, 0, 0))
-    
-    // Find snapshots from the previous month (before the first day of current month)
-    const previousMonthSnapshots = snapshots.filter(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      return snapshotDate < firstDayOfCurrentMonth
-    })
-    
-    if (previousMonthSnapshots.length === 0) {
-      // If no snapshot from previous month, fall back to transaction-based calculation
-      const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-      lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
-      const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
-      if (previousMonthNetWorth === 0) return 0
-      return ((totalNetWorthChf - previousMonthNetWorth) / previousMonthNetWorth) * 100
-    }
-    
-    // Get the last snapshot from previous month (most recent one)
-    const lastSnapshot = previousMonthSnapshots.reduce((latest, snapshot) => {
-      return snapshot.timestamp > latest.timestamp ? snapshot : latest
-    })
-    
-    // Snapshots are stored in CHF, so we can use the total directly
-    // (convert handles CHF->CHF as identity)
-    const previousMonthNetWorth = convert(lastSnapshot.total, 'CHF')
+    const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+    lastDayOfPreviousMonth.setHours(23, 59, 59, 999)
+    const previousMonthNetWorth = calculateNetWorthAtDate(lastDayOfPreviousMonth)
     if (previousMonthNetWorth === 0) return 0
     return ((totalNetWorthChf - previousMonthNetWorth) / previousMonthNetWorth) * 100
-  }, [totalNetWorthChf, snapshots, calculateNetWorthAtDate, convert])
+  }, [totalNetWorthChf, monthlyPnLSnapshot, calculateNetWorthAtDate, convert])
 
   // Calculate Year-to-Date (YTD) PnL (compare latest snapshot from previous year to current state)
   const ytdPnLChf = useMemo(() => {
-    if (snapshots.length === 0) {
-      // If no snapshots, consider previous year net worth to be 0
-      return totalNetWorthChf
-    }
-
-    const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    const previousYear = currentYear - 1
-    
-    // Get the first day of the current year in UTC (snapshots before this are from previous year)
-    const firstDayOfCurrentYear = new Date(Date.UTC(currentYear, 0, 1, 0, 0, 0, 0))
-    
-    // Find snapshots from the previous year (before the first day of current year)
-    const previousYearSnapshots = snapshots.filter(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      return snapshotDate < firstDayOfCurrentYear
-    })
-    
-    if (previousYearSnapshots.length === 0) {
-      // If no snapshot from previous year, consider net worth to be 0
-      return totalNetWorthChf
+    if (ytdPnLSnapshot) {
+      // Use snapshot if available
+      const previousYearNetWorth = convert(ytdPnLSnapshot.total, 'CHF')
+      return totalNetWorthChf - previousYearNetWorth
     }
     
-    // Get the last snapshot from previous year (most recent one)
-    const lastSnapshot = previousYearSnapshots.reduce((latest, snapshot) => {
-      return snapshot.timestamp > latest.timestamp ? snapshot : latest
-    })
-    
-    // Snapshots are stored in CHF, so we can use the total directly
-    // (convert handles CHF->CHF as identity)
-    const previousYearNetWorth = convert(lastSnapshot.total, 'CHF')
-    return totalNetWorthChf - previousYearNetWorth
-  }, [totalNetWorthChf, snapshots, convert])
+    // If no snapshots, consider previous year net worth to be 0
+    return totalNetWorthChf
+  }, [totalNetWorthChf, ytdPnLSnapshot, convert])
 
   // Calculate YTD PnL percentage
   const ytdPnLPercentage = useMemo(() => {
-    if (snapshots.length === 0) {
-      // If no snapshots, consider previous year net worth to be 0
-      // Percentage is undefined when starting from 0, return 0 or handle appropriately
-      return 0
-    }
-
-    const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    
-    // Get the first day of the current year in UTC (snapshots before this are from previous year)
-    const firstDayOfCurrentYear = new Date(Date.UTC(currentYear, 0, 1, 0, 0, 0, 0))
-    
-    // Find snapshots from the previous year (before the first day of current year)
-    const previousYearSnapshots = snapshots.filter(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      return snapshotDate < firstDayOfCurrentYear
-    })
-    
-    if (previousYearSnapshots.length === 0) {
-      // If no snapshot from previous year, consider net worth to be 0
-      // Percentage is undefined when starting from 0, return 0
-      return 0
+    if (ytdPnLSnapshot) {
+      // Use snapshot if available
+      const previousYearNetWorth = convert(ytdPnLSnapshot.total, 'CHF')
+      if (previousYearNetWorth === 0) return 0
+      return ((totalNetWorthChf - previousYearNetWorth) / previousYearNetWorth) * 100
     }
     
-    // Get the last snapshot from previous year (most recent one)
-    const lastSnapshot = previousYearSnapshots.reduce((latest, snapshot) => {
-      return snapshot.timestamp > latest.timestamp ? snapshot : latest
-    })
-    
-    // Snapshots are stored in CHF, so we can use the total directly
-    // (convert handles CHF->CHF as identity)
-    const previousYearNetWorth = convert(lastSnapshot.total, 'CHF')
-    if (previousYearNetWorth === 0) return 0
-    return ((totalNetWorthChf - previousYearNetWorth) / previousYearNetWorth) * 100
-  }, [totalNetWorthChf, snapshots, convert])
+    // If no snapshots, consider previous year net worth to be 0
+    // Percentage is undefined when starting from 0, return 0
+    return 0
+  }, [totalNetWorthChf, ytdPnLSnapshot, convert])
 
 
   // Convert values from CHF to baseCurrency
@@ -939,10 +898,13 @@ function Dashboard() {
             </div>
             <div className="space-y-2">
               <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1">Daily PnL</div>
+                <div className="text-xs md:text-sm text-text-muted mb-1 flex justify-between">
+                  <span>Daily PnL</span>
+                  {latestSnapshotDateTime && <span>({latestSnapshotDateTime})</span>}
+                </div>
                 {dailyPnLChf === null ? (
                   <div className="text-xs md:text-sm text-warning">
-                    ⚠️ No snapshot available for previous day
+                    ⚠️ No snapshot available
                   </div>
                 ) : (
                   <div className="flex flex-col gap-1">
@@ -965,7 +927,10 @@ function Dashboard() {
                 )}
               </div>
               <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1">Monthly PnL</div>
+                <div className="text-xs md:text-sm text-text-muted mb-1 flex justify-between">
+                  <span>Monthly PnL</span>
+                  {monthlyPnLSnapshotDateTime && <span>({monthlyPnLSnapshotDateTime})</span>}
+                </div>
                 <div className="flex flex-col gap-1">
                   <div className="flex items-baseline gap-2">
                     <TotalText variant={monthlyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
@@ -981,7 +946,10 @@ function Dashboard() {
                 </div>
               </div>
               <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1">YTD PnL</div>
+                <div className="text-xs md:text-sm text-text-muted mb-1 flex justify-between">
+                  <span>YTD PnL</span>
+                  {ytdPnLSnapshotDateTime && <span>({ytdPnLSnapshotDateTime})</span>}
+                </div>
                 <div className="flex flex-col gap-1">
                   <div className="flex items-baseline gap-2">
                     <TotalText variant={ytdPnLConverted >= 0 ? 'inflow' : 'outflow'}>
