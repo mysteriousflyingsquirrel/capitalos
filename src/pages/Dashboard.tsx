@@ -836,79 +836,97 @@ function Dashboard() {
   // Generate net worth evolution data from snapshots (only last snapshot per month)
   const netWorthData = useMemo(() => {
     if (snapshots.length === 0 || !convert) {
-      // If no snapshots or convert function not available, return empty array
       return []
     }
 
-    // Calculate cutoff date based on timeframe
+    // Calculate cutoff timestamp based on timeframe (using UTC)
     const now = new Date()
-    let cutoffDate: Date | null = null
+    let cutoffTimestamp: number | null = null
 
     switch (timeFrame) {
       case 'YTD':
-        cutoffDate = new Date(now.getFullYear(), 0, 1)
+        cutoffTimestamp = Date.UTC(now.getUTCFullYear(), 0, 1)
         break
       case '6M':
-        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate())
+        cutoffTimestamp = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)
         break
       case '1Y':
-        cutoffDate = new Date(now.getFullYear(), now.getMonth() - 12, now.getDate())
+        cutoffTimestamp = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 12, 1)
         break
       case '5Y':
-        cutoffDate = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate())
+        cutoffTimestamp = Date.UTC(now.getUTCFullYear() - 5, now.getUTCMonth(), 1)
         break
       case 'MAX':
       default:
-        cutoffDate = null
+        cutoffTimestamp = null
         break
     }
 
-    // Filter snapshots based on timeframe and sort
-    const filteredSnapshots = snapshots
-      .filter(snapshot => {
-        if (!cutoffDate) return true
-        const snapshotDate = new Date(snapshot.timestamp)
-        return snapshotDate >= cutoffDate
-      })
-      .sort((a, b) => a.timestamp - b.timestamp)
+    // Get current year and month in UTC (to exclude current month)
+    const currentYear = now.getUTCFullYear()
+    const currentMonth = now.getUTCMonth() + 1 // 1-12 for comparison with date field
 
-    // Group snapshots by month and keep only the last snapshot of each month
+    // Filter snapshots by timeframe and exclude current month
+    // Use the date field (YYYY-MM-DD) instead of parsing timestamp to avoid timezone issues
+    const filteredSnapshots = snapshots.filter(snapshot => {
+      // Parse date field (YYYY-MM-DD) to get year and month
+      const [snapshotYearStr, snapshotMonthStr] = snapshot.date.split('-')
+      const snapshotYear = parseInt(snapshotYearStr, 10)
+      const snapshotMonth = parseInt(snapshotMonthStr, 10) // 1-12
+      
+      // Exclude snapshots from current month (only show completed months)
+      if (snapshotYear === currentYear && snapshotMonth === currentMonth) {
+        return false
+      }
+      
+      // Apply timeframe filter if specified
+      if (cutoffTimestamp !== null && snapshot.timestamp < cutoffTimestamp) {
+        return false
+      }
+      return true
+    })
+
+    // Group snapshots by year-month and keep only the last one per month
+    // Use a Map with year-month as key to ensure no duplicates
     const snapshotsByMonth = new Map<string, NetWorthSnapshot>()
     
     filteredSnapshots.forEach(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      const monthKey = `${snapshotDate.getUTCFullYear()}-${snapshotDate.getUTCMonth()}`
+      // Parse date field (YYYY-MM-DD) to get year-month key
+      const [yearStr, monthStr] = snapshot.date.split('-')
+      const monthKey = `${yearStr}-${monthStr}` // Already in YYYY-MM format
       
-      // If we already have a snapshot for this month, keep the one with the latest timestamp
-      const existingSnapshot = snapshotsByMonth.get(monthKey)
-      if (!existingSnapshot || snapshot.timestamp > existingSnapshot.timestamp) {
+      // Keep only the snapshot with the latest timestamp for each month
+      const existing = snapshotsByMonth.get(monthKey)
+      if (!existing || snapshot.timestamp > existing.timestamp) {
         snapshotsByMonth.set(monthKey, snapshot)
       }
     })
 
-    // Convert to array and sort by timestamp
-    const monthlySnapshots = Array.from(snapshotsByMonth.values())
+    // Convert to array, sort by timestamp, and create chart data
+    const chartData: NetWorthDataPoint[] = Array.from(snapshotsByMonth.values())
       .sort((a, b) => a.timestamp - b.timestamp)
+      .map(snapshot => {
+        // Parse date field (YYYY-MM-DD) to create month label
+        const [yearStr, monthStr, dayStr] = snapshot.date.split('-')
+        const year = parseInt(yearStr, 10)
+        const month = parseInt(monthStr, 10) - 1 // Convert to 0-indexed for Date constructor
+        const date = new Date(Date.UTC(year, month, 1))
+        const monthLabel = date.toLocaleString('en-US', { month: 'short', year: 'numeric' })
 
-    // Convert snapshots to chart data format
-    const chartData: NetWorthDataPoint[] = monthlySnapshots.map(snapshot => {
-      const snapshotDate = new Date(snapshot.timestamp)
-      const month = snapshotDate.toLocaleString('en-US', { month: 'short', year: 'numeric' })
-
-      return {
-        month,
-        'Total Net Worth': convert(snapshot.total, 'CHF'),
-        'Cash': convert(snapshot.categories['Cash'] || 0, 'CHF'),
-        'Bank Accounts': convert(snapshot.categories['Bank Accounts'] || 0, 'CHF'),
-        'Retirement Funds': convert(snapshot.categories['Retirement Funds'] || 0, 'CHF'),
-        'Index Funds': convert(snapshot.categories['Index Funds'] || 0, 'CHF'),
-        'Stocks': convert(snapshot.categories['Stocks'] || 0, 'CHF'),
-        'Commodities': convert(snapshot.categories['Commodities'] || 0, 'CHF'),
-        'Crypto': convert(snapshot.categories['Crypto'] || 0, 'CHF'),
-        'Real Estate': convert(snapshot.categories['Real Estate'] || 0, 'CHF'),
-        'Depreciating Assets': convert(snapshot.categories['Depreciating Assets'] || 0, 'CHF'),
-      }
-    })
+        return {
+          month: monthLabel,
+          'Total Net Worth': convert(snapshot.total, 'CHF'),
+          'Cash': convert(snapshot.categories['Cash'] || 0, 'CHF'),
+          'Bank Accounts': convert(snapshot.categories['Bank Accounts'] || 0, 'CHF'),
+          'Retirement Funds': convert(snapshot.categories['Retirement Funds'] || 0, 'CHF'),
+          'Index Funds': convert(snapshot.categories['Index Funds'] || 0, 'CHF'),
+          'Stocks': convert(snapshot.categories['Stocks'] || 0, 'CHF'),
+          'Commodities': convert(snapshot.categories['Commodities'] || 0, 'CHF'),
+          'Crypto': convert(snapshot.categories['Crypto'] || 0, 'CHF'),
+          'Real Estate': convert(snapshot.categories['Real Estate'] || 0, 'CHF'),
+          'Depreciating Assets': convert(snapshot.categories['Depreciating Assets'] || 0, 'CHF'),
+        }
+      })
 
     return chartData
   }, [snapshots, convert, timeFrame])
@@ -1055,6 +1073,10 @@ function Dashboard() {
                 dataKey="month"
                 stroke={CHART_COLORS.muted1}
                 tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={60}
               />
               <YAxis
                 stroke={CHART_COLORS.muted1}
