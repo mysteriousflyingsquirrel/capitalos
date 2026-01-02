@@ -635,7 +635,7 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions, onEdit
       {menuOpen && menuPosition && (
         <div
           ref={menuRef}
-          className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card py-2 min-w-[180px]"
+          className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 min-w-[180px]"
           style={{ left: menuPosition.x, top: menuPosition.y }}
         >
           <button
@@ -1198,7 +1198,7 @@ function NetWorth() {
         </div>
 
         {/* Grouped Categories */}
-        <div className="space-y-4">
+        <div className="space-y-6">
           {categoryOrder.map((category) => {
             const items = groupedItems[category] || []
 
@@ -1514,7 +1514,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
           Add Item – {category}
         </Heading>
@@ -1818,7 +1818,7 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
           Edit Item
         </Heading>
@@ -2304,7 +2304,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
           {isEditing 
             ? `Edit Transaction – ${item.name}`
@@ -2586,7 +2586,7 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div className="w-full max-w-4xl bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-4xl bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
           Transactions – {item.name}
         </Heading>

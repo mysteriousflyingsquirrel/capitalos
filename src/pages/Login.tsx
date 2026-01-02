@@ -59,7 +59,7 @@ function Login() {
         />
       </div>
       <div className="max-w-md w-full relative z-10">
-        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card p-8">
+        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={1} className="mb-6 text-center">
             Capitalos
           </Heading>
