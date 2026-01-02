@@ -869,10 +869,26 @@ function Dashboard() {
     // Filter snapshots by timeframe and exclude current month
     // Use the date field (YYYY-MM-DD) instead of parsing timestamp to avoid timezone issues
     const filteredSnapshots = snapshots.filter(snapshot => {
+      // Skip if date is missing or malformed
+      if (!snapshot.date || typeof snapshot.date !== 'string') {
+        return false
+      }
+      
       // Parse date field (YYYY-MM-DD) to get year and month
-      const [snapshotYearStr, snapshotMonthStr] = snapshot.date.split('-')
+      const dateParts = snapshot.date.split('-')
+      if (dateParts.length < 2) {
+        return false
+      }
+      
+      const snapshotYearStr = dateParts[0]
+      const snapshotMonthStr = dateParts[1]
       const snapshotYear = parseInt(snapshotYearStr, 10)
       const snapshotMonth = parseInt(snapshotMonthStr, 10) // 1-12
+      
+      // Skip if parsing failed
+      if (isNaN(snapshotYear) || isNaN(snapshotMonth)) {
+        return false
+      }
       
       // Exclude snapshots from current month (only show completed months)
       if (snapshotYear === currentYear && snapshotMonth === currentMonth) {
@@ -892,7 +908,17 @@ function Dashboard() {
     
     filteredSnapshots.forEach(snapshot => {
       // Parse date field (YYYY-MM-DD) to get year-month key
-      const [yearStr, monthStr] = snapshot.date.split('-')
+      if (!snapshot.date || typeof snapshot.date !== 'string') {
+        return
+      }
+      
+      const dateParts = snapshot.date.split('-')
+      if (dateParts.length < 2) {
+        return
+      }
+      
+      const yearStr = dateParts[0]
+      const monthStr = dateParts[1]
       const monthKey = `${yearStr}-${monthStr}` // Already in YYYY-MM format
       
       // Keep only the snapshot with the latest timestamp for each month
@@ -907,9 +933,24 @@ function Dashboard() {
       .sort((a, b) => a.timestamp - b.timestamp)
       .map(snapshot => {
         // Parse date field (YYYY-MM-DD) to create month label
-        const [yearStr, monthStr, dayStr] = snapshot.date.split('-')
+        if (!snapshot.date || typeof snapshot.date !== 'string') {
+          return null
+        }
+        
+        const dateParts = snapshot.date.split('-')
+        if (dateParts.length < 2) {
+          return null
+        }
+        
+        const yearStr = dateParts[0]
+        const monthStr = dateParts[1]
         const year = parseInt(yearStr, 10)
         const month = parseInt(monthStr, 10) - 1 // Convert to 0-indexed for Date constructor
+        
+        if (isNaN(year) || isNaN(month)) {
+          return null
+        }
+        
         const date = new Date(Date.UTC(year, month, 1))
         const monthLabel = date.toLocaleString('en-US', { month: 'short', year: 'numeric' })
 
@@ -927,6 +968,73 @@ function Dashboard() {
           'Depreciating Assets': convert(snapshot.categories['Depreciating Assets'] || 0, 'CHF'),
         }
       })
+      .filter((item): item is NetWorthDataPoint => item !== null)
+
+    // Add current month snapshot as last entry if it exists
+    const currentMonthSnapshots = snapshots.filter(snapshot => {
+      if (!snapshot.date || typeof snapshot.date !== 'string') {
+        return false
+      }
+      
+      const dateParts = snapshot.date.split('-')
+      if (dateParts.length < 2) {
+        return false
+      }
+      
+      const snapshotYearStr = dateParts[0]
+      const snapshotMonthStr = dateParts[1]
+      const snapshotYear = parseInt(snapshotYearStr, 10)
+      const snapshotMonth = parseInt(snapshotMonthStr, 10)
+      
+      if (isNaN(snapshotYear) || isNaN(snapshotMonth)) {
+        return false
+      }
+      
+      return snapshotYear === currentYear && snapshotMonth === currentMonth
+    })
+
+    if (currentMonthSnapshots.length > 0) {
+      // Get the last snapshot of current month (by timestamp)
+      const lastCurrentMonthSnapshot = currentMonthSnapshots.reduce((latest, snapshot) => {
+        return snapshot.timestamp > latest.timestamp ? snapshot : latest
+      })
+
+      // Parse date field to create month label
+      if (!lastCurrentMonthSnapshot.date || typeof lastCurrentMonthSnapshot.date !== 'string') {
+        return chartData
+      }
+      
+      const dateParts = lastCurrentMonthSnapshot.date.split('-')
+      if (dateParts.length < 2) {
+        return chartData
+      }
+      
+      const yearStr = dateParts[0]
+      const monthStr = dateParts[1]
+      const year = parseInt(yearStr, 10)
+      const month = parseInt(monthStr, 10) - 1
+      
+      if (isNaN(year) || isNaN(month)) {
+        return chartData
+      }
+      
+      const date = new Date(Date.UTC(year, month, 1))
+      const monthLabel = date.toLocaleString('en-US', { month: 'short', year: 'numeric' })
+
+      chartData.push({
+        month: monthLabel,
+        'Total Net Worth': convert(lastCurrentMonthSnapshot.total, 'CHF'),
+        'Cash': convert(lastCurrentMonthSnapshot.categories['Cash'] || 0, 'CHF'),
+        'Bank Accounts': convert(lastCurrentMonthSnapshot.categories['Bank Accounts'] || 0, 'CHF'),
+        'Retirement Funds': convert(lastCurrentMonthSnapshot.categories['Retirement Funds'] || 0, 'CHF'),
+        'Index Funds': convert(lastCurrentMonthSnapshot.categories['Index Funds'] || 0, 'CHF'),
+        'Stocks': convert(lastCurrentMonthSnapshot.categories['Stocks'] || 0, 'CHF'),
+        'Commodities': convert(lastCurrentMonthSnapshot.categories['Commodities'] || 0, 'CHF'),
+        'Crypto': convert(lastCurrentMonthSnapshot.categories['Crypto'] || 0, 'CHF'),
+        'Real Estate': convert(lastCurrentMonthSnapshot.categories['Real Estate'] || 0, 'CHF'),
+        'Depreciating Assets': convert(lastCurrentMonthSnapshot.categories['Depreciating Assets'] || 0, 'CHF'),
+      })
+    }
 
     return chartData
   }, [snapshots, convert, timeFrame])
