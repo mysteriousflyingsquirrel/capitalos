@@ -9,7 +9,6 @@ import { formatMoney, formatNumber } from '../lib/currency'
 import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
-import { fetchCryptoPriceBySource, isKrakenSpotSupported, type CryptoPriceSource, type QuoteCurrency } from '../services/cryptoPriceProvider'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import {
   saveNetWorthItems,
@@ -39,8 +38,6 @@ export interface NetWorthItem {
   platform: string
   currency: string
   monthlyDepreciationChf?: number // Only for Depreciating Assets category
-  priceSource?: 'KRAKEN_SPOT' | 'KRAKEN_FUTURES' | 'MEXC' | 'ASTER' // Only for Crypto category
-  quoteCurrency?: 'USD' | 'USDT' | 'USDC' // Only for Crypto category - quote currency for price fetching
 }
 
 type TransactionSide = 'buy' | 'sell'
@@ -838,35 +835,7 @@ function NetWorth() {
           loadPlatforms(defaultPlatforms, uid),
         ])
         console.log('Loaded transactions from Firestore:', txs.length, txs)
-        
-        // Migrate existing crypto items: set priceSource to KRAKEN_SPOT and quoteCurrency to USD if not set
-        const migratedItems = items.map(item => {
-          if (item.category === 'Crypto') {
-            const updates: Partial<NetWorthItem> = {}
-            if (!item.priceSource) {
-              updates.priceSource = 'KRAKEN_SPOT' as CryptoPriceSource
-            }
-            if (!item.quoteCurrency) {
-              updates.quoteCurrency = 'USD' as QuoteCurrency
-            }
-            if (Object.keys(updates).length > 0) {
-              return { ...item, ...updates }
-            }
-          }
-          return item
-        })
-        
-        // Save migrated items if any were migrated
-        if (migratedItems.some((item, index) => item !== items[index])) {
-          console.log('Migrating crypto items to KRAKEN_SPOT price source and USD quote currency')
-          if (uid) {
-            saveNetWorthItems(migratedItems, uid).catch((error) => {
-              console.error('Failed to save migrated items:', error)
-            })
-          }
-        }
-        
-        setNetWorthItems(migratedItems)
+        setNetWorthItems(items)
         setTransactions(txs)
         setPlatforms(loadedPlatforms)
       } catch (error) {
@@ -939,54 +908,20 @@ function NetWorth() {
         return
       }
 
-    // Group items by (priceSource, quoteCurrency) and fetch prices accordingly
-    const itemsBySourceAndQuote = new Map<string, { tickers: string[], items: NetWorthItem[] }>()
+    const tickers = cryptoItems.map(item => item.name.trim().toUpperCase())
+    const uniqueTickers = [...new Set(tickers)]
     
-    for (const item of cryptoItems) {
-      const priceSource: CryptoPriceSource = item.priceSource || 'KRAKEN_SPOT' // Default to KRAKEN_SPOT for existing items
-      const quoteCurrency: QuoteCurrency = item.quoteCurrency || 'USD' // Default to USD for existing items
-      const ticker = item.name.trim().toUpperCase()
-      const key = `${priceSource}_${quoteCurrency}`
+      const { prices, usdToChfRate: rate } = await fetchCryptoData(uniqueTickers)
       
-      if (!itemsBySourceAndQuote.has(key)) {
-        itemsBySourceAndQuote.set(key, { tickers: [], items: [] })
-      }
-      itemsBySourceAndQuote.get(key)!.tickers.push(ticker)
-      itemsBySourceAndQuote.get(key)!.items.push(item)
-    }
-    
-    // Fetch prices from each (source, quoteCurrency) combination
-    const allPrices: Record<string, number> = {}
-    
-    for (const [key, { tickers, items }] of itemsBySourceAndQuote.entries()) {
-      const [source, quoteCurrency] = key.split('_') as [CryptoPriceSource, QuoteCurrency]
-      const uniqueTickers = [...new Set(tickers)]
+      // Update crypto prices
+      setCryptoPrices(prev => ({ ...prev, ...prices }))
       
-      if (source === 'KRAKEN_SPOT') {
-        // Use new price provider for Kraken Spot with quote currency
-        const prices = await fetchCryptoPricesBySource(uniqueTickers, source, quoteCurrency)
-        Object.assign(allPrices, prices)
-      } else {
-        // For other sources (not implemented yet), fall back to CryptoCompare
-        // This maintains backward compatibility during migration
-        const { prices } = await fetchCryptoData(uniqueTickers)
-        Object.assign(allPrices, prices)
-      }
-    }
-    
-    // Also fetch USD→CHF rate (still using CryptoCompare for now)
-    try {
-      const { usdToChfRate: rate } = await fetchCryptoData([])
+      // Update USD→CHF rate
       if (rate !== null) {
         setUsdToChfRate(rate)
       }
-    } catch (error) {
-      console.error('Error fetching USD→CHF rate:', error)
-    }
-    
-    // Update crypto prices
-    setCryptoPrices(prev => ({ ...prev, ...allPrices }))
-    setCryptoPricesLastUpdate(Date.now())
+      
+      setCryptoPricesLastUpdate(Date.now())
       } catch (error) {
       console.error('Error fetching crypto data:', error)
     } finally {
@@ -1155,7 +1090,7 @@ function NetWorth() {
 
   const handleAddItem = (
     category: NetWorthCategory,
-    data: { name: string; currency: string; platform: string; monthlyDepreciationChf?: number; priceSource?: CryptoPriceSource }
+    data: { name: string; currency: string; platform: string; monthlyDepreciationChf?: number }
   ) => {
     const id =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -1169,8 +1104,6 @@ function NetWorth() {
       currency: data.currency,
       platform: data.platform,
       ...(data.monthlyDepreciationChf !== undefined && { monthlyDepreciationChf: data.monthlyDepreciationChf }),
-      // For Crypto items, set priceSource (default to KRAKEN_SPOT if not provided)
-      ...(category === 'Crypto' && { priceSource: data.priceSource || 'KRAKEN_SPOT' }),
     }
 
     setNetWorthItems((prev) => [...prev, newItem])
@@ -1337,7 +1270,7 @@ function NetWorth() {
     setEditingItemId(itemId)
   }
 
-  const handleSaveEditItem = (itemId: string, newName: string, currency: string, platform: string, monthlyDepreciationChf?: number, priceSource?: CryptoPriceSource, quoteCurrency?: QuoteCurrency) => {
+  const handleSaveEditItem = (itemId: string, newName: string, currency: string, platform: string, monthlyDepreciationChf?: number) => {
     setNetWorthItems((prev) =>
       prev.map((item) => 
         item.id === itemId 
@@ -1346,20 +1279,12 @@ function NetWorth() {
               name: newName.trim(), 
               currency, 
               platform,
-              ...(monthlyDepreciationChf !== undefined && { monthlyDepreciationChf }),
-              // Update priceSource and quoteCurrency for Crypto items
-              ...(item.category === 'Crypto' && priceSource && { priceSource }),
-              ...(item.category === 'Crypto' && quoteCurrency && { quoteCurrency })
+              ...(monthlyDepreciationChf !== undefined && { monthlyDepreciationChf })
             } 
           : item
       )
     )
     setEditingItemId(null)
-    
-    // If priceSource or quoteCurrency changed for a crypto item, refresh prices
-    if (priceSource || quoteCurrency) {
-      fetchAllCryptoPrices()
-    }
   }
 
   return (
@@ -1491,7 +1416,7 @@ interface AddNetWorthItemModalProps {
   onClose: () => void
   onSubmit: (
     category: NetWorthCategory,
-    data: { name: string; currency: string; platform: string; monthlyDepreciationChf?: number; priceSource?: 'KRAKEN_SPOT' | 'KRAKEN_FUTURES' | 'MEXC' | 'ASTER'; quoteCurrency?: QuoteCurrency }
+    data: { name: string; currency: string; platform: string; monthlyDepreciationChf?: number }
   ) => string | void // Returns itemId if available
   onSaveTransaction?: (itemId: string, transaction: Omit<NetWorthTransaction, 'id' | 'itemId'>) => void
 }
@@ -1512,10 +1437,6 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   // For Crypto, Index Funds, Stocks, and Commodities, currency is always USD. For others, default to CHF.
   const [currency, setCurrency] = useState<CurrencyCode>(isCrypto || isStockCategory ? 'USD' : 'CHF')
   const [platform, setPlatform] = useState('Physical')
-  // Price source for Crypto items (default to KRAKEN_SPOT)
-  const [priceSource, setPriceSource] = useState<CryptoPriceSource>('KRAKEN_SPOT')
-  // Quote currency for Crypto items (default to USD)
-  const [quoteCurrency, setQuoteCurrency] = useState<QuoteCurrency>('USD')
   const isDepreciatingAsset = category === 'Depreciating Assets'
   // For date input, use YYYY-MM-DD format (HTML5 date input format)
   const [date, setDate] = useState(() => {
@@ -1528,26 +1449,19 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   
   // Fetch coin price when name is entered for Crypto items (debounced by 1 second)
   useEffect(() => {
-    if (isCrypto && name.trim() && priceSource === 'KRAKEN_SPOT') {
+    if (isCrypto && name.trim()) {
       const ticker = name.trim().toUpperCase()
-      
-      // Validate symbol is supported with selected quote currency
-      if (!isKrakenSpotSupported(ticker, quoteCurrency)) {
-        setPriceError(`Kraken Spot does not support this asset with the selected quote currency: ${ticker}/${quoteCurrency}`)
-        setPricePerItem('')
-        setIsLoadingPrice(false)
-        return
-      }
       
       // Debounce: wait 1 second after user stops typing
       const debounceTimer = setTimeout(() => {
         setIsLoadingPrice(true)
         setPriceError(null)
 
-        fetchCryptoPriceBySource(ticker, priceSource, quoteCurrency)
-          .then((price) => {
-            if (price !== null && price !== undefined) {
-              // Set the price from API (in the selected quote currency)
+        fetchCryptoPrices([ticker])
+          .then((prices) => {
+            const price = prices[ticker]
+            if (price !== undefined && price !== null) {
+              // Set the USD price directly from API (always in USD for crypto)
               setPricePerItem(price.toString())
               setPriceError(null)
             } else {
@@ -1569,14 +1483,9 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
       setPricePerItem('')
       setPriceError(null)
       setIsLoadingPrice(false)
-    } else if (isCrypto && priceSource !== 'KRAKEN_SPOT') {
-      // Clear price if non-implemented source is selected
-      setPricePerItem('')
-      setPriceError('Price source not available yet')
-      setIsLoadingPrice(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCrypto, name, priceSource, quoteCurrency]) // Run when name, priceSource, or quoteCurrency changes for crypto items
+  }, [isCrypto, name]) // Run when name changes for crypto items
 
   // Fetch stock/index fund/commodity price when name is entered (debounced by 1 second)
   useEffect(() => {
@@ -1674,27 +1583,12 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
       }
     }
 
-    // Validate crypto price source
-    if (isCrypto) {
-      if (priceSource !== 'KRAKEN_SPOT') {
-        setError('Selected price source is not available yet. Please use Kraken (Spot).')
-        return
-      }
-      // Validate symbol is supported by Kraken Spot with selected quote currency
-      const ticker = name.trim().toUpperCase()
-      if (!isKrakenSpotSupported(ticker, quoteCurrency)) {
-        setError(`Kraken Spot does not support this asset with the selected quote currency: ${ticker}/${quoteCurrency}`)
-        return
-      }
-    }
-
     // Create the item first and get its ID
     const newItemId = onSubmit(category, {
       name: name.trim(),
       currency: itemCurrency,
       platform,
       ...(isDepreciatingAsset && { monthlyDepreciationChf: Number(monthlyDepreciationChf) }),
-      ...(isCrypto && { priceSource, quoteCurrency }),
     })
 
     // Create the initial transaction
@@ -1733,7 +1627,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
           Add Item – {category}
         </Heading>
@@ -1770,72 +1664,31 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
             />
           </div>
 
-          {/* Currency selector for Crypto items */}
-          {isCrypto && (
-            <div>
-              <label
-                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                htmlFor="nw-quote-currency"
-              >
-                Currency
-              </label>
-              <select
-                id="nw-quote-currency"
-                value={quoteCurrency}
-                onChange={(e) => setQuoteCurrency(e.target.value as QuoteCurrency)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              >
-                <option value="USD">USD</option>
-                <option value="USDT">USDT</option>
-                <option value="USDC">USDC</option>
-              </select>
-            </div>
-          )}
-
-          {/* Currency field - only for non-crypto, non-stock categories */}
-          {!(isCrypto || isStockCategory) && (
-            <div>
-              <label
-                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                htmlFor="nw-currency"
-              >
-                Currency
-              </label>
-              <select
-                id="nw-currency"
-                value={currency}
+          {/* For all categories - same format */}
+              <div>
+                <label
+                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                  htmlFor="nw-currency"
+                >
+                  Currency
+                </label>
+            {(isCrypto || isStockCategory) ? (
+              <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-muted text-xs md:text-sm cursor-not-allowed">
+                USD
+              </div>
+            ) : (
+                <select
+                  id="nw-currency"
+                  value={currency}
                 onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              >
-                <option value="CHF">CHF</option>
-                <option value="EUR">EUR</option>
-                <option value="USD">USD</option>
-              </select>
-            </div>
-          )}
-
-          {/* Price Source selector for Crypto items */}
-          {isCrypto && (
-            <div>
-              <label
-                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                htmlFor="nw-price-source"
-              >
-                Price Source
-              </label>
-              <select
-                id="nw-price-source"
-                value={priceSource}
-                onChange={(e) => setPriceSource(e.target.value as CryptoPriceSource)}
-                className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-              >
-                <option value="KRAKEN_SPOT">Kraken (Spot)</option>
-                <option value="KRAKEN_FUTURES" disabled>Kraken (Futures) - Coming soon</option>
-                <option value="MEXC" disabled>MEXC - Coming soon</option>
-                <option value="ASTER" disabled>Aster - Coming soon</option>
-              </select>
-            </div>
-          )}
+                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+                >
+                  <option value="CHF">CHF</option>
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                </select>
+            )}
+          </div>
 
               <div>
                 <label
@@ -1862,7 +1715,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
                       className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                 htmlFor="nw-price-per-item"
                     >
-                Price per Item ({(isCrypto && quoteCurrency) ? quoteCurrency : (isStockCategory ? 'USD' : currency)})
+                Price per Item ({(isCrypto || isStockCategory) ? 'USD' : currency})
                 {isLoadingPrice && (isCrypto || isStockCategory) && (
                         <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
                       )}
@@ -1915,7 +1768,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
                     className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
               htmlFor="nw-total-balance"
                   >
-              Total balance of this transaction ({(isCrypto && quoteCurrency) ? quoteCurrency : (isStockCategory ? 'USD' : currency)})
+              Total balance of this transaction ({(isCrypto || isStockCategory) ? 'USD' : currency})
                   </label>
                   <input
               id="nw-total-balance"
@@ -2033,7 +1886,7 @@ interface EditNetWorthItemModalProps {
   item: NetWorthItem
   platforms: Platform[]
   onClose: () => void
-  onSave: (itemId: string, newName: string, currency: string, platform: string, monthlyDepreciationChf?: number, priceSource?: CryptoPriceSource) => void
+  onSave: (itemId: string, newName: string, currency: string, platform: string, monthlyDepreciationChf?: number) => void
 }
 
 function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWorthItemModalProps) {
@@ -2045,8 +1898,6 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
   const [monthlyDepreciationChf, setMonthlyDepreciationChf] = useState(
     item.monthlyDepreciationChf?.toString() || ''
   )
-  // Price source for Crypto items (default to KRAKEN_SPOT if not set)
-  const [priceSource, setPriceSource] = useState<CryptoPriceSource>(isCrypto ? (item.priceSource || 'KRAKEN_SPOT') : 'KRAKEN_SPOT')
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = (e: FormEvent) => {
@@ -2067,28 +1918,13 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
       }
     }
 
-    // Validate crypto price source
-    if (isCrypto) {
-      if (priceSource !== 'KRAKEN_SPOT') {
-        setError('Selected price source is not available yet. Please use Kraken (Spot).')
-        return
-      }
-      // Validate symbol is supported by Kraken Spot
-      const ticker = name.trim().toUpperCase()
-      if (!isKrakenSpotSupported(ticker)) {
-        setError(`Kraken Spot does not support this symbol/pair yet: ${ticker}`)
-        return
-      }
-    }
-
     // Currency cannot be changed - always use item's original currency
     onSave(
       item.id, 
       name.trim(), 
       item.currency, 
       platform,
-      isDepreciatingAsset ? Number(monthlyDepreciationChf) : undefined,
-      isCrypto ? priceSource : undefined
+      isDepreciatingAsset ? Number(monthlyDepreciationChf) : undefined
     )
     onClose()
   }
@@ -2150,51 +1986,6 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
                   ))}
               </select>
             </div>
-            
-            {/* Price Source selector for Crypto items */}
-            {isCrypto && (
-              <div>
-                <label
-                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                  htmlFor="edit-price-source"
-                >
-                  Price Source
-                </label>
-                <select
-                  id="edit-price-source"
-                  value={priceSource}
-                  onChange={(e) => setPriceSource(e.target.value as CryptoPriceSource)}
-                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                >
-                  <option value="KRAKEN_SPOT">Kraken (Spot)</option>
-                  <option value="KRAKEN_FUTURES" disabled>Kraken (Futures) - Coming soon</option>
-                  <option value="MEXC" disabled>MEXC - Coming soon</option>
-                  <option value="ASTER" disabled>Aster - Coming soon</option>
-                </select>
-              </div>
-            )}
-
-            {/* Currency selector for Crypto items */}
-            {isCrypto && (
-              <div>
-                <label
-                  className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                  htmlFor="edit-quote-currency"
-                >
-                  Currency
-                </label>
-                <select
-                  id="edit-quote-currency"
-                  value={quoteCurrency}
-                  onChange={(e) => setQuoteCurrency(e.target.value as QuoteCurrency)}
-                  className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                >
-                  <option value="USD">USD</option>
-                  <option value="USDT">USDT</option>
-                  <option value="USDC">USDC</option>
-                </select>
-              </div>
-            )}
             </>
           ) : (
             <>
@@ -2470,41 +2261,17 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
       // For new transactions, fetch if no price is set
       if (isEditing || !pricePerItemChf) {
         const ticker = item.name.trim().toUpperCase()
-        const priceSource: CryptoPriceSource = item.priceSource || 'KRAKEN_SPOT'
         setIsLoadingPrice(true)
         setPriceError(null)
 
-        // Use new price provider based on item's priceSource and quoteCurrency
-        const quoteCurrency: QuoteCurrency = item.quoteCurrency || 'USD'
-        if (priceSource === 'KRAKEN_SPOT') {
-          if (!isKrakenSpotSupported(ticker, quoteCurrency)) {
-            setPriceError(`Kraken Spot does not support this asset with the selected quote currency: ${ticker}/${quoteCurrency}`)
-            setIsLoadingPrice(false)
-            return
-          }
-          
-          fetchCryptoPriceBySource(ticker, priceSource, quoteCurrency)
-            .then((price) => {
-              if (price !== null && price !== undefined) {
-                // Set the USD price directly from API (always in USD for crypto)
-                setPricePerItemChf(price.toString())
-                setPriceError(null)
-              } else {
-                // If API fails and we're editing, fall back to converting from stored CHF
-                if (isEditing && transaction) {
-                  const baseAmount = convert(transaction.pricePerItemChf, 'CHF')
-                  if (exchangeRates && exchangeRates.rates['USD']) {
-                    const usdAmount = baseAmount * exchangeRates.rates['USD']
-                    setPricePerItemChf(usdAmount.toString())
-                  } else {
-                    setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
-                  }
-                } else {
-                  setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
-                }
-              }
-            })
-            .catch((err) => {
+        fetchCryptoPrices([ticker])
+          .then((prices) => {
+            const price = prices[ticker]
+            if (price !== undefined && price !== null) {
+              // Set the USD price directly from API (always in USD for crypto)
+              setPricePerItemChf(price.toString())
+              setPriceError(null)
+            } else {
               // If API fails and we're editing, fall back to converting from stored CHF
               if (isEditing && transaction) {
                 const baseAmount = convert(transaction.pricePerItemChf, 'CHF')
@@ -2512,24 +2279,34 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
                   const usdAmount = baseAmount * exchangeRates.rates['USD']
                   setPricePerItemChf(usdAmount.toString())
                 } else {
-                  setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
+                  setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
                 }
+              } else {
+                setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
+              }
+            }
+          })
+          .catch((err) => {
+            // If API fails and we're editing, fall back to converting from stored CHF
+            if (isEditing && transaction) {
+              const baseAmount = convert(transaction.pricePerItemChf, 'CHF')
+              if (exchangeRates && exchangeRates.rates['USD']) {
+                const usdAmount = baseAmount * exchangeRates.rates['USD']
+                setPricePerItemChf(usdAmount.toString())
               } else {
                 setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
               }
-            })
-            .finally(() => {
-              setIsLoadingPrice(false)
-            })
-        } else {
-          // For non-implemented sources, show error
-          setPriceError('Price source not available yet')
-          setIsLoadingPrice(false)
-        }
+            } else {
+              setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
+            }
+          })
+          .finally(() => {
+            setIsLoadingPrice(false)
+          })
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCrypto, item.name, item.priceSource, item.quoteCurrency, isEditing]) // Run when modal opens or when editing
+  }, [isCrypto, item.name, isEditing]) // Run when modal opens or when editing
 
   // Fetch stock/index fund/commodity price when modal opens (both for new transactions and when editing)
   useEffect(() => {
@@ -2897,7 +2674,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
                 className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                 htmlFor="tx-price"
               >
-                Price per Item ({item.quoteCurrency || 'USD'})
+                Price per Item (USD)
                 {isLoadingPrice && (
                   <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
                 )}
@@ -3103,8 +2880,8 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
   const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4 lg:pl-[270px] pr-4" onClick={onClose}>
-      <div className="w-full max-w-full bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
+      <div className="w-full max-w-4xl bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
           Transactions – {item.name}
         </Heading>
@@ -3121,36 +2898,15 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
             No transactions found.
           </div>
         ) : (
-          <div className="overflow-x-auto" style={{
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#39404A #11151C'
-          }}>
-            <style>{`
-              div.overflow-x-auto::-webkit-scrollbar {
-                height: 8px;
-              }
-              div.overflow-x-auto::-webkit-scrollbar-track {
-                background: #11151C;
-                border-radius: 4px;
-              }
-              div.overflow-x-auto::-webkit-scrollbar-thumb {
-                background: #39404A;
-                border-radius: 4px;
-              }
-              div.overflow-x-auto::-webkit-scrollbar-thumb:hover {
-                background: #4A5568;
-              }
-            `}</style>
-            <table className="w-full min-w-[800px]">
+          <div className="overflow-x-auto">
+            <table className="w-full">
               <thead>
                 <tr className="border-b border-border-subtle">
                   <th className="text-left py-2 px-3 text2 font-bold">Date</th>
                   <th className="text-left py-2 px-3 text2 font-bold">Side</th>
                   <th className="text-left py-2 px-3 text2 font-bold">Currency</th>
                   <th className="text-right py-2 px-3 text2 font-bold">Amount</th>
-                  <th className="text-right py-2 px-3 text2 font-bold">
-                    {isCrypto ? `Price per item (${item.quoteCurrency || 'USD'})` : 'Price per item'}
-                  </th>
+                  <th className="text-right py-2 px-3 text2 font-bold">{isCrypto ? 'Price per item (USD)' : 'Price per item'}</th>
                   <th className="text-right py-2 px-3 text2 font-bold">Total</th>
                   <th className="text-left py-2 px-3 text2 font-bold">Actions</th>
                 </tr>
@@ -3187,14 +2943,8 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
                     // Calculate total in USD (Crypto is always USD)
                     totalConverted = tx.amount * usdPrice
                     
-                    // Display price in quote currency (USD, USDT, or USDC)
-                    const quoteCurrency: QuoteCurrency = item.quoteCurrency || 'USD'
-                    if (quoteCurrency === 'USD') {
-                      priceDisplay = formatUsd(usdPrice)
-                    } else {
-                      // For USDT/USDC, just show the value with the currency label
-                      priceDisplay = `${usdPrice.toFixed(2)} ${quoteCurrency}`
-                    }
+                    // Display price in USD
+                    priceDisplay = formatUsd(usdPrice)
                   } else {
                     // Check if this is a transaction where amount is the total value (pricePerItemChf === 1)
                     if (tx.pricePerItemChf === 1) {
@@ -3256,14 +3006,7 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
                         ) : (
                           <span className={typeColor}>
                             {sign}{isCrypto 
-                              ? (() => {
-                                  const quoteCurrency: QuoteCurrency = item.quoteCurrency || 'USD'
-                                  if (quoteCurrency === 'USD') {
-                                    return formatUsd(totalConverted)
-                                  } else {
-                                    return `${Math.abs(totalConverted).toFixed(2)} ${quoteCurrency}`
-                                  }
-                                })()
+                              ? formatUsd(totalConverted) 
                               : formatMoney(Math.abs(totalConverted), tx.currency as CurrencyCode, 'ch')
                             }
                           </span>
