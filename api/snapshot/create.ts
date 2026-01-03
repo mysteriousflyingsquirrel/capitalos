@@ -65,10 +65,28 @@ interface UserSettings {
 }
 
 // Helper function to calculate coin amount (for Crypto)
+// Supports ADJUSTMENT transaction type
 function calculateCoinAmount(itemId: string, transactions: NetWorthTransaction[]): number {
   return transactions
     .filter(tx => tx.itemId === itemId)
-    .reduce((sum, tx) => sum + (tx.side === 'buy' ? 1 : -1) * tx.amount, 0)
+    .reduce((sum, tx) => {
+      // Handle Crypto-specific transaction types
+      if (tx.cryptoType) {
+        switch (tx.cryptoType) {
+          case 'BUY':
+            return sum + tx.amount
+          case 'SELL':
+            return sum - tx.amount
+          case 'ADJUSTMENT':
+            // ADJUSTMENT applies signed delta (can be positive or negative)
+            return sum + tx.amount
+          default:
+            return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
+        }
+      }
+      // Legacy BUY/SELL using 'side' field
+      return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
+    }, 0)
 }
 
 // Helper function to calculate balance in CHF

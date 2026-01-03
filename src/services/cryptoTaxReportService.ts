@@ -44,13 +44,21 @@ export async function getYearsWithCryptoActivity(uid?: string): Promise<number[]
   const cryptoItems = items.filter(item => item.category === 'Crypto')
   const years = new Set<number>()
 
-  // Get years from transactions only (buy/sell transactions on crypto items)
+  // Get years from trade-relevant transactions only (BUY/SELL, exclude ADJUSTMENT)
   transactions.forEach(tx => {
     const item = cryptoItems.find(i => i.id === tx.itemId)
-    if (item && (tx.side === 'buy' || tx.side === 'sell')) {
-      const date = new Date(tx.date)
-      if (!isNaN(date.getTime())) {
-        years.add(date.getFullYear())
+    if (item) {
+      // Include trade-relevant transactions: BUY, SELL
+      // Exclude non-trade: ADJUSTMENT
+      const isTradeRelevant = 
+        (tx.cryptoType === 'BUY' || tx.cryptoType === 'SELL') ||
+        (!tx.cryptoType && (tx.side === 'buy' || tx.side === 'sell')) // Legacy transactions
+      
+      if (isTradeRelevant) {
+        const date = new Date(tx.date)
+        if (!isNaN(date.getTime())) {
+          years.add(date.getFullYear())
+        }
       }
     }
   })
@@ -230,12 +238,19 @@ export async function generateCryptoTaxReport(
       return !isNaN(txDate.getTime()) && txDate.getTime() >= yearStart && txDate.getTime() <= yearEnd
     })
 
-    const buySellTransactions = yearTransactions.filter(tx => tx.side === 'buy' || tx.side === 'sell')
+    // Filter for trade-relevant transactions only (BUY/SELL, exclude ADJUSTMENT)
+    const tradeRelevantTransactions = yearTransactions.filter(tx => {
+      if (tx.cryptoType) {
+        return tx.cryptoType === 'BUY' || tx.cryptoType === 'SELL'
+      }
+      // Legacy transactions
+      return tx.side === 'buy' || tx.side === 'sell'
+    })
 
     const balanceStart = calculateBalanceAtTimestamp(item.id, coinTransactions, yearStart)
     const balanceEnd = calculateBalanceAtTimestamp(item.id, coinTransactions, yearEnd)
 
-    const hasActivity = balanceStart !== 0 || balanceEnd !== 0 || buySellTransactions.length > 0
+    const hasActivity = balanceStart !== 0 || balanceEnd !== 0 || tradeRelevantTransactions.length > 0
     
     if (!hasActivity) continue
 
@@ -247,32 +262,38 @@ export async function generateCryptoTaxReport(
     const buys: CryptoTransaction[] = []
     const sells: CryptoTransaction[] = []
 
-    for (const tx of buySellTransactions) {
+    for (const tx of tradeRelevantTransactions) {
       const txDate = new Date(tx.date)
       const txTimestamp = txDate.getTime()
       
-      const txPriceChf = await fetchHistoricalPrice(ticker, txTimestamp, convert)
+      // Handle BUY/SELL transactions (including legacy)
+      const isBuy = tx.cryptoType === 'BUY' || (!tx.cryptoType && tx.side === 'buy')
+      const isSell = tx.cryptoType === 'SELL' || (!tx.cryptoType && tx.side === 'sell')
       
-      let totalChf = 0
-      if (tx.pricePerItem !== undefined && tx.currency) {
-        totalChf = convert(tx.amount * tx.pricePerItem, tx.currency as CurrencyCode)
-      } else if (tx.pricePerItemChf !== undefined && tx.pricePerItemChf !== 1) {
-        totalChf = tx.amount * tx.pricePerItemChf
-      } else {
-        totalChf = tx.amount * txPriceChf
-      }
+      if (isBuy || isSell) {
+        const txPriceChf = await fetchHistoricalPrice(ticker, txTimestamp, convert)
+        
+        let totalChf = 0
+        if (tx.pricePerItem !== undefined && tx.currency) {
+          totalChf = convert(tx.amount * tx.pricePerItem, tx.currency as CurrencyCode)
+        } else if (tx.pricePerItemChf !== undefined && tx.pricePerItemChf !== 1 && tx.pricePerItemChf !== 0) {
+          totalChf = tx.amount * tx.pricePerItemChf
+        } else {
+          totalChf = tx.amount * txPriceChf
+        }
 
-      const cryptoTx: CryptoTransaction = {
-        date: tx.date,
-        amount: tx.amount,
-        priceChf: txPriceChf,
-        totalChf,
-      }
+        const cryptoTx: CryptoTransaction = {
+          date: tx.date,
+          amount: tx.amount,
+          priceChf: txPriceChf,
+          totalChf,
+        }
 
-      if (tx.side === 'buy') {
-        buys.push(cryptoTx)
-      } else if (tx.side === 'sell') {
-        sells.push(cryptoTx)
+        if (isBuy) {
+          buys.push(cryptoTx)
+        } else {
+          sells.push(cryptoTx)
+        }
       }
     }
 

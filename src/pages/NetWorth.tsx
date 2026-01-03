@@ -41,16 +41,21 @@ export interface NetWorthItem {
 }
 
 type TransactionSide = 'buy' | 'sell'
+// Crypto-only transaction types
+export type CryptoTransactionType = 'BUY' | 'SELL' | 'ADJUSTMENT'
 
 export interface NetWorthTransaction {
   id: string
   itemId: string
-  side: TransactionSide
+  side: TransactionSide // Required for backward compatibility and non-Crypto items
   currency: string
   amount: number
   pricePerItemChf: number // Kept for backward compatibility, but will be calculated from pricePerItem and currency
   pricePerItem?: number // Original price per item in original currency (optional for backward compatibility)
   date: string
+  // Transaction type fields (used for supported categories)
+  cryptoType?: CryptoTransactionType // If set, overrides 'side' for supported categories
+  adjustmentReason?: string // Optional reason/note for all transaction types
 }
 
 // Empty data - user will add their own data
@@ -102,9 +107,42 @@ export function calculateBalanceChf(
       tx.itemId === itemId && !tx.id.startsWith('depr-')
     )
     
-    // Calculate base balance from buy/sell transactions only
+    // Calculate base balance from buy/sell/adjustment transactions
     let baseBalance = itemTransactions.reduce((sum, tx) => {
-      const txValue = tx.amount * (tx.side === 'buy' ? 1 : -1)
+      // Handle ADJUSTMENT transactions
+      if (tx.cryptoType === 'ADJUSTMENT') {
+        // For ADJUSTMENT, the amount is already the delta in holdings
+        // We need to calculate the value change based on current price or average price
+        // For simplicity, we'll use the average price of buy transactions
+        const buyTransactions = itemTransactions.filter(t => 
+          (t.cryptoType === 'BUY' || (!t.cryptoType && t.side === 'buy')) && 
+          t.pricePerItemChf > 0
+        )
+        if (buyTransactions.length > 0) {
+          const totalValue = buyTransactions.reduce((s, t) => {
+            if (t.pricePerItem !== undefined && t.currency && convert) {
+              return s + convert(t.amount * t.pricePerItem, t.currency as CurrencyCode)
+            }
+            return s + t.amount * t.pricePerItemChf
+          }, 0)
+          const totalAmount = buyTransactions.reduce((s, t) => s + t.amount, 0)
+          const avgPrice = totalAmount > 0 ? totalValue / totalAmount : 0
+          return sum + tx.amount * avgPrice
+        }
+        // If no buy transactions, adjustment has no value impact
+        return sum
+      }
+      
+      // Handle BUY/SELL transactions
+      let txValue: number
+      if (tx.cryptoType === 'BUY') {
+        txValue = tx.amount
+      } else if (tx.cryptoType === 'SELL') {
+        txValue = -tx.amount
+      } else {
+        // Legacy: use side field
+        txValue = tx.amount * (tx.side === 'buy' ? 1 : -1)
+      }
       
       // For all categories, use pricePerItem and currency if available
       if (tx.pricePerItem !== undefined && tx.currency && convert) {
@@ -146,7 +184,40 @@ export function calculateBalanceChf(
   return transactions
     .filter(tx => tx.itemId === itemId)
     .reduce((sum, tx) => {
-      const txValue = tx.amount * (tx.side === 'buy' ? 1 : -1)
+      // Handle ADJUSTMENT transactions
+      if (tx.cryptoType === 'ADJUSTMENT') {
+        // For ADJUSTMENT, the amount is already the delta in holdings
+        // We need to calculate the value change based on average price of buy transactions
+        const buyTransactions = transactions.filter(t => 
+          t.itemId === itemId && 
+          (t.cryptoType === 'BUY' || (!t.cryptoType && t.side === 'buy')) && 
+          t.pricePerItemChf > 0
+        )
+        if (buyTransactions.length > 0) {
+          const totalValue = buyTransactions.reduce((s, t) => {
+            if (t.pricePerItem !== undefined && t.currency && convert) {
+              return s + convert(t.amount * t.pricePerItem, t.currency as CurrencyCode)
+            }
+            return s + t.amount * t.pricePerItemChf
+          }, 0)
+          const totalAmount = buyTransactions.reduce((s, t) => s + t.amount, 0)
+          const avgPrice = totalAmount > 0 ? totalValue / totalAmount : 0
+          return sum + tx.amount * avgPrice
+        }
+        // If no buy transactions, adjustment has no value impact
+        return sum
+      }
+      
+      // Handle BUY/SELL transactions
+      let txValue: number
+      if (tx.cryptoType === 'BUY') {
+        txValue = tx.amount
+      } else if (tx.cryptoType === 'SELL') {
+        txValue = -tx.amount
+      } else {
+        // Legacy: use side field
+        txValue = tx.amount * (tx.side === 'buy' ? 1 : -1)
+      }
       
       // For all categories, use pricePerItem and currency if available
       if (tx.pricePerItem !== undefined && tx.currency && convert) {
@@ -166,17 +237,59 @@ export function calculateBalanceChf(
  * @param transactions - Array of transactions
  * @returns Total amount of coins (buy transactions add, sell transactions subtract)
  */
+/**
+ * Calculate coin amount for a crypto asset, handling all transaction types.
+ * @param itemId - The item ID to calculate balance for
+ * @param transactions - Array of transactions
+ * @returns Total amount of coins
+ */
 export function calculateCoinAmount(itemId: string, transactions: NetWorthTransaction[]): number {
   return transactions
     .filter(tx => tx.itemId === itemId)
-    .reduce((sum, tx) => sum + (tx.side === 'buy' ? 1 : -1) * tx.amount, 0)
+    .reduce((sum, tx) => {
+      // Handle Crypto-specific transaction types
+      if (tx.cryptoType) {
+        switch (tx.cryptoType) {
+          case 'BUY':
+            // BUY increases balance
+            return sum + tx.amount
+          case 'SELL':
+            // SELL decreases balance
+            return sum - tx.amount
+          case 'ADJUSTMENT':
+            // ADJUSTMENT applies signed delta (can be positive or negative)
+            return sum + tx.amount // amount can be negative
+          default:
+            // Fallback to side-based logic
+            return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
+        }
+      }
+      // Legacy BUY/SELL using 'side' field (backward compatibility)
+      return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
+    }, 0)
 }
 
-// Calculate holdings (quantity) for Index Funds, Commodities, and Stocks
+// Calculate holdings (quantity) for all categories
+// Handles ADJUSTMENT transactions for all supported categories
 export function calculateHoldings(itemId: string, transactions: NetWorthTransaction[]): number {
   return transactions
     .filter(tx => tx.itemId === itemId)
-    .reduce((sum, tx) => sum + (tx.side === 'buy' ? 1 : -1) * tx.amount, 0)
+    .reduce((sum, tx) => {
+      // Handle ADJUSTMENT transactions for all supported categories
+      if (tx.cryptoType === 'ADJUSTMENT') {
+        // ADJUSTMENT applies signed delta (can be positive or negative)
+        return sum + tx.amount // amount can be negative
+      }
+      // BUY/SELL transactions
+      if (tx.cryptoType === 'BUY') {
+        return sum + tx.amount
+      }
+      if (tx.cryptoType === 'SELL') {
+        return sum - tx.amount
+      }
+      // Legacy BUY/SELL using 'side' field (backward compatibility)
+      return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
+    }, 0)
 }
 
 // Calculate average price per item for Index Funds, Commodities, and Stocks
@@ -1991,12 +2104,19 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { rapidApiKey } = useApiKeys()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
+  const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch')
   const isEditing = !!transaction
   const isCrypto = item.category === 'Crypto'
   const isStockCategory = item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities'
   // Categories where price per item is always 1 (no need to show input)
   const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate']
   const hidePricePerItem = categoriesWithoutPricePerItem.includes(item.category)
+  // Categories that support Buy/Sell and Adjustment modes
+  const supportsAdjustmentMode: NetWorthCategory[] = [
+    'Crypto', 'Cash', 'Bank Accounts', 'Retirement Funds', 'Stocks', 
+    'Commodities', 'Real Estate', 'Depreciating Assets'
+  ]
+  const canUseAdjustmentMode = supportsAdjustmentMode.includes(item.category)
   
   // For all categories, use original pricePerItem if available, otherwise convert from CHF
   const getInitialPrice = () => {
@@ -2020,6 +2140,19 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
       return transaction.pricePerItemChf.toString()
     }
   
+  // Transaction mode selector (Buy/Sell mode vs Adjustment mode) for supported categories
+  // In Buy/Sell mode: positive amount = buy, negative amount = sell
+  // In Adjustment mode: amount can be positive or negative
+  const [isAdjustmentMode, setIsAdjustmentMode] = useState<boolean>(() => {
+    if (canUseAdjustmentMode && transaction) {
+      return transaction.cryptoType === 'ADJUSTMENT'
+    }
+    return false // Default to Buy/Sell mode for new transactions
+  })
+  
+  // Transaction reason/note (available for all transaction types)
+  const [adjustmentReason, setAdjustmentReason] = useState(() => transaction?.adjustmentReason || '')
+  
   // Determine side from amount: positive = buy, negative = sell
   const getSideFromAmount = (amountValue: string): TransactionTab => {
     const parsed = Number(amountValue)
@@ -2033,28 +2166,47 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   const [inputMode, setInputMode] = useState<'amount' | 'balance'>('amount')
   const [amount, setAmount] = useState(() => {
     if (transaction) {
-      // For editing, keep the original sign
+      // For editing, handle different transaction types
+      if (canUseAdjustmentMode && transaction.cryptoType === 'ADJUSTMENT') {
+        // ADJUSTMENT can be negative, show the signed amount
+        return transaction.amount.toString()
+      }
+      // BUY/SELL: keep the original sign
       return transaction.side === 'sell' ? `-${transaction.amount}` : transaction.amount.toString()
     }
     return '0'
   })
-  const [targetBalance, setTargetBalance] = useState(() => {
+  
+  // Derive transactionType from mode and amount (must be after amount is defined)
+  const transactionType = useMemo<CryptoTransactionType>(() => {
+    if (!canUseAdjustmentMode) return 'BUY' // Not used for unsupported categories
+    if (isAdjustmentMode) return 'ADJUSTMENT'
+    // In Buy/Sell mode, determine from amount sign
+    const parsedAmount = Number(amount)
+    if (!isNaN(parsedAmount) && parsedAmount !== 0) {
+      return parsedAmount > 0 ? 'BUY' : 'SELL'
+    }
+    // Default to BUY if amount is 0 or invalid
+    return 'BUY'
+  }, [canUseAdjustmentMode, isAdjustmentMode, amount])
+  
+  const [targetHoldings, setTargetHoldings] = useState(() => {
     if (transaction) {
-      // For editing, calculate what the balance/holdings was after this transaction
+      // For editing, calculate what the holdings was after this transaction
       const relevantTransactions = transactions.filter(tx => 
         tx.itemId === item.id && tx.id !== transaction.id
       )
       // For all categories, use holdings (quantity)
-      const balanceBefore = calculateHoldings(item.id, relevantTransactions)
-      return (balanceBefore + (transaction.side === 'buy' ? 1 : -1) * transaction.amount).toString()
+      const holdingsBefore = calculateHoldings(item.id, relevantTransactions)
+      return (holdingsBefore + (transaction.side === 'buy' ? 1 : -1) * transaction.amount).toString()
     }
     // Default to current holdings for new transactions
     const relevantTransactions = transactions.filter(tx => tx.itemId === item.id)
-    const currentHoldings = calculateHoldings(item.id, relevantTransactions)
-    return currentHoldings.toString()
+    const currentHoldingsValue = calculateHoldings(item.id, relevantTransactions)
+    return currentHoldingsValue.toString()
   })
   const [isUpdatingFromAmount, setIsUpdatingFromAmount] = useState(false)
-  const [isUpdatingFromBalance, setIsUpdatingFromBalance] = useState(false)
+  const [isUpdatingFromHoldings, setIsUpdatingFromHoldings] = useState(false)
   
   // Derive activeTab from amount
   const activeTab = useMemo(() => getSideFromAmount(amount), [amount, transaction])
@@ -2081,14 +2233,26 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   const [priceError, setPriceError] = useState<string | null>(null)
   
   // Calculate current holdings for this item, excluding the transaction being edited
-  // For all categories, use holdings (quantity)
-  const currentBalance = useMemo(() => {
+  const currentHoldings = useMemo(() => {
     const relevantTransactions = transactions.filter(tx => 
       tx.itemId === item.id && (!transaction || tx.id !== transaction.id)
     )
-    // For all categories, calculate holdings (quantity)
     return calculateHoldings(item.id, relevantTransactions)
   }, [transactions, item.id, transaction])
+  
+  // Calculate current balance for display (for crypto: balance value in USD, for others: same as holdings)
+  const currentBalance = useMemo(() => {
+    // For crypto, calculate balance value (holdings * current price in USD)
+    if (isCrypto && pricePerItemChf) {
+      const currentPrice = Number(pricePerItemChf)
+      if (!isNaN(currentPrice) && currentPrice > 0) {
+        return currentHoldings * currentPrice
+      }
+    }
+    
+    // For other categories, return holdings (quantity)
+    return currentHoldings
+  }, [currentHoldings, isCrypto, pricePerItemChf])
 
   // Fetch coin price when modal opens for Crypto items (both for new transactions and when editing)
   useEffect(() => {
@@ -2208,6 +2372,10 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
     if (isNaN(parsedAmount)) {
       return 0
     }
+    // For ADJUSTMENT, there's no price, so total is 0
+    if (isCrypto && isAdjustmentMode) {
+      return 0
+    }
     // Use absolute value for calculation
     const absoluteAmount = Math.abs(parsedAmount)
     // For categories without price per item, price is always 1
@@ -2218,54 +2386,39 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
     // For all categories, total is in the selected currency (not converted to CHF for display)
     // The total will be converted to CHF when saving
     return absoluteAmount * parsedPrice
-  }, [amount, pricePerItemChf, hidePricePerItem])
+  }, [amount, pricePerItemChf, hidePricePerItem, isCrypto, isAdjustmentMode])
 
-  // Update target balance when amount changes (only in amount mode)
+  // Update target holdings when amount changes (only in amount mode)
   useEffect(() => {
-    if (inputMode !== 'amount' || isUpdatingFromBalance) return
+    if (inputMode !== 'amount' || isUpdatingFromHoldings) return
     
     const parsedAmount = Number(amount)
     if (!isNaN(parsedAmount)) {
       setIsUpdatingFromAmount(true)
-      // Add the amount (can be positive or negative) to current balance
-      setTargetBalance((currentBalance + parsedAmount).toString())
+      // Add the amount (can be positive or negative) to current holdings
+      setTargetHoldings((currentHoldings + parsedAmount).toString())
       setIsUpdatingFromAmount(false)
     }
-  }, [amount, currentBalance, isUpdatingFromBalance, inputMode])
+  }, [amount, currentHoldings, isUpdatingFromHoldings, inputMode])
 
-  // Update amount when target balance changes (only in balance mode)
+  // Update amount when target holdings changes (only in holdings mode)
   useEffect(() => {
     if (inputMode !== 'balance' || isUpdatingFromAmount) return
     
-    const parsedTarget = Number(targetBalance)
+    const parsedTarget = Number(targetHoldings)
     if (!isNaN(parsedTarget)) {
-      setIsUpdatingFromBalance(true)
+      setIsUpdatingFromHoldings(true)
       // Calculate the difference (can be positive or negative)
-      const calculatedAmount = parsedTarget - currentBalance
+      const calculatedAmount = parsedTarget - currentHoldings
       setAmount(calculatedAmount.toString())
-      setIsUpdatingFromBalance(false)
+      setIsUpdatingFromHoldings(false)
     }
-  }, [targetBalance, currentBalance, isUpdatingFromAmount, inputMode])
+  }, [targetHoldings, currentHoldings, isUpdatingFromAmount, inputMode])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     setError(null)
 
-    const parsedAmount = Number(amount)
-    // For categories without price per item, price is always 1
-    const parsedPrice = hidePricePerItem ? 1 : Number(pricePerItemChf)
-
-    if (!amount || Number.isNaN(parsedAmount) || parsedAmount === 0) {
-      setError('Please enter a valid amount (positive for buy, negative for sell).')
-      return
-    }
-    // Only validate price per item for categories that require it
-    if (!hidePricePerItem) {
-      if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
-        setError('Please enter a valid price per item greater than 0.')
-        return
-      }
-    }
     if (!date) {
       setError('Please select a date.')
       return
@@ -2274,28 +2427,117 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
     // Date input already provides YYYY-MM-DD format, use it directly
     const parsedDate = date
 
-    // Determine side from amount sign
-    const side: TransactionTab = parsedAmount > 0 ? 'buy' : 'sell'
-    // Store absolute value of amount
-    const absoluteAmount = Math.abs(parsedAmount)
+    // Handle transaction types for supported categories
+    if (canUseAdjustmentMode && transactionType) {
+      // Determine currency based on category
+      const transactionCurrency = isCrypto || isStockCategory 
+        ? 'USD' 
+        : (item.currency as CurrencyCode)
+      
+      switch (transactionType) {
+        case 'BUY':
+        case 'SELL': {
+          const parsedAmount = Number(amount)
+          const parsedPrice = hidePricePerItem ? 1 : Number(pricePerItemChf)
 
-    // For all categories, use item's currency (locked at item creation)
-    // For Crypto, Index Funds, Stocks, and Commodities, currency is always USD
-    const transactionCurrency = (isCrypto || isStockCategory) ? 'USD' : (item.currency as CurrencyCode)
-    const pricePerItemChfValue = convert(parsedPrice, transactionCurrency)
-    
+          if (!amount || Number.isNaN(parsedAmount) || parsedAmount === 0) {
+            setError('Please enter a valid amount (positive for buy, negative for sell).')
+            return
+          }
+          if (!hidePricePerItem) {
+            if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+              setError('Please enter a valid price per item greater than 0.')
+              return
+            }
+          }
+
+          // In Buy/Sell mode, amount sign determines buy vs sell
+          const absoluteAmount = Math.abs(parsedAmount)
+          const side: TransactionTab = parsedAmount > 0 ? 'buy' : 'sell'
+          const finalTransactionType: CryptoTransactionType = parsedAmount > 0 ? 'BUY' : 'SELL'
+          const pricePerItemChfValue = hidePricePerItem 
+            ? 1 
+            : convert(parsedPrice, transactionCurrency)
+
+          onSave({
+            itemId: item.id,
+            side,
+            currency: transactionCurrency,
+            amount: absoluteAmount,
+            pricePerItemChf: pricePerItemChfValue,
+            pricePerItem: hidePricePerItem ? 1 : parsedPrice,
+            date: parsedDate,
+            cryptoType: finalTransactionType,
+            adjustmentReason: adjustmentReason || undefined,
+          })
+          break
+        }
+        case 'ADJUSTMENT': {
+          const parsedAmount = Number(amount)
+
+          if (!amount || Number.isNaN(parsedAmount) || parsedAmount === 0) {
+            setError('Please enter a valid amount (can be positive or negative, but not zero).')
+            return
+          }
+
+          // ADJUSTMENT stores the signed amount directly
+          // We still need a side for backward compatibility
+          const side: TransactionTab = parsedAmount > 0 ? 'buy' : 'sell'
+
+          onSave({
+            itemId: item.id,
+            side,
+            currency: transactionCurrency,
+            amount: parsedAmount, // Store signed amount for ADJUSTMENT
+            pricePerItemChf: 0, // ADJUSTMENT doesn't have a price
+            pricePerItem: 0,
+            date: parsedDate,
+            cryptoType: 'ADJUSTMENT',
+            adjustmentReason: adjustmentReason || undefined,
+          })
+          break
+        }
+      }
+    } else {
+      // Non-Crypto or legacy transactions
+      const parsedAmount = Number(amount)
+      const parsedPrice = hidePricePerItem ? 1 : Number(pricePerItemChf)
+
+      if (!amount || Number.isNaN(parsedAmount) || parsedAmount === 0) {
+        setError('Please enter a valid amount (positive for buy, negative for sell).')
+        return
+      }
+      if (!hidePricePerItem) {
+        if (!pricePerItemChf || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+          setError('Please enter a valid price per item greater than 0.')
+          return
+        }
+      }
+
+      const side: TransactionTab = parsedAmount > 0 ? 'buy' : 'sell'
+      const absoluteAmount = Math.abs(parsedAmount)
+      const transactionCurrency = (isCrypto || isStockCategory) ? 'USD' : (item.currency as CurrencyCode)
+      const pricePerItemChfValue = convert(parsedPrice, transactionCurrency)
+
       onSave({
         itemId: item.id,
-      side,
-      currency: transactionCurrency,
-      amount: absoluteAmount, // Holdings quantity
-      pricePerItemChf: pricePerItemChfValue, // Converted to CHF for storage
-      pricePerItem: parsedPrice, // Original price per item in original currency
-      date: parsedDate,
-    })
+        side,
+        currency: transactionCurrency,
+        amount: absoluteAmount,
+        pricePerItemChf: pricePerItemChfValue,
+        pricePerItem: parsedPrice,
+        date: parsedDate,
+        adjustmentReason: adjustmentReason || undefined,
+      })
+    }
 
+    // Reset form
     setAmount('0')
     setPricePerItemChf('')
+    setAdjustmentReason('')
+    if (canUseAdjustmentMode) {
+      setIsAdjustmentMode(false)
+    }
     // Reset date to today in YYYY-MM-DD format
     const now = new Date()
     setDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`)
@@ -2304,7 +2546,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
           {isEditing 
             ? `Edit Transaction – ${item.name}`
@@ -2318,35 +2560,39 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
           </div>
         )}
 
-        {/* Read-only item info */}
-        <div className="mb-4 p-3 bg-bg-surface-2 rounded-input space-y-1">
-          <div className="text-text-secondary text-[0.567rem] md:text-xs">
-            <span className="font-medium">Item:</span> {item.name}
-          </div>
-          <div className="text-text-secondary text-[0.567rem] md:text-xs">
-            <span className="font-medium">Category:</span> {item.category}
-          </div>
-          <div className="text-text-secondary text-[0.567rem] md:text-xs">
-            <span className="font-medium">Platform:</span> {item.platform}
-          </div>
-          <div className="text-text-secondary text-[0.567rem] md:text-xs">
-            <span className="font-medium">{isCrypto ? 'Current Holdings' : 'Current Balance'}:</span> {currentBalance.toFixed(8).replace(/\.?0+$/, '')}
-          </div>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* For all categories - same format */}
-          <div>
-            <label
-              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-              htmlFor="tx-currency"
-            >
-              Currency
-            </label>
-            <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-muted text-xs md:text-sm cursor-not-allowed">
-              {(isCrypto || isStockCategory) ? 'USD' : item.currency}
+          {/* Transaction Mode Selection - Switch Button (for supported categories) */}
+          {canUseAdjustmentMode && (
+            <div>
+              <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
+                Transaction Mode
+              </label>
+              <div className="relative inline-flex rounded-lg bg-bg-surface-2 border border-border-subtle p-1 w-full" role="group">
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustmentMode(false)}
+                  className={`flex-1 px-3 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                    !isAdjustmentMode
+                      ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  Buy/Sell
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustmentMode(true)}
+                  className={`flex-1 px-3 py-2 text-[0.567rem] md:text-xs font-medium rounded-md transition-all duration-200 ${
+                    isAdjustmentMode
+                      ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] shadow-card'
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  Adjustment
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Input Mode Selection - Switch Button */}
           <div>
@@ -2374,7 +2620,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
                     : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
-                End Balance
+                End Holdings
               </button>
             </div>
           </div>
@@ -2395,41 +2641,41 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                placeholder="Positive for buy, negative for sell"
+                placeholder={canUseAdjustmentMode && isAdjustmentMode ? "Can be positive or negative" : "Positive for buy, negative for sell"}
               />
             </div>
           )}
 
-          {/* Target Balance Input (shown when inputMode === 'balance') */}
+          {/* Target Holdings Input (shown when inputMode === 'balance') */}
           {inputMode === 'balance' && (
             <div>
               <label
                 className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
-                htmlFor="tx-target-balance"
+                htmlFor="tx-target-holdings"
               >
-                End Balance (holdings)
+                End Holdings
               </label>
               <input
-                id="tx-target-balance"
+                id="tx-target-holdings"
                 type="number"
                 step={(isCrypto || isStockCategory) ? "0.00000001" : "0.0001"}
-                value={targetBalance}
-                onChange={(e) => setTargetBalance(e.target.value)}
+                value={targetHoldings}
+                onChange={(e) => setTargetHoldings(e.target.value)}
                 className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                placeholder="Total balance after this transaction"
+                placeholder="Total holdings after this transaction"
               />
             </div>
           )}
 
-          {/* Only show price per item field for categories that need it */}
-          {!hidePricePerItem && (
+          {/* Only show price per item field for categories that need it and for BUY/SELL transactions */}
+          {!hidePricePerItem && canUseAdjustmentMode && !isAdjustmentMode && isCrypto && (
             <div>
               <label
                 className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                 htmlFor="tx-price"
               >
-                Price per Item ({(isCrypto || isStockCategory) ? 'USD' : item.currency})
-                {isLoadingPrice && (isCrypto || isStockCategory) && (
+                Price per Item (USD)
+                {isLoadingPrice && (
                   <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
                 )}
               </label>
@@ -2437,14 +2683,45 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
                 id="tx-price"
                 type="number"
                 min="0"
-                step={(isCrypto || isStockCategory) ? "any" : "0.01"}
+                step="any"
                 value={pricePerItemChf}
                 onChange={(e) => setPricePerItemChf(e.target.value)}
                 className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
                   priceError ? 'border-warning' : 'border-border-subtle'
                 }`}
-                placeholder={(isCrypto || isStockCategory) ? "e.g. 50000, 3000, 1.00" : "e.g. 150.50"}
-                disabled={isLoadingPrice && (isCrypto || isStockCategory)}
+                placeholder="e.g. 50000, 3000, 1.00"
+                disabled={isLoadingPrice}
+              />
+              {priceError && (
+                <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
+                  {priceError}
+                </p>
+              )}
+            </div>
+          )}
+          {!hidePricePerItem && (!canUseAdjustmentMode || !isAdjustmentMode) && !isCrypto && (
+            <div>
+              <label
+                className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+                htmlFor="tx-price"
+              >
+                Price per Item ({item.currency})
+                {isLoadingPrice && isStockCategory && (
+                  <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
+                )}
+              </label>
+              <input
+                id="tx-price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={pricePerItemChf}
+                onChange={(e) => setPricePerItemChf(e.target.value)}
+                className={`w-full bg-bg-surface-2 border rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue ${
+                  priceError ? 'border-warning' : 'border-border-subtle'
+                }`}
+                placeholder="e.g. 150.50"
+                disabled={isLoadingPrice && isStockCategory}
               />
               {priceError && (
                 <p className="mt-1 text-[0.4725rem] md:text-[0.567rem] text-warning">
@@ -2524,6 +2801,24 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
                 </svg>
               </button>
             </div>
+          </div>
+
+          {/* Reason/Note field (available for all transaction types) - always at the bottom */}
+          <div>
+            <label
+              className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
+              htmlFor="transaction-reason"
+            >
+              Reason/Note (optional)
+            </label>
+            <input
+              id="transaction-reason"
+              type="text"
+              value={adjustmentReason}
+              onChange={(e) => setAdjustmentReason(e.target.value)}
+              className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
+              placeholder={canUseAdjustmentMode && isAdjustmentMode ? "e.g., Perp PnL, Manual correction, Fee adjustment" : "e.g., Purchase note, Sale reason, Transaction details"}
+            />
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -2622,7 +2917,14 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
                   let totalConverted: number
                   let priceDisplay: string
                   
-                  if (isCrypto) {
+                  // Check if this is an ADJUSTMENT transaction (no price)
+                  const isAdjustment = tx.cryptoType === 'ADJUSTMENT'
+                  
+                  if (isAdjustment) {
+                    // ADJUSTMENT doesn't have a price
+                    totalConverted = 0
+                    priceDisplay = '—'
+                  } else if (isCrypto) {
                     // Reconstruct original USD price from stored value
                     // When saving: convert(usdPrice, 'USD') converts FROM USD TO baseCurrency_at_save_time
                     // To reverse: usdPrice = stored * rates['USD']_at_save_time
@@ -2663,25 +2965,52 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
                     }
                   }
                   
-                  const sign = tx.side === 'buy' ? '+' : '-'
+                  // Determine transaction type display and sign
+                  let typeDisplay: string
+                  let typeColor: string
+                  let sign: string
+                  let amountDisplay: string
+                  
+                  if (tx.cryptoType === 'ADJUSTMENT') {
+                    typeDisplay = 'Adjustment'
+                    typeColor = 'text-purple-400'
+                    sign = tx.amount >= 0 ? '+' : '-'
+                    amountDisplay = tx.amount.toString()
+                  } else {
+                    // BUY/SELL or legacy
+                    typeDisplay = tx.side === 'buy' ? 'Buy' : 'Sell'
+                    typeColor = tx.side === 'buy' ? 'text-green-400' : 'text-red-400'
+                    sign = tx.side === 'buy' ? '+' : '-'
+                    amountDisplay = tx.amount.toString()
+                  }
+                  
                   return (
                     <tr key={tx.id} className="border-b border-border-subtle">
                       <td className="py-2 px-3 text2">{formatDate(tx.date)}</td>
                       <td className="py-2 px-3 text2">
-                        <span className={tx.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
-                          {tx.side === 'buy' ? 'Buy' : 'Sell'}
+                        <span className={typeColor}>
+                          {typeDisplay}
                         </span>
+                        {tx.adjustmentReason && (
+                          <div className="text-[0.4725rem] text-text-muted mt-0.5">
+                            {tx.adjustmentReason}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2 px-3 text2">{tx.currency}</td>
-                      <td className="py-2 px-3 text2 text-right">{tx.amount}</td>
+                      <td className="py-2 px-3 text2 text-right">{amountDisplay}</td>
                       <td className="py-2 px-3 text2 text-right">{priceDisplay}</td>
                       <td className="py-2 px-3 text2 text-right">
-                        <span className={tx.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
-                          {sign}{isCrypto 
-                            ? formatUsd(totalConverted) 
-                            : formatMoney(Math.abs(totalConverted), tx.currency as CurrencyCode, 'ch')
-                          }
-                        </span>
+                        {isAdjustment ? (
+                          <span className="text-text-muted">—</span>
+                        ) : (
+                          <span className={typeColor}>
+                            {sign}{isCrypto 
+                              ? formatUsd(totalConverted) 
+                              : formatMoney(Math.abs(totalConverted), tx.currency as CurrencyCode, 'ch')
+                            }
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 px-3 text2">
                         <div className="flex items-center gap-2">
