@@ -2880,8 +2880,8 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
   const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div className="w-full max-w-4xl bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4 lg:pl-[270px]" onClick={onClose}>
+      <div className="w-full max-w-6xl bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 relative max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <Heading level={2} className="mb-4">
           Transactions – {item.name}
         </Heading>
@@ -2898,8 +2898,28 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
             No transactions found.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="overflow-x-auto" style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#39404A #11151C'
+          }}>
+            <style>{`
+              div.overflow-x-auto::-webkit-scrollbar {
+                height: 10px;
+              }
+              div.overflow-x-auto::-webkit-scrollbar-track {
+                background: #11151C;
+                border-radius: 5px;
+              }
+              div.overflow-x-auto::-webkit-scrollbar-thumb {
+                background: #39404A;
+                border-radius: 5px;
+                border: 2px solid #11151C;
+              }
+              div.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+                background: #4A5568;
+              }
+            `}</style>
+            <table className="w-full min-w-[800px]">
               <thead>
                 <tr className="border-b border-border-subtle">
                   <th className="text-left py-2 px-3 text2 font-bold">Date</th>

@@ -142,6 +142,7 @@ function formatCHFTick(value: number): string {
 
 function Dashboard() {
   const [timeFrame, setTimeFrame] = useState<'YTD' | '6M' | '1Y' | '5Y' | 'MAX'>('MAX')
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { rapidApiKey } = useApiKeys()
 
@@ -160,6 +161,16 @@ function Dashboard() {
   const [usdToChfRate, setUsdToChfRate] = useState<number | null>(null)
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
   
+  // Track window width for responsive x-axis ticks
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   useEffect(() => {
     if (uid) {
       Promise.all([
@@ -998,6 +1009,29 @@ function Dashboard() {
     return chartData
   }, [snapshots, convert, timeFrame])
 
+  // Calculate dynamic interval for x-axis ticks based on data length and window width
+  const xAxisInterval = useMemo(() => {
+    const dataLength = netWorthData.length
+    if (dataLength === 0) return 0
+    
+    // Estimate available width for chart (accounting for padding and margins)
+    // Chart container is typically ~90% of window width on large screens
+    const estimatedChartWidth = windowWidth > 1024 
+      ? (windowWidth - 250) * 0.9 // Subtract sidebar width (250px) and padding
+      : windowWidth * 0.9
+    
+    // Calculate how many ticks we can fit (each tick needs ~40px with rotation for double density)
+    // Reduced from 80px to 40px to show approximately double the number of ticks
+    const minTickWidth = 40
+    const maxTicks = Math.floor(estimatedChartWidth / minTickWidth)
+    
+    // Calculate interval to show approximately maxTicks ticks
+    // But ensure we show at least 6-8 ticks (doubled from 3-4) and at most all ticks
+    const targetTicks = Math.max(6, Math.min(maxTicks, dataLength))
+    const interval = dataLength > targetTicks ? Math.floor(dataLength / targetTicks) : 0
+    
+    return interval
+  }, [netWorthData.length, windowWidth])
 
   return (
     <div className="min-h-screen px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
@@ -1149,10 +1183,11 @@ function Dashboard() {
                 dataKey="month"
                 stroke={CHART_COLORS.muted1}
                 tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
-                interval={0}
+                interval={xAxisInterval}
                 angle={-45}
                 textAnchor="end"
                 height={60}
+                minTickGap={40}
               />
               <YAxis
                 stroke={CHART_COLORS.muted1}
