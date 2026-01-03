@@ -5,9 +5,7 @@
 
 export type CryptoPriceSource = 
   | 'KRAKEN_SPOT'
-  | 'KRAKEN_FUTURES'
   | 'MEXC'
-  | 'ASTER'
 
 export type QuoteCurrency = 'USD' | 'USDT' | 'USDC'
 
@@ -198,30 +196,6 @@ class KrakenSpotProvider implements PriceProvider {
 /**
  * Stub providers for future implementation
  */
-class KrakenFuturesProvider implements PriceProvider {
-  isAvailable(): boolean {
-    return false
-  }
-
-  async fetchPrice(symbol: string, quoteCurrency?: QuoteCurrency): Promise<PriceResult> {
-    return {
-      price: null,
-      timestamp: Date.now(),
-      error: 'Kraken Futures is not implemented yet',
-      source: 'KRAKEN_FUTURES',
-      quoteCurrency,
-    }
-  }
-
-  async fetchPrices(symbols: string[], quoteCurrency?: QuoteCurrency): Promise<Record<string, PriceResult>> {
-    const results: Record<string, PriceResult> = {}
-    for (const symbol of symbols) {
-      results[symbol.trim().toUpperCase()] = await this.fetchPrice(symbol, quoteCurrency)
-    }
-    return results
-  }
-}
-
 class MexcProvider implements PriceProvider {
   isAvailable(): boolean {
     return false
@@ -246,30 +220,6 @@ class MexcProvider implements PriceProvider {
   }
 }
 
-class AsterProvider implements PriceProvider {
-  isAvailable(): boolean {
-    return false
-  }
-
-  async fetchPrice(symbol: string, quoteCurrency?: QuoteCurrency): Promise<PriceResult> {
-    return {
-      price: null,
-      timestamp: Date.now(),
-      error: 'Aster is not implemented yet',
-      source: 'ASTER',
-      quoteCurrency,
-    }
-  }
-
-  async fetchPrices(symbols: string[], quoteCurrency?: QuoteCurrency): Promise<Record<string, PriceResult>> {
-    const results: Record<string, PriceResult> = {}
-    for (const symbol of symbols) {
-      results[symbol.trim().toUpperCase()] = await this.fetchPrice(symbol, quoteCurrency)
-    }
-    return results
-  }
-}
-
 /**
  * Get price provider instance for a given source
  */
@@ -277,12 +227,8 @@ export function getPriceProvider(source: CryptoPriceSource): PriceProvider {
   switch (source) {
     case 'KRAKEN_SPOT':
       return new KrakenSpotProvider()
-    case 'KRAKEN_FUTURES':
-      return new KrakenFuturesProvider()
     case 'MEXC':
       return new MexcProvider()
-    case 'ASTER':
-      return new AsterProvider()
     default:
       // Default to Kraken Spot for unknown sources
       return new KrakenSpotProvider()
