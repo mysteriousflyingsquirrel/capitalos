@@ -67,7 +67,7 @@ export class NetWorthCalculationService {
         if (!item.perpetualsData) {
           balance = 0
         } else {
-          const { openPositions, openOrders, availableMargin } = item.perpetualsData
+          const { openPositions, availableMargin, lockedMargin } = item.perpetualsData
           
           // Sum all CHF balances directly (matching NetWorth page logic)
           let totalChf = 0
@@ -81,14 +81,15 @@ export class NetWorthCalculationService {
             totalChf += balanceChf
           })
           
-          // Open Orders: convert each balance to CHF and sum
-          openOrders.forEach(order => {
-            const balanceUsd = order.margin
+          // Open Orders: use account-level lockedMargin if available
+          // (per-order margin is not reliable from API)
+          if (lockedMargin !== null) {
+            const balanceUsd = lockedMargin
             const balanceChf = usdToChfRate && usdToChfRate > 0 
               ? balanceUsd * usdToChfRate 
               : convert(balanceUsd, 'USD')
             totalChf += balanceChf
-          })
+          }
           
           // Available Margin: convert each balance to CHF and sum
           availableMargin.forEach(margin => {

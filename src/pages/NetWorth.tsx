@@ -45,7 +45,7 @@ export interface PerpetualsOpenPosition {
 export interface PerpetualsOpenOrder {
   id: string
   name: string
-  margin: number // in quote currency (USD/USDT)
+  margin: number | null // in quote currency (USD/USDT), null when not available from API
   platform: string
 }
 
@@ -60,6 +60,7 @@ export interface PerpetualsData {
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
   availableMargin: PerpetualsAvailableMargin[]
+  lockedMargin: number | null // Account-level locked margin from /fapi/v4/account (in USD/USDT)
 }
 
 export interface NetWorthItem {
@@ -98,6 +99,7 @@ const defaultPerpetualsData: PerpetualsData = {
   openPositions: [],
   openOrders: [],
   availableMargin: [],
+  lockedMargin: null,
 }
 
 const initialMockTransactions: NetWorthTransaction[] = []
@@ -150,10 +152,9 @@ export function calculateBalanceChf(
       return posSum + (pos.margin + pos.pnl)
     }, 0)
     
-    // Open Orders: balance = margin (in USD)
-    const openOrdersTotal = openOrders.reduce((orderSum, order) => {
-      return orderSum + order.margin
-    }, 0)
+    // Open Orders: use account-level lockedMargin if available, otherwise 0
+    // (per-order margin is not reliable from API)
+    const openOrdersTotal = lockedMargin !== null ? lockedMargin : 0
     
     // Available Margin: balance = margin (in USD)
     const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
@@ -468,14 +469,15 @@ function NetWorthCategorySection({
         totalChf += balanceChf
       })
       
-      // Open Orders: convert each balance to CHF and sum
-      openOrders.forEach(order => {
-        const balanceUsd = order.margin
+      // Open Orders: use account-level lockedMargin if available
+      // (per-order margin is not reliable from API)
+      if (item.perpetualsData.lockedMargin !== null) {
+        const balanceUsd = item.perpetualsData.lockedMargin
         const balanceChf = usdToChfRate && usdToChfRate > 0 
           ? balanceUsd * usdToChfRate 
           : convert(balanceUsd, 'USD')
         totalChf += balanceChf
-      })
+      }
       
       // Available Margin: convert each balance to CHF and sum
       availableMargin.forEach(margin => {
@@ -688,10 +690,17 @@ function NetWorthCategorySection({
                     </thead>
                     <tbody>
                       {items[0].perpetualsData.openOrders.map((order) => {
-                        const balanceUsd = order.margin
-                        const balanceChf = usdToChfRate && usdToChfRate > 0 
-                          ? balanceUsd * usdToChfRate 
-                          : convert(balanceUsd, 'USD')
+                        // Margin is null when not available from API
+                        const marginDisplay = order.margin !== null ? formatUsd(order.margin) : '—'
+                        const balanceDisplay = order.margin !== null 
+                          ? (() => {
+                              const balanceUsd = order.margin
+                              const balanceChf = usdToChfRate && usdToChfRate > 0 
+                                ? balanceUsd * usdToChfRate 
+                                : convert(balanceUsd, 'USD')
+                              return formatCurrency(balanceChf)
+                            })()
+                          : '—'
                         return (
                           <tr key={order.id} className="border-b border-border-subtle last:border-b-0">
                             <td className="py-2 pr-2">
@@ -701,12 +710,12 @@ function NetWorthCategorySection({
                             </td>
                             <td className="py-2 text-right px-2">
                               <div className="text2 whitespace-nowrap">
-                                {formatUsd(order.margin)}
+                                {marginDisplay}
                               </div>
                             </td>
                             <td className="py-2 text-right px-2">
                               <div className="text2 whitespace-nowrap">
-                                {formatCurrency(balanceChf)}
+                                {balanceDisplay}
                               </div>
                             </td>
                             <td className="py-2 text-right pr-2 hidden md:table-cell">

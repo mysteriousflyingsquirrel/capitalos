@@ -39,7 +39,7 @@ interface PerpetualsOpenPosition {
 interface PerpetualsOpenOrder {
   id: string
   name: string
-  margin: number // in USD/USDT
+  margin: number | null // in USD/USDT, null when not available from API
   platform: string
 }
 
@@ -54,6 +54,7 @@ interface PerpetualsData {
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
   availableMargin: PerpetualsAvailableMargin[]
+  lockedMargin: number | null // Account-level locked margin from /fapi/v4/account (in USD/USDT)
 }
 
 const ASTER_BASE_URL = 'https://fapi.asterdex.com'
@@ -177,6 +178,8 @@ async function fetchOpenOrders(
   const data = await response.json()
 
   const orders: PerpetualsOpenOrder[] = []
+  let ordersWithZeroPrice = 0
+  let ordersWithStopPrice = 0
 
   if (Array.isArray(data)) {
     for (const order of data) {
@@ -184,22 +187,92 @@ async function fetchOpenOrders(
       const side = order.side || 'UNKNOWN'
       const type = order.type || 'UNKNOWN'
       const price = parseFloat(order.price || '0')
+      const stopPrice = parseFloat(order.stopPrice || '0')
+      
+      // Debug logging: track orders with price == 0 and stopPrice > 0
+      if (price === 0) {
+        ordersWithZeroPrice++
+        if (stopPrice > 0) {
+          ordersWithStopPrice++
+        }
+      }
       
       // Build human-readable name
-      const name = `${symbol} ${side} ${type}${price > 0 ? ` @ ${price}` : ''}`
+      // For STOP_MARKET/TAKE_PROFIT_MARKET orders, use stopPrice if price is 0
+      const effectivePrice = price > 0 ? price : (stopPrice > 0 ? stopPrice : 0)
+      const priceDisplay = effectivePrice > 0 ? ` @ ${effectivePrice}` : ''
+      const name = `${symbol} ${side} ${type}${priceDisplay}`
 
-      // Note: Aster API doesn't provide per-order margin, so we set to 0
-      // The locked margin is accounted for at the account level
+      // Per-order margin is NOT reliably available from /fapi/v1/openOrders
+      // Set to null to indicate unknown value (UI will display "—")
       orders.push({
         id: `aster-order-${order.orderId || Date.now()}`,
         name,
-        margin: 0, // Per-order margin not available from API
+        margin: null, // Per-order margin not available from API
         platform: 'Aster',
       })
     }
   }
 
+  // Debug logging (remove before final commit)
+  if (ordersWithZeroPrice > 0) {
+    console.log(`[DEBUG] Open orders with price == 0: ${ordersWithZeroPrice}, with stopPrice > 0: ${ordersWithStopPrice}`)
+  }
+
   return orders
+}
+
+/**
+ * Fetches account-level data including locked margin from /fapi/v4/account
+ */
+async function fetchAccountData(
+  apiKey: string,
+  apiSecret: string
+): Promise<{ lockedMargin: number | null }> {
+  try {
+    const accountQueryString = buildSignedQueryString({}, apiSecret)
+    const accountUrl = `${ASTER_BASE_URL}/fapi/v4/account?${accountQueryString}`
+    
+    const accountResponse = await fetch(accountUrl, {
+      method: 'GET',
+      headers: {
+        'X-MBX-APIKEY': apiKey,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!accountResponse.ok) {
+      const errorText = await accountResponse.text()
+      console.warn(`Failed to fetch account data (${accountResponse.status}): ${errorText}`)
+      return { lockedMargin: null }
+    }
+
+    const accountData = await accountResponse.json()
+    
+    // Debug logging: inspect account fields
+    console.log('[DEBUG] Account data fields:', {
+      totalOpenOrderInitialMargin: accountData.totalOpenOrderInitialMargin,
+      totalInitialMargin: accountData.totalInitialMargin,
+      totalMarginUsed: accountData.totalMarginUsed,
+      availableBalance: accountData.availableBalance,
+      totalWalletBalance: accountData.totalWalletBalance,
+    })
+    
+    // Use totalOpenOrderInitialMargin as the authoritative locked margin value
+    // This represents margin reserved by open orders
+    const lockedMargin = accountData.totalOpenOrderInitialMargin !== undefined
+      ? parseFloat(accountData.totalOpenOrderInitialMargin || '0')
+      : null
+    
+    if (lockedMargin !== null) {
+      console.log(`[DEBUG] Using totalOpenOrderInitialMargin as locked margin: ${lockedMargin}`)
+    }
+
+    return { lockedMargin }
+  } catch (error) {
+    console.warn('Failed to fetch account data:', error)
+    return { lockedMargin: null }
+  }
 }
 
 /**
@@ -248,34 +321,6 @@ async function fetchAvailableMargin(
     }
   }
 
-  // Optionally fetch account data for validation (but don't use it for display yet)
-  try {
-    const accountQueryString = buildSignedQueryString({}, apiSecret)
-    const accountUrl = `${ASTER_BASE_URL}/fapi/v4/account?${accountQueryString}`
-    
-    const accountResponse = await fetch(accountUrl, {
-      method: 'GET',
-      headers: {
-        'X-MBX-APIKEY': apiKey,
-        'Content-Type': 'application/json',
-      },
-    })
-
-    if (accountResponse.ok) {
-      const accountData = await accountResponse.json()
-      // Account data available for future use/sanity checks
-      // availableBalance, marginUsed, walletBalance, etc.
-      console.log('Account data fetched for validation:', {
-        availableBalance: accountData.availableBalance,
-        marginUsed: accountData.totalMarginUsed,
-        walletBalance: accountData.totalWalletBalance,
-      })
-    }
-  } catch (error) {
-    // Don't fail if account endpoint fails - it's optional for validation
-    console.warn('Failed to fetch account data for validation:', error)
-  }
-
   return margins
 }
 
@@ -286,17 +331,20 @@ async function fetchAsterPerpetualsData(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsData> {
-  // Fetch all data in parallel
-  const [openPositions, openOrders, availableMargin] = await Promise.all([
+  // Fetch positions, orders, and margin in parallel
+  // Account data is fetched separately as it's needed for locked margin
+  const [openPositions, openOrders, availableMargin, accountData] = await Promise.all([
     fetchOpenPositions(apiKey, apiSecret),
     fetchOpenOrders(apiKey, apiSecret),
     fetchAvailableMargin(apiKey, apiSecret),
+    fetchAccountData(apiKey, apiSecret),
   ])
 
   return {
     openPositions,
     openOrders,
     availableMargin,
+    lockedMargin: accountData.lockedMargin,
   }
 }
 
