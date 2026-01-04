@@ -46,6 +46,7 @@ interface NetWorthDataPoint {
   'Stocks': number
   'Commodities': number
   'Crypto': number
+  'Perpetuals': number
   'Real Estate': number
   'Depreciating Assets': number
 }
@@ -347,6 +348,7 @@ function Dashboard() {
       'Stocks': 0,
       'Commodities': 0,
       'Crypto': 0,
+      'Perpetuals': 0,
       'Real Estate': 0,
       'Depreciating Assets': 0,
     }
@@ -371,6 +373,36 @@ function Dashboard() {
           } else {
             // Use convert function to convert USD to CHF (baseCurrency)
             balance = convert(balanceUsd, 'USD')
+          }
+        }
+      } else if (item.category === 'Perpetuals') {
+        // For Perpetuals: calculate from subcategories
+        if (!item.perpetualsData) {
+          balance = 0
+        } else {
+          const { openPositions, openOrders, availableMargin } = item.perpetualsData
+          
+          // Open Positions: balance = margin + pnl (in USD)
+          const openPositionsTotal = openPositions.reduce((posSum, pos) => {
+            return posSum + (pos.margin + pos.pnl)
+          }, 0)
+          
+          // Open Orders: balance = margin (in USD)
+          const openOrdersTotal = openOrders.reduce((orderSum, order) => {
+            return orderSum + order.margin
+          }, 0)
+          
+          // Available Margin: balance = margin (in USD)
+          const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
+            return marginSum + margin.margin
+          }, 0)
+          
+          // Total in USD, convert to CHF
+          const totalUsd = openPositionsTotal + openOrdersTotal + availableMarginTotal
+          if (usdToChfRate && usdToChfRate > 0) {
+            balance = totalUsd * usdToChfRate
+          } else {
+            balance = convert(totalUsd, 'USD')
           }
         }
       } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
@@ -705,6 +737,7 @@ function Dashboard() {
       'Stocks': 0,
       'Commodities': 0,
       'Crypto': 0,
+      'Perpetuals': 0,
       'Real Estate': 0,
       'Depreciating Assets': 0,
     }
@@ -729,6 +762,36 @@ function Dashboard() {
           } else {
             // Use convert function to convert USD to CHF (baseCurrency)
             balance = convert(balanceUsd, 'USD')
+          }
+        }
+      } else if (item.category === 'Perpetuals') {
+        // For Perpetuals: calculate from subcategories
+        if (!item.perpetualsData) {
+          balance = 0
+        } else {
+          const { openPositions, openOrders, availableMargin } = item.perpetualsData
+          
+          // Open Positions: balance = margin + pnl (in USD)
+          const openPositionsTotal = openPositions.reduce((posSum, pos) => {
+            return posSum + (pos.margin + pos.pnl)
+          }, 0)
+          
+          // Open Orders: balance = margin (in USD)
+          const openOrdersTotal = openOrders.reduce((orderSum, order) => {
+            return orderSum + order.margin
+          }, 0)
+          
+          // Available Margin: balance = margin (in USD)
+          const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
+            return marginSum + margin.margin
+          }, 0)
+          
+          // Total in USD, convert to CHF
+          const totalUsd = openPositionsTotal + openOrdersTotal + availableMarginTotal
+          if (usdToChfRate && usdToChfRate > 0) {
+            balance = isNaN(totalUsd) ? 0 : totalUsd * usdToChfRate
+          } else {
+            balance = convert(totalUsd, 'USD')
           }
         }
       } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
@@ -934,6 +997,7 @@ function Dashboard() {
           'Stocks': convert(snapshot.categories['Stocks'] || 0, 'CHF'),
           'Commodities': convert(snapshot.categories['Commodities'] || 0, 'CHF'),
           'Crypto': convert(snapshot.categories['Crypto'] || 0, 'CHF'),
+          'Perpetuals': convert(snapshot.categories['Perpetuals'] || 0, 'CHF'),
           'Real Estate': convert(snapshot.categories['Real Estate'] || 0, 'CHF'),
           'Depreciating Assets': convert(snapshot.categories['Depreciating Assets'] || 0, 'CHF'),
         }
@@ -1001,6 +1065,7 @@ function Dashboard() {
         'Stocks': convert(lastCurrentMonthSnapshot.categories['Stocks'] || 0, 'CHF'),
         'Commodities': convert(lastCurrentMonthSnapshot.categories['Commodities'] || 0, 'CHF'),
         'Crypto': convert(lastCurrentMonthSnapshot.categories['Crypto'] || 0, 'CHF'),
+        'Perpetuals': convert(lastCurrentMonthSnapshot.categories['Perpetuals'] || 0, 'CHF'),
         'Real Estate': convert(lastCurrentMonthSnapshot.categories['Real Estate'] || 0, 'CHF'),
         'Depreciating Assets': convert(lastCurrentMonthSnapshot.categories['Depreciating Assets'] || 0, 'CHF'),
       })
@@ -1270,6 +1335,14 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Crypto"
                   stroke={CHART_COLORS.pink}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Perpetuals"
+                  stroke={CHART_COLORS.lime}
                   strokeWidth={2}
                   dot={false}
                   activeDot={false}

@@ -4,9 +4,11 @@ import {
   getDoc, 
   getDocs, 
   setDoc, 
+  updateDoc,
   deleteDoc,
   writeBatch,
   query,
+  deleteField,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 
@@ -24,7 +26,6 @@ export async function saveDocuments<T extends { id: string }>(
   collectionName: string,
   items: T[]
 ): Promise<void> {
-  console.log(`[saveDocuments] Saving ${items.length} items to ${collectionName} for uid: ${uid}`)
   const collectionPath = getUserCollectionPath(uid, collectionName)
   const BATCH_SIZE = 500
 
@@ -34,12 +35,10 @@ export async function saveDocuments<T extends { id: string }>(
     const querySnapshot = await getDocs(q)
     
     if (querySnapshot.empty) {
-      console.log(`[saveDocuments] Collection ${collectionName} is already empty`)
       return
     }
     
     const docs = querySnapshot.docs
-    console.log(`[saveDocuments] Deleting ${docs.length} existing documents from ${collectionName}`)
     for (let i = 0; i < docs.length; i += BATCH_SIZE) {
       const chunk = docs.slice(i, i + BATCH_SIZE)
       const batch = writeBatch(db)
@@ -50,7 +49,6 @@ export async function saveDocuments<T extends { id: string }>(
       
       await batch.commit()
     }
-    console.log(`[saveDocuments] Successfully deleted all documents from ${collectionName}`)
     return
   }
 
@@ -60,11 +58,8 @@ export async function saveDocuments<T extends { id: string }>(
   const existingIds = new Set(querySnapshot.docs.map(d => d.id))
   const newIds = new Set(items.map(item => item.id))
   
-  console.log(`[saveDocuments] Existing IDs: ${existingIds.size}, New IDs: ${newIds.size}`)
-  
   // Find IDs to delete (exist in Firestore but not in new items)
   const idsToDelete = Array.from(existingIds).filter(id => !newIds.has(id))
-  console.log(`[saveDocuments] IDs to delete: ${idsToDelete.length}`)
 
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const chunk = items.slice(i, i + BATCH_SIZE)
@@ -76,11 +71,9 @@ export async function saveDocuments<T extends { id: string }>(
     })
 
     await batch.commit()
-    console.log(`[saveDocuments] Saved chunk ${i / BATCH_SIZE + 1} (${chunk.length} items) to ${collectionName}`)
   }
 
   if (idsToDelete.length > 0) {
-    console.log(`[saveDocuments] Deleting ${idsToDelete.length} removed documents from ${collectionName}`)
     for (let i = 0; i < idsToDelete.length; i += BATCH_SIZE) {
       const chunk = idsToDelete.slice(i, i + BATCH_SIZE)
       const batch = writeBatch(db)
@@ -92,10 +85,7 @@ export async function saveDocuments<T extends { id: string }>(
       
       await batch.commit()
     }
-    console.log(`[saveDocuments] Successfully deleted removed documents from ${collectionName}`)
   }
-  
-  console.log(`[saveDocuments] Successfully saved all ${items.length} items to ${collectionName}`)
 }
 
 /**
@@ -105,16 +95,11 @@ export async function loadDocuments<T>(
   uid: string,
   collectionName: string
 ): Promise<T[]> {
-  console.log(`[loadDocuments] Loading from ${collectionName} for uid: ${uid}`)
   const collectionPath = getUserCollectionPath(uid, collectionName)
   const q = query(collection(db, collectionPath))
   const querySnapshot = await getDocs(q)
   
   const items = querySnapshot.docs.map((doc) => doc.data() as T)
-  console.log(`[loadDocuments] Loaded ${items.length} items from ${collectionName}`)
-  if (items.length > 0) {
-    console.log(`[loadDocuments] Sample item from ${collectionName}:`, items[0])
-  }
   return items
 }
 
@@ -151,11 +136,27 @@ export async function saveNetWorthItems<T extends { id: string }>(
   uid: string,
   items: T[]
 ): Promise<void> {
-  await saveDocuments(uid, 'netWorthItems', items)
+  // Strip perpetualsData from Perpetuals items before saving (it's fetched live from API)
+  const itemsToSave = items.map(item => {
+    if ((item as any).category === 'Perpetuals' && (item as any).perpetualsData) {
+      const { perpetualsData, ...itemWithoutPerpetualsData } = item as any
+      return itemWithoutPerpetualsData
+    }
+    return item
+  })
+  await saveDocuments(uid, 'netWorthItems', itemsToSave)
 }
 
 export async function loadNetWorthItems<T>(uid: string): Promise<T[]> {
-  return loadDocuments<T>(uid, 'netWorthItems')
+  const items = await loadDocuments<T>(uid, 'netWorthItems')
+  // Strip perpetualsData from loaded items (it may have been saved before we excluded it)
+  return items.map(item => {
+    if ((item as any).category === 'Perpetuals' && (item as any).perpetualsData) {
+      const { perpetualsData, ...itemWithoutPerpetualsData } = item as any
+      return itemWithoutPerpetualsData
+    }
+    return item
+  })
 }
 
 export async function saveNetWorthTransactions<T extends { id: string }>(
@@ -220,6 +221,9 @@ export interface UserSettings {
   baseCurrency?: string
   apiKeys?: {
     rapidApiKey?: string
+    asterApiKey?: string
+    asterApiSecretKey?: string
+    krakenApiKey?: string
   }
 }
 
@@ -228,7 +232,50 @@ export async function saveUserSettings(
   settings: UserSettings
 ): Promise<void> {
   const docRef = doc(db, `users/${uid}/settings/user`)
-  await setDoc(docRef, settings)
+  // Check if document exists
+  const docSnap = await getDoc(docRef)
+  
+  if (docSnap.exists()) {
+    // Use updateDoc to preserve existing fields and handle deleteField() properly
+    const updateData: any = { ...settings }
+    
+    // Handle nested apiKeys object - if any key should be deleted, use deleteField()
+    if (settings.apiKeys) {
+      const apiKeysUpdate: any = {}
+      Object.keys(settings.apiKeys).forEach((key) => {
+        const value = (settings.apiKeys as any)[key]
+        if (value === deleteField()) {
+          apiKeysUpdate[key] = deleteField()
+        } else if (value !== undefined) {
+          apiKeysUpdate[key] = value
+        }
+      })
+      if (Object.keys(apiKeysUpdate).length > 0) {
+        updateData.apiKeys = apiKeysUpdate
+      }
+    }
+    
+    await updateDoc(docRef, updateData)
+  } else {
+    // Document doesn't exist, use setDoc
+    // Remove any deleteField() values before setting
+    const setData: any = { ...settings }
+    if (setData.apiKeys) {
+      const apiKeysData: any = {}
+      Object.keys(setData.apiKeys).forEach((key) => {
+        const value = setData.apiKeys[key]
+        if (value !== deleteField() && value !== undefined) {
+          apiKeysData[key] = value
+        }
+      })
+      if (Object.keys(apiKeysData).length > 0) {
+        setData.apiKeys = apiKeysData
+      } else {
+        delete setData.apiKeys
+      }
+    }
+    await setDoc(docRef, setData)
+  }
 }
 
 export async function loadUserSettings(uid: string): Promise<UserSettings | null> {

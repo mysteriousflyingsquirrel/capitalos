@@ -10,6 +10,7 @@ import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } 
 import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
+import { fetchAsterPerpetualsData } from '../services/asterService'
 import {
   saveNetWorthItems,
   loadNetWorthItems,
@@ -28,8 +29,38 @@ export type NetWorthCategory =
   | 'Stocks'
   | 'Commodities'
   | 'Crypto'
+  | 'Perpetuals'
   | 'Real Estate'
   | 'Depreciating Assets'
+
+// Perpetuals subcategory types
+export interface PerpetualsOpenPosition {
+  id: string
+  ticker: string
+  margin: number // in quote currency (USD/USDT)
+  pnl: number // in quote currency (USD/USDT)
+  platform: string
+}
+
+export interface PerpetualsOpenOrder {
+  id: string
+  name: string
+  margin: number // in quote currency (USD/USDT)
+  platform: string
+}
+
+export interface PerpetualsAvailableMargin {
+  id: string
+  asset: string
+  margin: number // in quote currency (USD/USDT)
+  platform: string
+}
+
+export interface PerpetualsData {
+  openPositions: PerpetualsOpenPosition[]
+  openOrders: PerpetualsOpenOrder[]
+  availableMargin: PerpetualsAvailableMargin[]
+}
 
 export interface NetWorthItem {
   id: string
@@ -38,6 +69,7 @@ export interface NetWorthItem {
   platform: string
   currency: string
   monthlyDepreciationChf?: number // Only for Depreciating Assets category
+  perpetualsData?: PerpetualsData // Only for Perpetuals category
 }
 
 type TransactionSide = 'buy' | 'sell'
@@ -60,6 +92,14 @@ export interface NetWorthTransaction {
 
 // Empty data - user will add their own data
 const mockNetWorthItems: NetWorthItem[] = []
+
+// Empty data for Perpetuals category (will be populated from Aster API)
+const defaultPerpetualsData: PerpetualsData = {
+  openPositions: [],
+  openOrders: [],
+  availableMargin: [],
+}
+
 const initialMockTransactions: NetWorthTransaction[] = []
 
 // Category order
@@ -71,6 +111,7 @@ const categoryOrder: NetWorthCategory[] = [
   'Stocks',
   'Commodities',
   'Crypto',
+  'Perpetuals',
   'Real Estate',
   'Depreciating Assets',
 ]
@@ -98,6 +139,29 @@ export function calculateBalanceChf(
       // Price is in USD - returns USD value, caller must convert to CHF
       return coinAmount * currentPrice
     }
+  }
+  
+  // For Perpetuals items, calculate from subcategories (returns USD, caller must convert to CHF)
+  if (item?.category === 'Perpetuals' && item.perpetualsData) {
+    const { openPositions, openOrders, availableMargin } = item.perpetualsData
+    
+    // Open Positions: balance = margin + pnl (in USD)
+    const openPositionsTotal = openPositions.reduce((posSum, pos) => {
+      return posSum + (pos.margin + pos.pnl)
+    }, 0)
+    
+    // Open Orders: balance = margin (in USD)
+    const openOrdersTotal = openOrders.reduce((orderSum, order) => {
+      return orderSum + order.margin
+    }, 0)
+    
+    // Available Margin: balance = margin (in USD)
+    const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
+      return marginSum + margin.margin
+    }, 0)
+    
+    // Total in USD - returns USD value, caller must convert to CHF
+    return openPositionsTotal + openOrdersTotal + availableMarginTotal
   }
   
   // For Depreciating Assets, calculate depreciation based on time since purchase
@@ -387,6 +451,35 @@ function NetWorthCategorySection({
       // balanceUsd is already in USD, so use it directly for the subtotal
       return sum + (isNaN(balanceUsd) || !isFinite(balanceUsd) ? 0 : balanceUsd)
     }
+    if (category === 'Perpetuals') {
+      // For Perpetuals: calculate from subcategories
+      if (!item.perpetualsData) return sum
+      const { openPositions, openOrders, availableMargin } = item.perpetualsData
+      
+      // Open Positions: balance = margin + pnl (in USD)
+      const openPositionsTotal = openPositions.reduce((posSum, pos) => {
+        const balanceUsd = pos.margin + pos.pnl
+        return posSum + balanceUsd
+      }, 0)
+      
+      // Open Orders: balance = margin (in USD)
+      const openOrdersTotal = openOrders.reduce((orderSum, order) => {
+        return orderSum + order.margin
+      }, 0)
+      
+      // Available Margin: balance = margin (in USD)
+      const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
+        return marginSum + margin.margin
+      }, 0)
+      
+      // Total in USD, convert to CHF
+      const totalUsd = openPositionsTotal + openOrdersTotal + availableMarginTotal
+      const totalChf = usdToChfRate && usdToChfRate > 0 
+        ? totalUsd * usdToChfRate 
+        : convert(totalUsd, 'USD')
+      
+      return sum + (isNaN(totalChf) || !isFinite(totalChf) ? 0 : totalChf)
+    }
     // For non-Crypto, calculateBalanceChf already returns CHF (converts from original currency internally)
     const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
     return sum + (isNaN(balanceChf) || !isFinite(balanceChf) ? 0 : balanceChf)
@@ -397,14 +490,18 @@ function NetWorthCategorySection({
   // Use usdToChfRate (from CryptoCompare) to match Dashboard calculation, fallback to convert if not available
   const subtotalInBaseCurrency = category === 'Crypto' 
     ? (usdToChfRate && usdToChfRate > 0 ? subtotal * usdToChfRate : convert(subtotal, 'USD'))
-    : subtotal
+    : (category === 'Perpetuals'
+      ? (usdToChfRate && usdToChfRate > 0 ? subtotal * usdToChfRate : convert(subtotal, 'USD'))
+      : subtotal)
   
   // Calculate USD value for all categories
   // For Crypto, subtotal is already in USD
   // For non-Crypto, convert from baseCurrency (CHF) to USD using exchange rate
   const subtotalInUsd = category === 'Crypto' 
     ? subtotal 
-    : (subtotal * (exchangeRates?.rates['USD'] || 1))
+    : (category === 'Perpetuals'
+      ? (usdToChfRate && usdToChfRate > 0 ? subtotal / usdToChfRate : (subtotal / (exchangeRates?.rates['USD'] || 1)))
+      : (subtotal * (exchangeRates?.rates['USD'] || 1)))
 
   return (
     <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6 overflow-hidden">
@@ -419,31 +516,310 @@ function NetWorthCategorySection({
                     {formatUsd(subtotalInUsd)}
             </TotalText>
           </div>
-          <button
-            onClick={onAddClick}
-            className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
-          >
-            <svg
-              className="w-4 h-4 transition-transform group-hover:rotate-90"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {category !== 'Perpetuals' && (
+            <button
+              onClick={onAddClick}
+              className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            <span>Add Item</span>
-          </button>
+              <svg
+                className="w-4 h-4 transition-transform group-hover:rotate-90"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span>Add Item</span>
+            </button>
+          )}
         </div>
       </div>
 
       <div className="space-y-3 w-full">
-        {/* Table structure for proper column alignment */}
-        <div className="w-full overflow-hidden">
+        {/* Perpetuals category: render three subcategory tables */}
+        {category === 'Perpetuals' ? (
+          items.length > 0 && items[0]?.perpetualsData ? (
+            <div className="space-y-6">
+              {/* Open Positions Table */}
+              <div>
+                <Heading level={3} className="mb-3 text-text-secondary">Open Positions</Heading>
+                <div className="w-full overflow-hidden">
+                  <style>{`
+                    @media (max-width: 767px) {
+                      .perp-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
+                      .perp-table-pnl-col { width: calc((100% - 80px) * 1 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 80px) * 2 / 6) !important; }
+                    }
+                    @media (min-width: 768px) {
+                      .perp-table-item-col { width: calc((100% - 80px) * 3 / 8) !important; }
+                      .perp-table-pnl-col { width: calc((100% - 80px) * 1 / 8) !important; }
+                      .perp-table-balance-col { width: calc((100% - 80px) * 2 / 8) !important; }
+                      .perp-table-platform-col { width: calc((100% - 80px) * 2 / 8) !important; }
+                    }
+                  `}</style>
+                  <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <colgroup>
+                      <col className="perp-table-item-col" />
+                      <col className="perp-table-pnl-col" />
+                      <col className="perp-table-balance-col" />
+                      <col className="perp-table-platform-col hidden md:table-column" />
+                      <col style={{ width: '80px' }} />
+                    </colgroup>
+                    <thead>
+                      <tr className="border-b border-border-subtle">
+                        <th className="text-left pb-2">
+                          <Heading level={4}>Item</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>PnL</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Balance</Heading>
+                        </th>
+                        <th className="text-right pb-2 hidden md:table-cell">
+                          <Heading level={4}>Platform</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Actions</Heading>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items[0].perpetualsData.openPositions.map((pos) => {
+                        const balanceUsd = pos.margin + pos.pnl
+                        const balanceChf = usdToChfRate && usdToChfRate > 0 
+                          ? balanceUsd * usdToChfRate 
+                          : convert(balanceUsd, 'USD')
+                        return (
+                          <tr key={pos.id} className="border-b border-border-subtle last:border-b-0">
+                            <td className="py-2 pr-2">
+                              <div className="text2 truncate">
+                                {pos.ticker}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right px-2">
+                              <div className={`text2 whitespace-nowrap ${pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {formatUsd(pos.pnl)}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right px-2">
+                              <div className="text2 whitespace-nowrap">
+                                {formatCurrency(balanceChf)}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right pr-2 hidden md:table-cell">
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text2 truncate">
+                                  {pos.platform}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2">
+                              <div className="flex items-center justify-end -space-x-1">
+                                <button className="text-text-muted hover:text-text-primary text-[0.567rem] md:text-xs">
+                                  ...
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Open Orders Table */}
+              <div>
+                <Heading level={3} className="mb-3 text-text-secondary">Open Orders</Heading>
+                <div className="w-full overflow-hidden">
+                  <style>{`
+                    @media (max-width: 767px) {
+                      .perp-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
+                      .perp-table-margin-col { width: calc((100% - 80px) * 1 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 80px) * 2 / 6) !important; }
+                    }
+                    @media (min-width: 768px) {
+                      .perp-table-item-col { width: calc((100% - 80px) * 3 / 8) !important; }
+                      .perp-table-margin-col { width: calc((100% - 80px) * 1 / 8) !important; }
+                      .perp-table-balance-col { width: calc((100% - 80px) * 2 / 8) !important; }
+                      .perp-table-platform-col { width: calc((100% - 80px) * 2 / 8) !important; }
+                    }
+                  `}</style>
+                  <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <colgroup>
+                      <col className="perp-table-item-col" />
+                      <col className="perp-table-margin-col" />
+                      <col className="perp-table-balance-col" />
+                      <col className="perp-table-platform-col hidden md:table-column" />
+                      <col style={{ width: '80px' }} />
+                    </colgroup>
+                    <thead>
+                      <tr className="border-b border-border-subtle">
+                        <th className="text-left pb-2">
+                          <Heading level={4}>Item</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Margin</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Balance</Heading>
+                        </th>
+                        <th className="text-right pb-2 hidden md:table-cell">
+                          <Heading level={4}>Platform</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Actions</Heading>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items[0].perpetualsData.openOrders.map((order) => {
+                        const balanceUsd = order.margin
+                        const balanceChf = usdToChfRate && usdToChfRate > 0 
+                          ? balanceUsd * usdToChfRate 
+                          : convert(balanceUsd, 'USD')
+                        return (
+                          <tr key={order.id} className="border-b border-border-subtle last:border-b-0">
+                            <td className="py-2 pr-2">
+                              <div className="text2 truncate">
+                                {order.name}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right px-2">
+                              <div className="text2 whitespace-nowrap">
+                                {formatUsd(order.margin)}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right px-2">
+                              <div className="text2 whitespace-nowrap">
+                                {formatCurrency(balanceChf)}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right pr-2 hidden md:table-cell">
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text2 truncate">
+                                  {order.platform}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2">
+                              <div className="flex items-center justify-end -space-x-1">
+                                <button className="text-text-muted hover:text-text-primary text-[0.567rem] md:text-xs">
+                                  ...
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Available Margin Table */}
+              <div>
+                <Heading level={3} className="mb-3 text-text-secondary">Available Margin</Heading>
+                <div className="w-full overflow-hidden">
+                  <style>{`
+                    @media (max-width: 767px) {
+                      .perp-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
+                      .perp-table-margin-col { width: calc((100% - 80px) * 1 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 80px) * 2 / 6) !important; }
+                    }
+                    @media (min-width: 768px) {
+                      .perp-table-item-col { width: calc((100% - 80px) * 3 / 8) !important; }
+                      .perp-table-margin-col { width: calc((100% - 80px) * 1 / 8) !important; }
+                      .perp-table-balance-col { width: calc((100% - 80px) * 2 / 8) !important; }
+                      .perp-table-platform-col { width: calc((100% - 80px) * 2 / 8) !important; }
+                    }
+                  `}</style>
+                  <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <colgroup>
+                      <col className="perp-table-item-col" />
+                      <col className="perp-table-margin-col" />
+                      <col className="perp-table-balance-col" />
+                      <col className="perp-table-platform-col hidden md:table-column" />
+                      <col style={{ width: '80px' }} />
+                    </colgroup>
+                    <thead>
+                      <tr className="border-b border-border-subtle">
+                        <th className="text-left pb-2">
+                          <Heading level={4}>Item</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Margin</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Balance</Heading>
+                        </th>
+                        <th className="text-right pb-2 hidden md:table-cell">
+                          <Heading level={4}>Platform</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Actions</Heading>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items[0].perpetualsData.availableMargin.map((margin) => {
+                        const balanceUsd = margin.margin
+                        const balanceChf = usdToChfRate && usdToChfRate > 0 
+                          ? balanceUsd * usdToChfRate 
+                          : convert(balanceUsd, 'USD')
+                        return (
+                          <tr key={margin.id} className="border-b border-border-subtle last:border-b-0">
+                            <td className="py-2 pr-2">
+                              <div className="text2 truncate">
+                                {margin.asset}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right px-2">
+                              <div className="text2 whitespace-nowrap">
+                                {formatUsd(margin.margin)}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right px-2">
+                              <div className="text2 whitespace-nowrap">
+                                {formatCurrency(balanceChf)}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right pr-2 hidden md:table-cell">
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text2 truncate">
+                                  {margin.platform}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2">
+                              <div className="flex items-center justify-end -space-x-1">
+                                <button className="text-text-muted hover:text-text-primary text-[0.567rem] md:text-xs">
+                                  ...
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-text-muted text-[0.567rem] md:text-xs py-4">
+              No Perpetuals data yet.
+            </div>
+          )
+        ) : (
+          /* Regular table structure for other categories */
+          <div className="w-full overflow-hidden">
           <style>{`
             @media (max-width: 767px) {
               .nw-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
@@ -669,6 +1045,7 @@ function NetWorthCategorySection({
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   )
@@ -835,9 +1212,57 @@ function NetWorth() {
           loadPlatforms(defaultPlatforms, uid),
         ])
         console.log('Loaded transactions from Firestore:', txs.length, txs)
-        setNetWorthItems(items)
+        
+        // Ensure Perpetuals items don't have perpetualsData loaded from Firebase (it's fetched live)
+        const migratedItems = items.map(item => {
+          if (item.category === 'Perpetuals') {
+            // Remove perpetualsData if it exists (shouldn't be in Firebase, but clean up just in case)
+            const { perpetualsData, ...itemWithoutPerpetualsData } = item
+            return itemWithoutPerpetualsData
+          }
+          return item
+        })
+        
+        // If no Perpetuals item exists, add one (without perpetualsData - will be fetched from API)
+        const hasPerpetuals = migratedItems.some(item => item.category === 'Perpetuals')
+        if (!hasPerpetuals) {
+          migratedItems.push({
+            id: 'perpetuals-default',
+            category: 'Perpetuals',
+            name: 'Perpetuals',
+            platform: 'Aster',
+            currency: 'USD',
+            // No perpetualsData - will be fetched from Aster API
+          })
+        }
+        
+        setNetWorthItems(migratedItems)
         setTransactions(txs)
         setPlatforms(loadedPlatforms)
+        
+        // Fetch Aster Perpetuals data if Perpetuals item exists
+        const perpetualsItem = migratedItems.find(item => item.category === 'Perpetuals')
+        if (perpetualsItem) {
+          fetchAsterPerpetualsData(uid).then((asterData) => {
+            if (asterData) {
+              // Update the Perpetuals item with live data from Aster
+              setNetWorthItems((prevItems) => {
+                return prevItems.map((item) => {
+                  if (item.category === 'Perpetuals') {
+                    return {
+                      ...item,
+                      perpetualsData: asterData,
+                    }
+                  }
+                  return item
+                })
+              })
+            }
+          }).catch((error) => {
+            console.error('Failed to fetch Aster Perpetuals data:', error)
+            // Keep existing data if fetch fails
+          })
+        }
       } catch (error) {
         console.error('Failed to load data:', error)
       } finally {
@@ -847,6 +1272,36 @@ function NetWorth() {
 
     loadData()
   }, [uid])
+
+  // Periodically refresh Aster Perpetuals data (every 5 minutes)
+  useEffect(() => {
+    if (!uid) return
+
+    const perpetualsItem = netWorthItems.find(item => item.category === 'Perpetuals')
+    if (!perpetualsItem) return
+
+    const refreshInterval = setInterval(() => {
+      fetchAsterPerpetualsData(uid).then((asterData) => {
+        if (asterData) {
+          setNetWorthItems((prevItems) => {
+            return prevItems.map((item) => {
+              if (item.category === 'Perpetuals') {
+                return {
+                  ...item,
+                  perpetualsData: asterData,
+                }
+              }
+              return item
+            })
+          })
+        }
+      }).catch((error) => {
+        console.error('Failed to refresh Aster Perpetuals data:', error)
+      })
+    }, 5 * 60 * 1000) // 5 minutes
+
+    return () => clearInterval(refreshInterval)
+  }, [uid, netWorthItems])
 
   // Save to Firestore whenever data changes
   useEffect(() => {
@@ -1029,6 +1484,7 @@ function NetWorth() {
       'Stocks': 0,
       'Commodities': 0,
       'Crypto': 0,
+      'Perpetuals': 0,
       'Real Estate': 0,
       'Depreciating Assets': 0,
     }
@@ -1427,7 +1883,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   const isCrypto = category === 'Crypto'
   const isStockCategory = category === 'Index Funds' || category === 'Stocks' || category === 'Commodities'
   // Categories where price per item is always 1 (no need to show input)
-  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate']
+  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate', 'Perpetuals']
   const hidePricePerItem = categoriesWithoutPricePerItem.includes(category)
   
   const [name, setName] = useState('')
@@ -2109,7 +2565,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   const isCrypto = item.category === 'Crypto'
   const isStockCategory = item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities'
   // Categories where price per item is always 1 (no need to show input)
-  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate']
+  const categoriesWithoutPricePerItem: NetWorthCategory[] = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate', 'Perpetuals']
   const hidePricePerItem = categoriesWithoutPricePerItem.includes(item.category)
   // Categories that support Buy/Sell and Adjustment modes
   const supportsAdjustmentMode: NetWorthCategory[] = [

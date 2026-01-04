@@ -30,13 +30,42 @@ function initializeAdmin() {
 }
 
 // Types matching the frontend
+interface PerpetualsOpenPosition {
+  id: string
+  ticker: string
+  margin: number
+  pnl: number
+  platform: string
+}
+
+interface PerpetualsOpenOrder {
+  id: string
+  name: string
+  margin: number
+  platform: string
+}
+
+interface PerpetualsAvailableMargin {
+  id: string
+  asset: string
+  margin: number
+  platform: string
+}
+
+interface PerpetualsData {
+  openPositions: PerpetualsOpenPosition[]
+  openOrders: PerpetualsOpenOrder[]
+  availableMargin: PerpetualsAvailableMargin[]
+}
+
 interface NetWorthItem {
   id: string
-  category: 'Cash' | 'Bank Accounts' | 'Retirement Funds' | 'Index Funds' | 'Stocks' | 'Commodities' | 'Crypto' | 'Real Estate' | 'Depreciating Assets'
+  category: 'Cash' | 'Bank Accounts' | 'Retirement Funds' | 'Index Funds' | 'Stocks' | 'Commodities' | 'Crypto' | 'Perpetuals' | 'Real Estate' | 'Depreciating Assets'
   name: string
   platform: string
   currency: string
   monthlyDepreciationChf?: number
+  perpetualsData?: PerpetualsData
 }
 
 interface NetWorthTransaction {
@@ -335,6 +364,7 @@ function createSnapshot(
     'Stocks': 0,
     'Commodities': 0,
     'Crypto': 0,
+    'Perpetuals': 0,
     'Real Estate': 0,
     'Depreciating Assets': 0,
   }
@@ -362,6 +392,38 @@ function createSnapshot(
           categories[item.category] += balanceUsd / exchangeRates.USD
         } else {
           categories[item.category] += balanceUsd
+        }
+      }
+    } else if (item.category === 'Perpetuals') {
+      // For Perpetuals: calculate from subcategories
+      if (!item.perpetualsData) {
+        categories[item.category] += 0
+      } else {
+        const { openPositions, openOrders, availableMargin } = item.perpetualsData
+        
+        // Open Positions: balance = margin + pnl (in USD)
+        const openPositionsTotal = openPositions.reduce((posSum, pos) => {
+          return posSum + (pos.margin + pos.pnl)
+        }, 0)
+        
+        // Open Orders: balance = margin (in USD)
+        const openOrdersTotal = openOrders.reduce((orderSum, order) => {
+          return orderSum + order.margin
+        }, 0)
+        
+        // Available Margin: balance = margin (in USD)
+        const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
+          return marginSum + margin.margin
+        }, 0)
+        
+        // Total in USD, convert to CHF
+        const totalUsd = openPositionsTotal + openOrdersTotal + availableMarginTotal
+        if (usdToChfRate && usdToChfRate > 0) {
+          categories[item.category] += totalUsd * usdToChfRate
+        } else if (exchangeRates.USD && exchangeRates.USD > 0) {
+          categories[item.category] += totalUsd / exchangeRates.USD
+        } else {
+          categories[item.category] += totalUsd
         }
       }
     } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
