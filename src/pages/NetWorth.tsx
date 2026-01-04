@@ -456,27 +456,35 @@ function NetWorthCategorySection({
       if (!item.perpetualsData) return sum
       const { openPositions, openOrders, availableMargin } = item.perpetualsData
       
-      // Open Positions: balance = margin + pnl (in USD)
-      const openPositionsTotal = openPositions.reduce((posSum, pos) => {
+      // Sum all CHF balances directly (matching what's displayed in tables)
+      let totalChf = 0
+      
+      // Open Positions: convert each balance to CHF and sum
+      openPositions.forEach(pos => {
         const balanceUsd = pos.margin + pos.pnl
-        return posSum + balanceUsd
-      }, 0)
+        const balanceChf = usdToChfRate && usdToChfRate > 0 
+          ? balanceUsd * usdToChfRate 
+          : convert(balanceUsd, 'USD')
+        totalChf += balanceChf
+      })
       
-      // Open Orders: balance = margin (in USD)
-      const openOrdersTotal = openOrders.reduce((orderSum, order) => {
-        return orderSum + order.margin
-      }, 0)
+      // Open Orders: convert each balance to CHF and sum
+      openOrders.forEach(order => {
+        const balanceUsd = order.margin
+        const balanceChf = usdToChfRate && usdToChfRate > 0 
+          ? balanceUsd * usdToChfRate 
+          : convert(balanceUsd, 'USD')
+        totalChf += balanceChf
+      })
       
-      // Available Margin: balance = margin (in USD)
-      const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
-        return marginSum + margin.margin
-      }, 0)
-      
-      // Total in USD, convert to CHF
-      const totalUsd = openPositionsTotal + openOrdersTotal + availableMarginTotal
-      const totalChf = usdToChfRate && usdToChfRate > 0 
-        ? totalUsd * usdToChfRate 
-        : convert(totalUsd, 'USD')
+      // Available Margin: convert each balance to CHF and sum
+      availableMargin.forEach(margin => {
+        const balanceUsd = margin.margin
+        const balanceChf = usdToChfRate && usdToChfRate > 0 
+          ? balanceUsd * usdToChfRate 
+          : convert(balanceUsd, 'USD')
+        totalChf += balanceChf
+      })
       
       return sum + (isNaN(totalChf) || !isFinite(totalChf) ? 0 : totalChf)
     }
@@ -491,7 +499,7 @@ function NetWorthCategorySection({
   const subtotalInBaseCurrency = category === 'Crypto' 
     ? (usdToChfRate && usdToChfRate > 0 ? subtotal * usdToChfRate : convert(subtotal, 'USD'))
     : (category === 'Perpetuals'
-      ? (usdToChfRate && usdToChfRate > 0 ? subtotal * usdToChfRate : convert(subtotal, 'USD'))
+      ? subtotal  // subtotal is already in CHF for Perpetuals
       : subtotal)
   
   // Calculate USD value for all categories
