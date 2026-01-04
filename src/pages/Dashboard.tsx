@@ -34,6 +34,7 @@ import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from './N
 import type { InflowItem, OutflowItem } from './Cashflow'
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
+import { fetchAsterPerpetualsData } from '../services/asterService'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -186,6 +187,30 @@ function Dashboard() {
         setInflowItems(inflow)
         setOutflowItems(outflow)
         setSnapshots(loadedSnapshots)
+        
+        // Fetch Aster Perpetuals data if Perpetuals item exists
+        const perpetualsItem = items.find((item: NetWorthItem) => item.category === 'Perpetuals')
+        if (perpetualsItem) {
+          fetchAsterPerpetualsData(uid).then((asterData) => {
+            if (asterData) {
+              // Update the Perpetuals item with live data from Aster
+              setNetWorthItems((prevItems) => {
+                return prevItems.map((item: NetWorthItem) => {
+                  if (item.category === 'Perpetuals') {
+                    return {
+                      ...item,
+                      perpetualsData: asterData,
+                    }
+                  }
+                  return item
+                })
+              })
+            }
+          }).catch((error) => {
+            console.error('Failed to fetch Aster Perpetuals data:', error)
+            // Keep existing data if fetch fails
+          })
+        }
       })
     }
   }, [uid])
@@ -285,6 +310,56 @@ function Dashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netWorthItems]) // Re-fetch when items change
+
+  // Periodically refresh Aster Perpetuals data (every 5 minutes)
+  useEffect(() => {
+    if (!uid) return
+
+    const perpetualsItem = netWorthItems.find((item: NetWorthItem) => item.category === 'Perpetuals')
+    if (!perpetualsItem) return
+
+    // Fetch immediately
+    fetchAsterPerpetualsData(uid).then((asterData) => {
+      if (asterData) {
+        setNetWorthItems((prevItems: NetWorthItem[]) => {
+          return prevItems.map((item: NetWorthItem) => {
+            if (item.category === 'Perpetuals') {
+              return {
+                ...item,
+                perpetualsData: asterData,
+              }
+            }
+            return item
+          })
+        })
+      }
+    }).catch((error) => {
+      console.error('Failed to refresh Aster Perpetuals data:', error)
+    })
+
+    // Set up interval to refresh every 5 minutes
+    const refreshInterval = setInterval(() => {
+      fetchAsterPerpetualsData(uid).then((asterData) => {
+        if (asterData) {
+          setNetWorthItems((prevItems: NetWorthItem[]) => {
+            return prevItems.map((item: NetWorthItem) => {
+              if (item.category === 'Perpetuals') {
+                return {
+                  ...item,
+                  perpetualsData: asterData,
+                }
+              }
+              return item
+            })
+          })
+        }
+      }).catch((error) => {
+        console.error('Failed to refresh Aster Perpetuals data:', error)
+      })
+    }, 5 * 60 * 1000) // 5 minutes
+
+    return () => clearInterval(refreshInterval)
+  }, [uid, netWorthItems])
 
   // Pull-to-refresh functionality for mobile
   useEffect(() => {
