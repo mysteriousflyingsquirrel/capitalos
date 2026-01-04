@@ -382,28 +382,37 @@ function Dashboard() {
         } else {
           const { openPositions, openOrders, availableMargin } = item.perpetualsData
           
-          // Open Positions: balance = margin + pnl (in USD)
-          const openPositionsTotal = openPositions.reduce((posSum, pos) => {
-            return posSum + (pos.margin + pos.pnl)
-          }, 0)
+          // Sum all CHF balances directly (matching NetWorth page logic)
+          let totalChf = 0
           
-          // Open Orders: balance = margin (in USD)
-          const openOrdersTotal = openOrders.reduce((orderSum, order) => {
-            return orderSum + order.margin
-          }, 0)
+          // Open Positions: convert each balance to CHF and sum
+          openPositions.forEach(pos => {
+            const balanceUsd = pos.margin + pos.pnl
+            const balanceChf = usdToChfRate && usdToChfRate > 0 
+              ? balanceUsd * usdToChfRate 
+              : convert(balanceUsd, 'USD')
+            totalChf += balanceChf
+          })
           
-          // Available Margin: balance = margin (in USD)
-          const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
-            return marginSum + margin.margin
-          }, 0)
+          // Open Orders: convert each balance to CHF and sum
+          openOrders.forEach(order => {
+            const balanceUsd = order.margin
+            const balanceChf = usdToChfRate && usdToChfRate > 0 
+              ? balanceUsd * usdToChfRate 
+              : convert(balanceUsd, 'USD')
+            totalChf += balanceChf
+          })
           
-          // Total in USD, convert to CHF
-          const totalUsd = openPositionsTotal + openOrdersTotal + availableMarginTotal
-          if (usdToChfRate && usdToChfRate > 0) {
-            balance = totalUsd * usdToChfRate
-          } else {
-            balance = convert(totalUsd, 'USD')
-          }
+          // Available Margin: convert each balance to CHF and sum
+          availableMargin.forEach(margin => {
+            const balanceUsd = margin.margin
+            const balanceChf = usdToChfRate && usdToChfRate > 0 
+              ? balanceUsd * usdToChfRate 
+              : convert(balanceUsd, 'USD')
+            totalChf += balanceChf
+          })
+          
+          balance = totalChf
         }
       } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
         // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance
@@ -460,6 +469,7 @@ function Dashboard() {
         'Stocks': 0,
         'Commodities': 0,
         'Crypto': 0,
+        'Perpetuals': 0,
         'Real Estate': 0,
         'Depreciating Assets': 0,
       }
@@ -485,6 +495,45 @@ function Dashboard() {
               // Use convert function to convert USD to CHF (baseCurrency)
               balance = convert(balanceUsd, 'USD')
             }
+          }
+        } else if (item.category === 'Perpetuals') {
+          // For Perpetuals: calculate from subcategories (convert each balance individually)
+          if (!item.perpetualsData) {
+            balance = 0
+          } else {
+            const { openPositions, openOrders, availableMargin } = item.perpetualsData
+            
+            // Sum all CHF balances directly (matching NetWorth page logic)
+            let totalChf = 0
+            
+            // Open Positions: convert each balance to CHF and sum
+            openPositions.forEach(pos => {
+              const balanceUsd = pos.margin + pos.pnl
+              const balanceChf = usdToChfRate && usdToChfRate > 0 
+                ? balanceUsd * usdToChfRate 
+                : convert(balanceUsd, 'USD')
+              totalChf += balanceChf
+            })
+            
+            // Open Orders: convert each balance to CHF and sum
+            openOrders.forEach(order => {
+              const balanceUsd = order.margin
+              const balanceChf = usdToChfRate && usdToChfRate > 0 
+                ? balanceUsd * usdToChfRate 
+                : convert(balanceUsd, 'USD')
+              totalChf += balanceChf
+            })
+            
+            // Available Margin: convert each balance to CHF and sum
+            availableMargin.forEach(margin => {
+              const balanceUsd = margin.margin
+              const balanceChf = usdToChfRate && usdToChfRate > 0 
+                ? balanceUsd * usdToChfRate 
+                : convert(balanceUsd, 'USD')
+              totalChf += balanceChf
+            })
+            
+            balance = totalChf
           }
         } else {
           // For non-Crypto items, calculateBalanceChf returns CHF
@@ -765,34 +814,43 @@ function Dashboard() {
           }
         }
       } else if (item.category === 'Perpetuals') {
-        // For Perpetuals: calculate from subcategories
+        // For Perpetuals: calculate from subcategories (convert each balance individually)
         if (!item.perpetualsData) {
           balance = 0
         } else {
           const { openPositions, openOrders, availableMargin } = item.perpetualsData
           
-          // Open Positions: balance = margin + pnl (in USD)
-          const openPositionsTotal = openPositions.reduce((posSum, pos) => {
-            return posSum + (pos.margin + pos.pnl)
-          }, 0)
+          // Sum all CHF balances directly (matching NetWorth page logic)
+          let totalChf = 0
           
-          // Open Orders: balance = margin (in USD)
-          const openOrdersTotal = openOrders.reduce((orderSum, order) => {
-            return orderSum + order.margin
-          }, 0)
+          // Open Positions: convert each balance to CHF and sum
+          openPositions.forEach(pos => {
+            const balanceUsd = pos.margin + pos.pnl
+            const balanceChf = usdToChfRate && usdToChfRate > 0 
+              ? balanceUsd * usdToChfRate 
+              : convert(balanceUsd, 'USD')
+            totalChf += balanceChf
+          })
           
-          // Available Margin: balance = margin (in USD)
-          const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
-            return marginSum + margin.margin
-          }, 0)
+          // Open Orders: convert each balance to CHF and sum
+          openOrders.forEach(order => {
+            const balanceUsd = order.margin
+            const balanceChf = usdToChfRate && usdToChfRate > 0 
+              ? balanceUsd * usdToChfRate 
+              : convert(balanceUsd, 'USD')
+            totalChf += balanceChf
+          })
           
-          // Total in USD, convert to CHF
-          const totalUsd = openPositionsTotal + openOrdersTotal + availableMarginTotal
-          if (usdToChfRate && usdToChfRate > 0) {
-            balance = isNaN(totalUsd) ? 0 : totalUsd * usdToChfRate
-          } else {
-            balance = convert(totalUsd, 'USD')
-          }
+          // Available Margin: convert each balance to CHF and sum
+          availableMargin.forEach(margin => {
+            const balanceUsd = margin.margin
+            const balanceChf = usdToChfRate && usdToChfRate > 0 
+              ? balanceUsd * usdToChfRate 
+              : convert(balanceUsd, 'USD')
+            totalChf += balanceChf
+          })
+          
+          balance = totalChf
         }
       } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
         // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance
