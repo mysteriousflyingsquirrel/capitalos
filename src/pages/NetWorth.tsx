@@ -145,7 +145,7 @@ export function calculateBalanceChf(
   
   // For Perpetuals items, calculate from subcategories (returns USD, caller must convert to CHF)
   if (item?.category === 'Perpetuals' && item.perpetualsData) {
-    const { openPositions, openOrders, availableMargin } = item.perpetualsData
+    const { openPositions, availableMargin, lockedMargin } = item.perpetualsData
     
     // Open Positions: balance = margin + pnl (in USD)
     const openPositionsTotal = openPositions.reduce((posSum, pos) => {
@@ -455,7 +455,7 @@ function NetWorthCategorySection({
     if (category === 'Perpetuals') {
       // For Perpetuals: calculate from subcategories
       if (!item.perpetualsData) return sum
-      const { openPositions, openOrders, availableMargin } = item.perpetualsData
+      const { openPositions, availableMargin, lockedMargin } = item.perpetualsData
       
       // Sum all CHF balances directly (matching what's displayed in tables)
       let totalChf = 0
@@ -471,8 +471,8 @@ function NetWorthCategorySection({
       
       // Open Orders: use account-level lockedMargin if available
       // (per-order margin is not reliable from API)
-      if (item.perpetualsData.lockedMargin !== null) {
-        const balanceUsd = item.perpetualsData.lockedMargin
+      if (lockedMargin !== null && lockedMargin !== undefined) {
+        const balanceUsd = lockedMargin
         const balanceChf = usdToChfRate && usdToChfRate > 0 
           ? balanceUsd * usdToChfRate 
           : convert(balanceUsd, 'USD')
@@ -1260,25 +1260,30 @@ function NetWorth() {
         // Fetch Aster Perpetuals data if Perpetuals item exists
         const perpetualsItem = migratedItems.find(item => item.category === 'Perpetuals')
         if (perpetualsItem) {
-          fetchAsterPerpetualsData(uid).then((asterData) => {
-            if (asterData) {
-              // Update the Perpetuals item with live data from Aster
-              setNetWorthItems((prevItems) => {
-                return prevItems.map((item) => {
-                  if (item.category === 'Perpetuals') {
-                    return {
-                      ...item,
-                      perpetualsData: asterData,
+            fetchAsterPerpetualsData(uid).then((asterData) => {
+              if (asterData) {
+                // Ensure lockedMargin is included (in case API returns old structure)
+                const perpetualsData: PerpetualsData = {
+                  ...asterData,
+                  lockedMargin: asterData.lockedMargin ?? null,
+                }
+                // Update the Perpetuals item with live data from Aster
+                setNetWorthItems((prevItems) => {
+                  return prevItems.map((item) => {
+                    if (item.category === 'Perpetuals') {
+                      return {
+                        ...item,
+                        perpetualsData,
+                      }
                     }
-                  }
-                  return item
+                    return item
+                  })
                 })
-              })
-            }
-          }).catch((error) => {
-            console.error('Failed to fetch Aster Perpetuals data:', error)
-            // Keep existing data if fetch fails
-          })
+              }
+            }).catch((error) => {
+              console.error('Failed to fetch Aster Perpetuals data:', error)
+              // Keep existing data if fetch fails
+            })
         }
       } catch (error) {
         console.error('Failed to load data:', error)
@@ -1300,12 +1305,17 @@ function NetWorth() {
     const refreshInterval = setInterval(() => {
       fetchAsterPerpetualsData(uid).then((asterData) => {
         if (asterData) {
+          // Ensure lockedMargin is included (in case API returns old structure)
+          const perpetualsData: PerpetualsData = {
+            ...asterData,
+            lockedMargin: asterData.lockedMargin ?? null,
+          }
           setNetWorthItems((prevItems) => {
             return prevItems.map((item) => {
               if (item.category === 'Perpetuals') {
                 return {
                   ...item,
-                  perpetualsData: asterData,
+                  perpetualsData,
                 }
               }
               return item
