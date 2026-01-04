@@ -6,36 +6,41 @@ import NetWorth from './pages/NetWorth'
 import Investing from './pages/Investing'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
-import FloatingLines from './components/FloatingLines'
+import LoadingScreen from './components/LoadingScreen'
 import { CurrencyProvider } from './contexts/CurrencyContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { IncognitoProvider } from './contexts/IncognitoContext'
 import { ApiKeysProvider } from './contexts/ApiKeysContext'
+import { DataProvider, useData } from './contexts/DataContext'
 
 function ProtectedRoutes() {
-  const { user, loading } = useAuth()
+  const { user, loading: authLoading } = useAuth()
+  const { loading: dataLoading, error: dataError } = useData()
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center relative">
-        <div className="fixed inset-0 z-0">
-          <FloatingLines
-            linesGradient={['#4A56FF', '#AD33FF', '#A45CFF', '#3CC8C0']}
-            enabledWaves={['top', 'middle', 'bottom']}
-            lineCount={[4, 6, 4]}
-            animationSpeed={0.5}
-            interactive={true}
-            parallax={true}
-            mixBlendMode="screen"
-          />
-        </div>
-        <div className="text-text-secondary relative z-10">Loading...</div>
-      </div>
-    )
+  if (authLoading) {
+    return <LoadingScreen />
   }
 
   if (!user) {
     return <Login />
+  }
+
+  if (dataLoading) {
+    return <LoadingScreen />
+  }
+
+  if (dataError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center relative">
+        <div className="fixed inset-0 z-0">
+          <LoadingScreen />
+        </div>
+        <div className="relative z-10 text-center">
+          <div className="text-red-400 mb-4">Error loading data</div>
+          <div className="text-text-secondary">{dataError}</div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -56,11 +61,13 @@ function App() {
     <AuthProvider>
       <CurrencyProvider>
         <ApiKeysProvider>
-          <IncognitoProvider>
-            <Router>
-              <ProtectedRoutes />
-            </Router>
-          </IncognitoProvider>
+          <DataProvider>
+            <IncognitoProvider>
+              <Router>
+                <ProtectedRoutes />
+              </Router>
+            </IncognitoProvider>
+          </DataProvider>
         </ApiKeysProvider>
       </CurrencyProvider>
     </AuthProvider>
