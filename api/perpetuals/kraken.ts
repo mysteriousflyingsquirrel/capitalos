@@ -59,6 +59,8 @@ interface PerpetualsData {
 
 const KRAKEN_FUTURES_BASE_URL = 'https://futures.kraken.com'
 const KRAKEN_FUTURES_API_PATH = '/derivatives/api/v3'
+const KRAKEN_AUTH_BASE_URL = 'https://futures.kraken.com'
+const KRAKEN_AUTH_API_PATH = '/api/auth/v1'
 
 /**
  * Generates Kraken Futures v3 signature
@@ -260,18 +262,8 @@ async function krakenFuturesRequest<T>(
     console.log('[Kraken API] Full Data (first 2000 chars):', JSON.stringify(data, null, 2).substring(0, 2000))
     console.log('[Kraken API] ===================================')
     
-    // Kraken Futures API may return { result: 'success', data: ... } or direct data
-    let returnData: T
-    if (data.result === 'success' && data.data !== undefined) {
-      console.log('[Kraken API] Extracting data from result.success.data')
-      returnData = data.data as T
-    } else if (data.data !== undefined) {
-      console.log('[Kraken API] Extracting data from data.data')
-      returnData = data.data as T
-    } else {
-      console.log('[Kraken API] Returning data as-is')
-      returnData = data as T
-    }
+    // Unwrap Kraken response - handle different response structures
+    const returnData = unwrapKrakenResponse<T>(data, endpoint)
     
     console.log('[Kraken API] ========== RETURNING DATA ==========')
     console.log('[Kraken API] Endpoint:', endpoint)
@@ -296,8 +288,199 @@ async function krakenFuturesRequest<T>(
 }
 
 /**
+ * Unwraps Kraken API response to extract the actual payload
+ * Handles different response wrapper structures
+ */
+function unwrapKrakenResponse<T>(json: any, endpoint: string): T {
+  // If result is "success", look for payload in various possible keys
+  if (json.result === 'success') {
+    const possibleKeys = ['data', 'accounts', 'openPositions', 'open_positions', 'positions', 'orders', 'openOrders', 'open_orders']
+    
+    for (const key of possibleKeys) {
+      if (json[key] !== undefined) {
+        console.log(`[Kraken API] Unwrapped response using key: ${key}`)
+        return json[key] as T
+      }
+    }
+    
+    // If no known key found, return the whole object (minus result field)
+    const { result, ...rest } = json
+    console.log('[Kraken API] Unwrapped response by removing result field')
+    return rest as T
+  }
+  
+  // If result is not "success", return as-is
+  console.log('[Kraken API] Response does not have result="success", returning as-is')
+  return json as T
+}
+
+/**
+ * Verifies Kraken Futures API key and permissions
+ * Calls /api-keys/v3/check endpoint
+ */
+async function verifyKrakenApiKey(
+  apiKey: string,
+  apiSecret: string
+): Promise<{ valid: boolean; hasDerivatives: boolean; error?: string }> {
+  try {
+    // Note: /api-keys/v3/check uses different base path (/api/auth/v1 instead of /derivatives/api/v3)
+    const endpointPath = `${KRAKEN_AUTH_API_PATH}/api-keys/v3/check`
+    const nonce = Date.now().toString()
+    const postData = ''
+    
+    const message = postData + nonce + endpointPath
+    const sha256 = crypto.createHash('sha256').update(message).digest()
+    const secretDecoded = Buffer.from(apiSecret, 'base64')
+    const hmac = crypto.createHmac('sha512', secretDecoded).update(sha256).digest()
+    const signature = hmac.toString('base64')
+    
+    const url = `${KRAKEN_AUTH_BASE_URL}${endpointPath}`
+    
+    console.log('[Kraken Key Check] Verifying API key...')
+    console.log('[Kraken Key Check] URL:', url)
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'APIKey': apiKey,
+        'Authent': signature,
+        'Nonce': nonce,
+        'Content-Type': 'application/json',
+      },
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[Kraken Key Check] Key verification failed:', {
+        status: response.status,
+        error: errorText,
+      })
+      return {
+        valid: false,
+        hasDerivatives: false,
+        error: `Key verification failed (${response.status}): ${errorText.substring(0, 200)}`,
+      }
+    }
+    
+    const data = await response.json()
+    console.log('[Kraken Key Check] Key check response:', {
+      keys: Object.keys(data),
+      result: data.result,
+      hasDerivatives: data.derivatives || data.hasDerivatives || false,
+    })
+    
+    // Check if key has derivatives permissions
+    const hasDerivatives = !!(data.derivatives || data.hasDerivatives || data.permissions?.derivatives)
+    
+    return {
+      valid: data.result === 'success' || data.valid === true,
+      hasDerivatives,
+    }
+  } catch (error) {
+    console.error('[Kraken Key Check] Error verifying key:', error)
+    return {
+      valid: false,
+      hasDerivatives: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
+/**
+ * Runs diagnostics mode - calls all endpoints and logs structure
+ * DEV-ONLY: Only runs when ?diagnostics=true is in query
+ */
+async function runKrakenDiagnostics(
+  apiKey: string,
+  apiSecret: string
+): Promise<void> {
+  console.log('[Kraken Diagnostics] ========== STARTING DIAGNOSTICS ==========')
+  
+  // 1. Check API key
+  try {
+    console.log('[Kraken Diagnostics] 1. Checking API key...')
+    const keyCheck = await verifyKrakenApiKey(apiKey, apiSecret)
+    console.log('[Kraken Diagnostics] Key check result:', keyCheck)
+  } catch (error) {
+    console.error('[Kraken Diagnostics] Key check failed:', error)
+  }
+  
+  // 2. Call /openpositions
+  try {
+    console.log('[Kraken Diagnostics] 2. Calling /openpositions...')
+    const openPositionsData = await krakenFuturesRequest<any>(
+      '/openpositions',
+      apiKey,
+      apiSecret
+    )
+    console.log('[Kraken Diagnostics] /openpositions response:')
+    console.log('[Kraken Diagnostics]   - Type:', typeof openPositionsData)
+    console.log('[Kraken Diagnostics]   - Is Array:', Array.isArray(openPositionsData))
+    console.log('[Kraken Diagnostics]   - Keys:', openPositionsData ? Object.keys(openPositionsData) : [])
+    if (Array.isArray(openPositionsData) && openPositionsData.length > 0) {
+      console.log('[Kraken Diagnostics]   - First item keys:', Object.keys(openPositionsData[0]))
+      console.log('[Kraken Diagnostics]   - First item (redacted):', redactSensitiveValues(openPositionsData[0]))
+    }
+  } catch (error) {
+    console.error('[Kraken Diagnostics] /openpositions failed:', error)
+  }
+  
+  // 3. Call /accounts
+  try {
+    console.log('[Kraken Diagnostics] 3. Calling /accounts...')
+    const accountsData = await krakenFuturesRequest<any>(
+      '/accounts',
+      apiKey,
+      apiSecret
+    )
+    console.log('[Kraken Diagnostics] /accounts response:')
+    console.log('[Kraken Diagnostics]   - Type:', typeof accountsData)
+    console.log('[Kraken Diagnostics]   - Is Array:', Array.isArray(accountsData))
+    console.log('[Kraken Diagnostics]   - Keys:', accountsData ? Object.keys(accountsData) : [])
+    if (Array.isArray(accountsData) && accountsData.length > 0) {
+      console.log('[Kraken Diagnostics]   - First item keys:', Object.keys(accountsData[0]))
+      console.log('[Kraken Diagnostics]   - First item (redacted):', redactSensitiveValues(accountsData[0]))
+    } else if (accountsData && typeof accountsData === 'object') {
+      console.log('[Kraken Diagnostics]   - Top-level keys:', Object.keys(accountsData))
+      if (accountsData.accounts && Array.isArray(accountsData.accounts) && accountsData.accounts.length > 0) {
+        console.log('[Kraken Diagnostics]   - accounts[0] keys:', Object.keys(accountsData.accounts[0]))
+      }
+    }
+  } catch (error) {
+    console.error('[Kraken Diagnostics] /accounts failed:', error)
+  }
+  
+  console.log('[Kraken Diagnostics] ========== DIAGNOSTICS COMPLETE ==========')
+}
+
+/**
+ * Redacts sensitive values from objects for logging
+ */
+function redactSensitiveValues(obj: any, depth = 0): any {
+  if (depth > 5) return '[MAX_DEPTH]'
+  if (typeof obj === 'string' && obj.length > 50) {
+    return obj.substring(0, 20) + '...[REDACTED]'
+  }
+  if (Array.isArray(obj)) {
+    return obj.slice(0, 2).map(item => redactSensitiveValues(item, depth + 1))
+  }
+  if (typeof obj === 'object' && obj !== null) {
+    const result: any = {}
+    for (const [key, value] of Object.entries(obj)) {
+      if (typeof value === 'number') {
+        result[key] = value
+      } else {
+        result[key] = redactSensitiveValues(value, depth + 1)
+      }
+    }
+    return result
+  }
+  return obj
+}
+
+/**
  * Fetches accounts data from Kraken Futures API
- * This is the source of truth for all margin metrics
+ * This is the source of truth for margin metrics (but NOT positions)
  */
 async function fetchAccounts(
   apiKey: string,
@@ -346,107 +529,133 @@ async function fetchAccounts(
 }
 
 /**
- * Extracts open positions from /accounts data
- * Uses /accounts as source of truth for margin and PnL
+ * Fetches open positions from /openpositions endpoint (source of truth)
+ * Then enriches with margin/PnL from /accounts if available
  */
-function extractOpenPositionsFromAccounts(accountsData: any): PerpetualsOpenPosition[] {
-  const positions: PerpetualsOpenPosition[] = []
-  
-  if (!accountsData) {
-    console.log('[Kraken] No accounts data provided')
-    return positions
-  }
-
-  // DEV-ONLY: Log which fields we're looking for
-  console.log('[Kraken] Extracting positions from /accounts, looking for instrument-level margin/PnL fields')
-  
-  // Handle different possible structures
-  let accountsList: any[] = []
-  
-  if (Array.isArray(accountsData)) {
-    accountsList = accountsData
-  } else if (accountsData.accounts && Array.isArray(accountsData.accounts)) {
-    accountsList = accountsData.accounts
-  } else if (accountsData.data && Array.isArray(accountsData.data)) {
-    accountsList = accountsData.data
-  } else if (typeof accountsData === 'object') {
-    // Single account object or object with instrument-level data
-    accountsList = [accountsData]
-  }
-
-  console.log('[Kraken] Processing accounts list, count:', accountsList.length)
-
-  for (let i = 0; i < accountsList.length; i++) {
-    const account = accountsList[i]
+async function fetchOpenPositions(
+  apiKey: string,
+  apiSecret: string,
+  accountsData: any
+): Promise<PerpetualsOpenPosition[]> {
+  try {
+    console.log('[Kraken] Fetching open positions from /openpositions (source of truth)')
     
-    // Check if account has per-instrument positions
-    if (account.positions && Array.isArray(account.positions)) {
-      for (const pos of account.positions) {
-        const instrument = pos.instrument || pos.symbol || pos.type || ''
-        const size = parseFloat(pos.size || pos.qty || pos.quantity || '0')
-        
-        if (!instrument || Math.abs(size) < 0.0001) {
-          continue
+    const positionsData = await krakenFuturesRequest<any>(
+      '/openpositions',
+      apiKey,
+      apiSecret
+    )
+    
+    console.log('[Kraken] /openpositions response type:', typeof positionsData)
+    console.log('[Kraken] /openpositions is array:', Array.isArray(positionsData))
+    
+    // Parse positions list from response
+    let positionsList: any[] = []
+    if (Array.isArray(positionsData)) {
+      positionsList = positionsData
+      console.log('[Kraken] Using positionsData as array, length:', positionsList.length)
+    } else if (positionsData && typeof positionsData === 'object') {
+      // Try to find positions array in response
+      const possibleKeys = ['positions', 'openPositions', 'open_positions', 'data']
+      for (const key of possibleKeys) {
+        if (Array.isArray(positionsData[key])) {
+          positionsList = positionsData[key]
+          console.log(`[Kraken] Found positions array at key "${key}", length:`, positionsList.length)
+          break
+        }
+      }
+    }
+    
+    console.log('[Kraken] Processing positions list, length:', positionsList.length)
+    
+    // Build a map of instrument -> margin/PnL from accounts for enrichment
+    const accountInstrumentMap = new Map<string, { margin: number; pnl: number }>()
+    
+    if (accountsData) {
+      let accountsList: any[] = []
+      if (Array.isArray(accountsData)) {
+        accountsList = accountsData
+      } else if (accountsData.accounts && Array.isArray(accountsData.accounts)) {
+        accountsList = accountsData.accounts
+      } else if (accountsData.data && Array.isArray(accountsData.data)) {
+        accountsList = accountsData.data
+      } else if (typeof accountsData === 'object') {
+        accountsList = [accountsData]
+      }
+      
+      // Extract per-instrument margin/PnL from accounts
+      for (const account of accountsList) {
+        if (account.positions && Array.isArray(account.positions)) {
+          for (const pos of account.positions) {
+            const instrument = pos.instrument || pos.symbol || ''
+            if (instrument) {
+              accountInstrumentMap.set(instrument, {
+                margin: parseFloat(pos.initial_margin || pos.initialMargin || pos.margin || '0'),
+                pnl: parseFloat(pos.unrealized_pnl || pos.unrealizedPnl || pos.pnl || '0'),
+              })
+            }
+          }
         }
         
-        // Extract margin and PnL from position data
-        const margin = parseFloat(
-          pos.initial_margin ||
-          pos.initialMargin ||
-          pos.margin ||
-          '0'
-        )
-        const pnl = parseFloat(
-          pos.unrealized_pnl ||
-          pos.unrealizedPnl ||
-          pos.pnl ||
-          '0'
-        )
-        
-        positions.push({
-          id: `kraken-pos-${instrument}-${Date.now()}-${i}`,
-          ticker: instrument,
-          margin,
-          pnl,
-          platform: 'Kraken',
-        })
-        
-        console.log(`[Kraken] Extracted position: ${instrument}, margin: ${margin}, pnl: ${pnl}`)
+        // Also check for instrument-level fields directly in account
+        if (account.instrument) {
+          accountInstrumentMap.set(account.instrument, {
+            margin: parseFloat(account.initial_margin || account.initialMargin || account.margin || '0'),
+            pnl: parseFloat(account.unrealized_pnl || account.unrealizedPnl || account.pnl || '0'),
+          })
+        }
       }
+      
+      console.log('[Kraken] Built account instrument map with', accountInstrumentMap.size, 'instruments')
     }
     
-    // Also check for instrument-level fields directly in account
-    if (account.instrument) {
-      const instrument = account.instrument
-      const margin = parseFloat(
-        account.initial_margin ||
-        account.initialMargin ||
-        account.margin ||
-        '0'
-      )
-      const pnl = parseFloat(
-        account.unrealized_pnl ||
-        account.unrealizedPnl ||
-        account.pnl ||
-        '0'
-      )
+    const positions: PerpetualsOpenPosition[] = []
+    
+    for (let i = 0; i < positionsList.length; i++) {
+      const pos = positionsList[i]
       
-      if (margin > 0 || pnl !== 0) {
-        positions.push({
-          id: `kraken-pos-${instrument}-${Date.now()}-${i}`,
-          ticker: instrument,
-          margin,
-          pnl,
-          platform: 'Kraken',
-        })
-        
-        console.log(`[Kraken] Extracted position from account: ${instrument}, margin: ${margin}, pnl: ${pnl}`)
+      // Get instrument/symbol from /openpositions
+      const instrument = pos.instrument || pos.symbol || pos.type || pos.futures || ''
+      const size = parseFloat(pos.size || pos.qty || pos.quantity || pos.amount || '0')
+      
+      // Filter out zero-size positions
+      if (!instrument || Math.abs(size) < 0.0001) {
+        console.log(`[Kraken] Skipping position ${i}: zero size or no instrument`)
+        continue
       }
+      
+      // Try to get margin/PnL from accounts map
+      const accountData = accountInstrumentMap.get(instrument)
+      let margin = 0
+      let pnl = 0
+      
+      if (accountData) {
+        margin = accountData.margin
+        pnl = accountData.pnl
+        console.log(`[Kraken] Position ${i} (${instrument}) enriched from accounts: margin=${margin}, pnl=${pnl}`)
+      } else {
+        console.warn(`[Kraken] Position ${i} (${instrument}) not found in accounts - using margin=0, pnl=0`)
+        // DEV warning: accounts has no instrument-level fields
+        if (process.env.NODE_ENV === 'development' || process.env.VERCEL_ENV !== 'production') {
+          console.warn('[Kraken] WARNING: accounts has no instrument-level fields for position:', instrument)
+        }
+      }
+      
+      positions.push({
+        id: `kraken-pos-${instrument}-${Date.now()}-${i}`,
+        ticker: instrument,
+        margin,
+        pnl,
+        platform: 'Kraken',
+      })
     }
+    
+    console.log('[Kraken] Total positions extracted from /openpositions:', positions.length)
+    return positions
+  } catch (error) {
+    console.error('[Kraken] Error fetching open positions:', error)
+    throw error
   }
-
-  console.log('[Kraken] Total positions extracted:', positions.length)
-  return positions
 }
 
 /**
@@ -641,27 +850,59 @@ async function fetchOpenOrders(
 
 /**
  * Fetches all Perpetuals data from Kraken Futures API
- * Uses /accounts as the source of truth for all margin metrics
+ * Uses /openpositions as source of truth for positions
+ * Uses /accounts as source of truth for margin metrics (locked, available)
  */
 async function fetchKrakenPerpetualsData(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsData> {
-  // Fetch accounts first (source of truth for all margin data)
+  // Fetch accounts first (needed for margin metrics and position enrichment)
   const accountsData = await fetchAccounts(apiKey, apiSecret)
   
-  // Extract all data from /accounts
-  const openPositions = extractOpenPositionsFromAccounts(accountsData)
+  // Fetch open positions from /openpositions (source of truth)
+  // This will also enrich with margin/PnL from accounts if available
+  const openPositions = await fetchOpenPositions(apiKey, apiSecret, accountsData)
+  
+  // Extract margin metrics from /accounts
   const lockedMargin = extractLockedMarginFromAccounts(accountsData)
   const availableMargin = extractAvailableMarginFromAccounts(accountsData)
   
   // Optionally fetch open orders (for display only, not used for margin calculations)
   const openOrders = await fetchOpenOrders(apiKey, apiSecret).catch(() => [])
 
-  // DEV-ONLY: Log computed totals
+  // DEV-ONLY: Log computed totals and check for mismatches
   const totalPositionMargin = openPositions.reduce((sum, p) => sum + p.margin, 0)
   const totalPositionPnl = openPositions.reduce((sum, p) => sum + p.pnl, 0)
   const totalAvailable = availableMargin.reduce((sum, m) => sum + m.margin, 0)
+  
+  // Check for account scope / subaccount mismatch
+  if (openPositions.length === 0 && accountsData) {
+    let accountsList: any[] = []
+    if (Array.isArray(accountsData)) {
+      accountsList = accountsData
+    } else if (accountsData.accounts && Array.isArray(accountsData.accounts)) {
+      accountsList = accountsData.accounts
+    } else if (accountsData.data && Array.isArray(accountsData.data)) {
+      accountsList = accountsData.data
+    }
+    
+    // Check if accounts shows non-zero margin/equity
+    let hasNonZeroMargin = false
+    for (const account of accountsList) {
+      const margin = parseFloat(account.initial_margin || account.initialMargin || account.margin || '0')
+      const equity = parseFloat(account.equity || account.totalEquity || account.balance || '0')
+      if (margin > 0 || equity > 0) {
+        hasNonZeroMargin = true
+        break
+      }
+    }
+    
+    if (hasNonZeroMargin) {
+      console.warn('[Kraken] WARNING: /openpositions returned empty but /accounts shows non-zero margin/equity')
+      console.warn('[Kraken] This may indicate account scope / subaccount mismatch')
+    }
+  }
   
   console.log('[Kraken] Computed totals:', {
     totalPositionMargin,
@@ -716,6 +957,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!apiKey || !apiSecret) {
       return res.status(400).json({ 
         error: 'Kraken Futures API credentials not configured. Please configure API Key and Secret Key in Settings.' 
+      })
+    }
+
+    // Check if diagnostics mode is requested
+    const diagnosticsMode = req.query?.diagnostics === 'true'
+    if (diagnosticsMode) {
+      await runKrakenDiagnostics(apiKey, apiSecret)
+      return res.status(200).json({
+        success: true,
+        message: 'Diagnostics completed. Check server logs for details.',
+      })
+    }
+
+    // Verify API key and permissions
+    const keyVerification = await verifyKrakenApiKey(apiKey, apiSecret)
+    if (!keyVerification.valid || !keyVerification.hasDerivatives) {
+      return res.status(401).json({
+        success: false,
+        error: 'API key is not a Kraken Futures (Derivatives) v3 key or lacks required permissions.',
+        details: keyVerification.error || 'Key verification failed or derivatives permissions missing',
       })
     }
 
