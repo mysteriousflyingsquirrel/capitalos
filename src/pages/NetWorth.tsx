@@ -366,8 +366,8 @@ function NetWorthCategorySection({
                                 </span>
                               </div>
                             </td>
-                            <td className="py-2">
-                              <div className="flex items-center justify-end -space-x-1">
+                            <td className="py-2 pr-0">
+                              <div className="flex items-center justify-end -space-x-1 -mr-1">
                                 <button className="text-text-muted hover:text-text-primary text-[0.567rem] md:text-xs">
                                   ...
                                 </button>
@@ -387,15 +387,18 @@ function NetWorthCategorySection({
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
-                      .perp-table-margin-col { width: calc((100% - 80px) * 1 / 6) !important; }
-                      .perp-table-balance-col { width: calc((100% - 80px) * 2 / 6) !important; }
+                      .perp-table-item-col { width: calc((100% - 50px) * 3 / 6) !important; }
+                      .perp-table-margin-col { width: calc((100% - 50px) * 1 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 50px) * 1 / 6) !important; }
+                      .perp-table-actions-col { width: 50px !important; }
+                      .perp-table-balance-cell { padding-right: 0.25rem !important; }
                     }
                     @media (min-width: 768px) {
                       .perp-table-item-col { width: calc((100% - 80px) * 3 / 8) !important; }
                       .perp-table-margin-col { width: calc((100% - 80px) * 1 / 8) !important; }
                       .perp-table-balance-col { width: calc((100% - 80px) * 2 / 8) !important; }
                       .perp-table-platform-col { width: calc((100% - 80px) * 2 / 8) !important; }
+                      .perp-table-actions-col { width: 80px !important; }
                     }
                   `}</style>
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -404,7 +407,7 @@ function NetWorthCategorySection({
                       <col className="perp-table-margin-col" />
                       <col className="perp-table-balance-col" />
                       <col className="perp-table-platform-col hidden md:table-column" />
-                      <col style={{ width: '80px' }} />
+                      <col className="perp-table-actions-col" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-border-subtle">
@@ -443,7 +446,7 @@ function NetWorthCategorySection({
                                 {formatUsd(margin.margin)}
                               </div>
                             </td>
-                            <td className="py-2 text-right px-2">
+                            <td className="py-2 text-right px-2 perp-table-balance-cell">
                               <div className="text2 whitespace-nowrap">
                                 {formatCurrency(balanceChf)}
                               </div>
@@ -455,8 +458,8 @@ function NetWorthCategorySection({
                                 </span>
                               </div>
                             </td>
-                            <td className="py-2">
-                              <div className="flex items-center justify-end -space-x-1">
+                            <td className="py-2 pr-0">
+                              <div className="flex items-center justify-end -space-x-1 -mr-1">
                                 <button className="text-text-muted hover:text-text-primary text-[0.567rem] md:text-xs">
                                   ...
                                 </button>
@@ -476,15 +479,18 @@ function NetWorthCategorySection({
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
-                      .perp-table-margin-col { width: calc((100% - 80px) * 1 / 6) !important; }
-                      .perp-table-balance-col { width: calc((100% - 80px) * 2 / 6) !important; }
+                      .perp-table-item-col { width: calc((100% - 50px) * 3 / 6) !important; }
+                      .perp-table-margin-col { width: calc((100% - 50px) * 1 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 50px) * 1 / 6) !important; }
+                      .perp-table-actions-col { width: 50px !important; }
+                      .perp-table-balance-cell { padding-right: 0.25rem !important; }
                     }
                     @media (min-width: 768px) {
                       .perp-table-item-col { width: calc((100% - 80px) * 3 / 8) !important; }
                       .perp-table-margin-col { width: calc((100% - 80px) * 1 / 8) !important; }
                       .perp-table-balance-col { width: calc((100% - 80px) * 2 / 8) !important; }
                       .perp-table-platform-col { width: calc((100% - 80px) * 2 / 8) !important; }
+                      .perp-table-actions-col { width: 80px !important; }
                     }
                   `}</style>
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -493,7 +499,7 @@ function NetWorthCategorySection({
                       <col className="perp-table-margin-col" />
                       <col className="perp-table-balance-col" />
                       <col className="perp-table-platform-col hidden md:table-column" />
-                      <col style={{ width: '80px' }} />
+                      <col className="perp-table-actions-col" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-border-subtle">
@@ -532,7 +538,7 @@ function NetWorthCategorySection({
                                 {formatUsd(margin.margin)}
                               </div>
                             </td>
-                            <td className="py-2 text-right px-2">
+                            <td className="py-2 text-right px-2 perp-table-balance-cell">
                               <div className="text2 whitespace-nowrap">
                                 {formatCurrency(balanceChf)}
                               </div>
@@ -544,8 +550,8 @@ function NetWorthCategorySection({
                                 </span>
                               </div>
                             </td>
-                            <td className="py-2">
-                              <div className="flex items-center justify-end -space-x-1">
+                            <td className="py-2 pr-0">
+                              <div className="flex items-center justify-end -space-x-1 -mr-1">
                                 <button className="text-text-muted hover:text-text-primary text-[0.567rem] md:text-xs">
                                   ...
                                 </button>
@@ -569,15 +575,18 @@ function NetWorthCategorySection({
           <div className="w-full overflow-hidden">
           <style>{`
             @media (max-width: 767px) {
-              .nw-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
-              .nw-table-holdings-col { width: calc((100% - 80px) * 1 / 6) !important; }
-              .nw-table-balance-col { width: calc((100% - 80px) * 2 / 6) !important; }
+              .nw-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
+              .nw-table-holdings-col { width: calc((100% - 55px) * 1 / 6) !important; }
+              .nw-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
+              .nw-table-actions-col { width: 55px !important; }
+              .nw-table-balance-cell { padding-right: 0.25rem !important; }
             }
             @media (min-width: 768px) {
-              .nw-table-item-col { width: calc((100% - 80px) * 3 / 8) !important; }
-              .nw-table-holdings-col { width: calc((100% - 80px) * 1 / 8) !important; }
-              .nw-table-balance-col { width: calc((100% - 80px) * 2 / 8) !important; }
-              .nw-table-platform-col { width: calc((100% - 80px) * 2 / 8) !important; }
+              .nw-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
+              .nw-table-holdings-col { width: calc((100% - 85px) * 1 / 8) !important; }
+              .nw-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
+              .nw-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
+              .nw-table-actions-col { width: 85px !important; }
             }
           `}</style>
           <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -591,7 +600,7 @@ function NetWorthCategorySection({
               {/* Platform: stretch 2, flexible, can truncate, hidden on mobile */}
               <col className="nw-table-platform-col hidden md:table-column" />
               {/* Actions: fixed */}
-                  <col style={{ width: '80px' }} />
+              <col className="nw-table-actions-col" />
             </colgroup>
             <thead>
               <tr className="border-b border-border-subtle">
@@ -739,7 +748,7 @@ function NetWorthCategorySection({
                           {formatCoinAmount(holdings, isIncognito)}
                           </div>
                         </td>
-                      <td className="py-2 text-right px-2">
+                      <td className="py-2 text-right px-2 nw-table-balance-cell">
                         <div className="text2 whitespace-nowrap">
                           {formatCurrency(balanceConverted)}
                         </div>
@@ -766,7 +775,7 @@ function NetWorthCategorySection({
                         </div>
                       </td>
                       <td className="py-2">
-                        <div className="flex items-center justify-end -space-x-1">
+                        <div className="flex items-center justify-end -space-x-[12px]">
                           <button
                             onClick={() => onAddTransaction(item.id)}
                             className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
