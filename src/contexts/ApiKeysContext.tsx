@@ -13,6 +13,8 @@ interface ApiKeysContextType {
   setAsterApiSecretKey: (key: string) => Promise<void>
   krakenApiKey: string | null
   setKrakenApiKey: (key: string) => Promise<void>
+  krakenApiSecretKey: string | null
+  setKrakenApiSecretKey: (key: string) => Promise<void>
   isLoading: boolean
 }
 
@@ -28,6 +30,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const [asterApiKey, setAsterApiKeyState] = useState<string | null>(null)
   const [asterApiSecretKey, setAsterApiSecretKeyState] = useState<string | null>(null)
   const [krakenApiKey, setKrakenApiKeyState] = useState<string | null>(null)
+  const [krakenApiSecretKey, setKrakenApiSecretKeyState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   // Load API keys from Firestore on mount
@@ -57,6 +60,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           setAsterApiKeyState(settings.apiKeys.asterApiKey || null)
           setAsterApiSecretKeyState(settings.apiKeys.asterApiSecretKey || null)
           setKrakenApiKeyState(settings.apiKeys.krakenApiKey || null)
+          setKrakenApiSecretKeyState(settings.apiKeys.krakenApiSecretKey || null)
         } else {
           // No settings found, try environment variable for RapidAPI
           const envKey = import.meta.env.VITE_RAPIDAPI_KEY
@@ -69,6 +73,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           setAsterApiKeyState(null)
           setAsterApiSecretKeyState(null)
           setKrakenApiKeyState(null)
+          setKrakenApiSecretKeyState(null)
         }
       } catch (error) {
         console.error('Error loading API keys:', error)
@@ -224,6 +229,42 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     }
   }
 
+  // Save Kraken API Secret key to Firestore
+  const setKrakenApiSecretKey = async (key: string) => {
+    if (!uid) {
+      console.error('Cannot save API key: user not authenticated')
+      return
+    }
+
+    try {
+      const trimmedKey = key.trim()
+      const docRef = doc(db, `users/${uid}/settings/user`)
+      
+      if (trimmedKey) {
+        // Key has value - load existing settings and update
+        const existingSettings = await loadUserSettings(uid) || {}
+        const updatedSettings: UserSettings = {
+          ...existingSettings,
+          apiKeys: {
+            ...existingSettings.apiKeys,
+            krakenApiSecretKey: trimmedKey,
+          },
+        }
+        await saveUserSettings(uid, updatedSettings)
+      } else {
+        // Key is empty - use updateDoc with deleteField() to remove it
+        await updateDoc(docRef, {
+          'apiKeys.krakenApiSecretKey': deleteField(),
+        })
+      }
+      
+      setKrakenApiSecretKeyState(trimmedKey || null)
+    } catch (error) {
+      console.error('Error saving API key:', error)
+      throw error
+    }
+  }
+
   return (
     <ApiKeysContext.Provider
       value={{
@@ -235,6 +276,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         setAsterApiSecretKey,
         krakenApiKey,
         setKrakenApiKey,
+        krakenApiSecretKey,
+        setKrakenApiSecretKey,
         isLoading,
       }}
     >

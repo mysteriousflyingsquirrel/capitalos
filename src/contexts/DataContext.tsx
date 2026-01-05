@@ -12,6 +12,7 @@ import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotServic
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
+import { fetchKrakenPerpetualsData } from '../services/krakenService'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
 import type { InflowItem, OutflowItem } from '../pages/Cashflow'
@@ -146,7 +147,7 @@ export function DataProvider({ children }: DataProviderProps) {
     }
   }
 
-  // Fetch Aster Perpetuals data
+  // Fetch Aster and Kraken Perpetuals data and merge them
   const fetchPerpetualsData = async (items: NetWorthItem[]): Promise<NetWorthItem[]> => {
     if (!uid) {
       return items
@@ -158,20 +159,42 @@ export function DataProvider({ children }: DataProviderProps) {
     }
 
     try {
-      const asterData = await fetchAsterPerpetualsData(uid)
-      if (asterData) {
+      // Fetch both Aster and Kraken data in parallel
+      const [asterData, krakenData] = await Promise.all([
+        fetchAsterPerpetualsData(uid),
+        fetchKrakenPerpetualsData(uid),
+      ])
+
+      // Merge the data from both sources
+      const mergedData = {
+        openPositions: [
+          ...(asterData?.openPositions || []),
+          ...(krakenData?.openPositions || []),
+        ],
+        lockedMargin: [
+          ...(asterData?.lockedMargin || []),
+          ...(krakenData?.lockedMargin || []),
+        ],
+        availableMargin: [
+          ...(asterData?.availableMargin || []),
+          ...(krakenData?.availableMargin || []),
+        ],
+      }
+
+      // Only update if we have data from at least one source
+      if (asterData || krakenData) {
         return items.map((item) => {
           if (item.category === 'Perpetuals') {
             return {
               ...item,
-              perpetualsData: asterData,
+              perpetualsData: mergedData,
             }
           }
           return item
         })
       }
     } catch (error) {
-      console.error('Error fetching Aster Perpetuals data:', error)
+      console.error('Error fetching Perpetuals data:', error)
     }
 
     return items

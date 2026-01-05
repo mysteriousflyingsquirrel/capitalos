@@ -11,6 +11,7 @@ import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
+import { fetchKrakenPerpetualsData } from '../services/krakenService'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
 import {
@@ -981,23 +982,37 @@ function NetWorth() {
         setTransactions(txs)
         setPlatforms(loadedPlatforms)
         
-        // Fetch Aster Perpetuals data if Perpetuals item exists
+        // Fetch Aster and Kraken Perpetuals data if Perpetuals item exists
         const perpetualsItem = migratedItems.find(item => item.category === 'Perpetuals')
         if (perpetualsItem) {
-            fetchAsterPerpetualsData(uid).then((asterData) => {
-              if (asterData) {
-                // Ensure lockedMargin is included (in case API returns old structure)
-                const perpetualsData: PerpetualsData = {
-                  ...asterData,
-                  lockedMargin: asterData.lockedMargin ?? [],
-                }
-                // Update the Perpetuals item with live data from Aster
+            Promise.all([
+              fetchAsterPerpetualsData(uid),
+              fetchKrakenPerpetualsData(uid),
+            ]).then(([asterData, krakenData]) => {
+              // Merge data from both sources
+              const mergedData: PerpetualsData = {
+                openPositions: [
+                  ...(asterData?.openPositions || []),
+                  ...(krakenData?.openPositions || []),
+                ],
+                lockedMargin: [
+                  ...(asterData?.lockedMargin ?? []),
+                  ...(krakenData?.lockedMargin ?? []),
+                ],
+                availableMargin: [
+                  ...(asterData?.availableMargin || []),
+                  ...(krakenData?.availableMargin || []),
+                ],
+              }
+              
+              // Only update if we have data from at least one source
+              if (asterData || krakenData) {
                 setNetWorthItems((prevItems) => {
                   return prevItems.map((item) => {
                     if (item.category === 'Perpetuals') {
                       return {
                         ...item,
-                        perpetualsData,
+                        perpetualsData: mergedData,
                       }
                     }
                     return item
@@ -1005,7 +1020,7 @@ function NetWorth() {
                 })
               }
             }).catch((error) => {
-              console.error('Failed to fetch Aster Perpetuals data:', error)
+              console.error('Failed to fetch Perpetuals data:', error)
               // Keep existing data if fetch fails
             })
         }
@@ -1027,19 +1042,34 @@ function NetWorth() {
     if (!perpetualsItem) return
 
     const refreshInterval = setInterval(() => {
-      fetchAsterPerpetualsData(uid).then((asterData) => {
-        if (asterData) {
-          // Ensure lockedMargin is included (in case API returns old structure)
-          const perpetualsData: PerpetualsData = {
-            ...asterData,
-            lockedMargin: asterData.lockedMargin ?? [],
-          }
+      Promise.all([
+        fetchAsterPerpetualsData(uid),
+        fetchKrakenPerpetualsData(uid),
+      ]).then(([asterData, krakenData]) => {
+        // Merge data from both sources
+        const mergedData: PerpetualsData = {
+          openPositions: [
+            ...(asterData?.openPositions || []),
+            ...(krakenData?.openPositions || []),
+          ],
+          lockedMargin: [
+            ...(asterData?.lockedMargin ?? []),
+            ...(krakenData?.lockedMargin ?? []),
+          ],
+          availableMargin: [
+            ...(asterData?.availableMargin || []),
+            ...(krakenData?.availableMargin || []),
+          ],
+        }
+        
+        // Only update if we have data from at least one source
+        if (asterData || krakenData) {
           setNetWorthItems((prevItems) => {
             return prevItems.map((item) => {
               if (item.category === 'Perpetuals') {
                 return {
                   ...item,
-                  perpetualsData,
+                  perpetualsData: mergedData,
                 }
               }
               return item
@@ -1047,7 +1077,7 @@ function NetWorth() {
           })
         }
       }).catch((error) => {
-        console.error('Failed to refresh Aster Perpetuals data:', error)
+        console.error('Failed to refresh Perpetuals data:', error)
       })
     }, 5 * 60 * 1000) // 5 minutes
 

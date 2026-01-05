@@ -224,6 +224,7 @@ export interface UserSettings {
     asterApiKey?: string
     asterApiSecretKey?: string
     krakenApiKey?: string
+    krakenApiSecretKey?: string
   }
 }
 
