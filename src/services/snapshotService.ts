@@ -1,5 +1,5 @@
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
-import { calculateBalanceChf, calculateCoinAmount } from '../pages/NetWorth'
+import { calculateBalanceChf, calculateCoinAmount } from './balanceCalculationService'
 import type { NetWorthCategory } from '../pages/NetWorth'
 
 export interface NetWorthSnapshot {

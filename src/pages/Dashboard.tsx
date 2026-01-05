@@ -30,9 +30,10 @@ import {
 import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
-import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from './NetWorth'
+import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from '../services/balanceCalculationService'
 import type { InflowItem, OutflowItem } from './Cashflow'
 import { fetchCryptoData } from '../services/cryptoCompareService'
+import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
 
@@ -413,106 +414,17 @@ function Dashboard() {
   }, []) // Only run once on mount
 
 
-  // Calculate total net worth by summing all category subtotals (same logic as NetWorth page)
+  // Calculate total net worth using shared calculation service
   const totalNetWorthChf = useMemo(() => {
-    const categoryTotals: Record<NetWorthCategory, number> = {
-      'Cash': 0,
-      'Bank Accounts': 0,
-      'Retirement Funds': 0,
-      'Index Funds': 0,
-      'Stocks': 0,
-      'Commodities': 0,
-      'Crypto': 0,
-      'Perpetuals': 0,
-      'Real Estate': 0,
-      'Depreciating Assets': 0,
-    }
-
-    netWorthItems.forEach((item: NetWorthItem) => {
-      let balance: number
-      if (item.category === 'Crypto') {
-        // For Crypto: use current price * coin amount, convert USD to CHF using CryptoCompare rate
-        const coinAmount = calculateCoinAmount(item.id, transactions)
-        const ticker = item.name.trim().toUpperCase()
-        const currentPriceUsd = cryptoPrices[ticker] || 0
-        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-          // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
-          const valueUsd = coinAmount * currentPriceUsd
-          balance = valueUsd * usdToChfRate
-        } else {
-          // Fallback: calculateBalanceChf returns USD for crypto, need to convert to CHF
-          const balanceUsd = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-          // Convert USD to CHF
-          if (usdToChfRate && usdToChfRate > 0) {
-            balance = balanceUsd * usdToChfRate
-          } else {
-            // Use convert function to convert USD to CHF (baseCurrency)
-            balance = convert(balanceUsd, 'USD')
-          }
-        }
-      } else if (item.category === 'Perpetuals') {
-        // For Perpetuals: calculate from subcategories
-        if (!item.perpetualsData) {
-          balance = 0
-        } else {
-          const { openPositions, openOrders, availableMargin } = item.perpetualsData
-          
-          // Sum all CHF balances directly (matching NetWorth page logic)
-          let totalChf = 0
-          
-          // Open Positions: convert each balance to CHF and sum
-          openPositions.forEach(pos => {
-            const balanceUsd = pos.margin + pos.pnl
-            const balanceChf = usdToChfRate && usdToChfRate > 0 
-              ? balanceUsd * usdToChfRate 
-              : convert(balanceUsd, 'USD')
-            totalChf += balanceChf
-          })
-          
-          // Open Orders: convert each balance to CHF and sum
-          openOrders.forEach(order => {
-            const balanceUsd = order.margin
-            const balanceChf = usdToChfRate && usdToChfRate > 0 
-              ? balanceUsd * usdToChfRate 
-              : convert(balanceUsd, 'USD')
-            totalChf += balanceChf
-          })
-          
-          // Available Margin: convert each balance to CHF and sum
-          availableMargin.forEach(margin => {
-            const balanceUsd = margin.margin
-            const balanceChf = usdToChfRate && usdToChfRate > 0 
-              ? balanceUsd * usdToChfRate 
-              : convert(balanceUsd, 'USD')
-            totalChf += balanceChf
-          })
-          
-          balance = totalChf
-        }
-      } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
-        // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance
-        const holdings = calculateHoldings(item.id, transactions)
-        const ticker = item.name.trim().toUpperCase()
-        const currentPriceUsd = stockPrices[ticker] || 0
-        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-          // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
-          const valueUsd = holdings * currentPriceUsd
-          balance = valueUsd * usdToChfRate
-        } else {
-          // Fallback: calculateBalanceChf returns CHF
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-        }
-      } else {
-        // For all other items, calculateBalanceChf returns CHF
-        balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-      }
-      // Ensure balance is a valid number
-      const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
-      categoryTotals[item.category] += validBalance
-    })
-
-    // Sum all category totals
-    return Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
+    const result = NetWorthCalculationService.calculateTotals(
+      netWorthItems,
+      transactions,
+      cryptoPrices,
+      stockPrices,
+      usdToChfRate,
+      convert
+    )
+    return result.totalNetWorthChf
   }, [netWorthItems, transactions, cryptoPrices, stockPrices, usdToChfRate, convert])
 
   // Calculate monthly inflow/outflow from cashflow items
@@ -851,102 +763,17 @@ function Dashboard() {
     return converted.toString()
   }
 
-  // Calculate asset allocation from net worth items
+  // Calculate asset allocation from net worth items using shared calculation service
   const assetAllocationData = useMemo(() => {
-    const categoryTotals: Record<NetWorthCategory, number> = {
-      'Cash': 0,
-      'Bank Accounts': 0,
-      'Retirement Funds': 0,
-      'Index Funds': 0,
-      'Stocks': 0,
-      'Commodities': 0,
-      'Crypto': 0,
-      'Perpetuals': 0,
-      'Real Estate': 0,
-      'Depreciating Assets': 0,
-    }
-
-    netWorthItems.forEach((item: NetWorthItem) => {
-      let balance: number
-      if (item.category === 'Crypto') {
-        // For Crypto: use current price * coin amount, convert USD to CHF
-        const coinAmount = calculateCoinAmount(item.id, transactions)
-        const ticker = item.name.trim().toUpperCase()
-        const currentPriceUsd = cryptoPrices[ticker] || 0
-        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-          // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
-          const valueUsd = coinAmount * currentPriceUsd
-          balance = isNaN(valueUsd) ? 0 : valueUsd * usdToChfRate
-        } else {
-          // Fallback: calculateBalanceChf returns USD for crypto, need to convert to CHF
-          const balanceUsd = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-          // Convert USD to CHF
-          if (usdToChfRate && usdToChfRate > 0) {
-            balance = balanceUsd * usdToChfRate
-          } else {
-            // Use convert function to convert USD to CHF (baseCurrency)
-            balance = convert(balanceUsd, 'USD')
-          }
-        }
-      } else if (item.category === 'Perpetuals') {
-        // For Perpetuals: calculate from subcategories (convert each balance individually)
-        if (!item.perpetualsData) {
-          balance = 0
-        } else {
-          const { openPositions, openOrders, availableMargin } = item.perpetualsData
-          
-          // Sum all CHF balances directly (matching NetWorth page logic)
-          let totalChf = 0
-          
-          // Open Positions: convert each balance to CHF and sum
-          openPositions.forEach(pos => {
-            const balanceUsd = pos.margin + pos.pnl
-            const balanceChf = usdToChfRate && usdToChfRate > 0 
-              ? balanceUsd * usdToChfRate 
-              : convert(balanceUsd, 'USD')
-            totalChf += balanceChf
-          })
-          
-          // Open Orders: convert each balance to CHF and sum
-          openOrders.forEach(order => {
-            const balanceUsd = order.margin
-            const balanceChf = usdToChfRate && usdToChfRate > 0 
-              ? balanceUsd * usdToChfRate 
-              : convert(balanceUsd, 'USD')
-            totalChf += balanceChf
-          })
-          
-          // Available Margin: convert each balance to CHF and sum
-          availableMargin.forEach(margin => {
-            const balanceUsd = margin.margin
-            const balanceChf = usdToChfRate && usdToChfRate > 0 
-              ? balanceUsd * usdToChfRate 
-              : convert(balanceUsd, 'USD')
-            totalChf += balanceChf
-          })
-          
-          balance = totalChf
-        }
-      } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
-        // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance
-        const holdings = calculateHoldings(item.id, transactions)
-        const ticker = item.name.trim().toUpperCase()
-        const currentPriceUsd = stockPrices[ticker] || 0
-        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-          const valueUsd = holdings * currentPriceUsd
-          balance = isNaN(valueUsd) ? 0 : valueUsd * usdToChfRate
-        } else {
-          // Fallback to transaction-based calculation if price not available
-          balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-        }
-      } else {
-        // For all other items, balance is already in CHF
-        balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-      }
-      // Ensure balance is a valid number
-      const validBalance = isNaN(balance) || !isFinite(balance) ? 0 : balance
-      categoryTotals[item.category] += validBalance
-    })
+    const result = NetWorthCalculationService.calculateTotals(
+      netWorthItems,
+      transactions,
+      cryptoPrices,
+      stockPrices,
+      usdToChfRate,
+      convert
+    )
+    const categoryTotals = result.categoryTotals
 
     const total = Object.values(categoryTotals).reduce((sum, val) => sum + (isNaN(val) ? 0 : val), 0)
     if (total === 0 || isNaN(total)) return []

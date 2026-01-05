@@ -17,6 +17,7 @@ import {
   loadPlatforms,
   type Platform,
 } from '../services/storageService'
+import { getInflowGroupSum, getOutflowGroupSum, computeMappingAmount } from '../services/cashflowCalculationService'
 
 type InflowGroupName = 'Time' | 'Service' | 'Worker Bees'
 
@@ -97,66 +98,7 @@ const mockAccountflowItems: AccountflowItem[] = []
 // Helper function to format CHF
 // formatChf will be replaced with currency-aware formatting in the component
 
-// Helper functions for mapping amounts
-function getInflowGroupSum(group: InflowGroupName, items: InflowItem[], convert: (amount: number, from: CurrencyCode) => number): number {
-  return items
-    .filter(i => i.group === group)
-    .reduce((sum, i) => {
-      // Use original amount and currency if available, otherwise fall back to amountChf
-      if (i.amount !== undefined && i.currency) {
-        return sum + convert(i.amount, i.currency as CurrencyCode)
-      }
-      return sum + i.amountChf
-    }, 0)
-}
-
-function getOutflowGroupSum(group: OutflowGroupName, items: OutflowItem[], convert: (amount: number, from: CurrencyCode) => number): number {
-  return items
-    .filter(i => i.group === group)
-    .reduce((sum, i) => {
-      // Use original amount and currency if available, otherwise fall back to amountChf
-      if (i.amount !== undefined && i.currency) {
-        return sum + convert(i.amount, i.currency as CurrencyCode)
-      }
-      return sum + i.amountChf
-    }, 0)
-}
-
-function computeMappingAmount(
-  mapping: AccountflowMapping,
-  inflowItems: InflowItem[],
-  outflowItems: OutflowItem[],
-  convert: (amount: number, from: CurrencyCode) => number
-): number {
-  if (mapping.kind === 'inflowToAccount') {
-    if (mapping.mode === 'group' && mapping.group) {
-      return getInflowGroupSum(mapping.group, inflowItems, convert)
-    } else if (mapping.mode === 'item' && mapping.inflowItemId) {
-      const item = inflowItems.find(i => i.id === mapping.inflowItemId)
-      if (!item) return 0
-      // Use original amount and currency if available, otherwise fall back to amountChf
-      if (item.amount !== undefined && item.currency) {
-        return convert(item.amount, item.currency as CurrencyCode)
-      }
-      return item.amountChf
-    }
-  } else if (mapping.kind === 'accountToOutflow') {
-    if (mapping.mode === 'group' && mapping.group) {
-      return getOutflowGroupSum(mapping.group, outflowItems, convert)
-    } else if (mapping.mode === 'item' && mapping.outflowItemId) {
-      const item = outflowItems.find(i => i.id === mapping.outflowItemId)
-      if (!item) return 0
-      // Use original amount and currency if available, otherwise fall back to amountChf
-      if (item.amount !== undefined && item.currency) {
-        return convert(item.amount, item.currency as CurrencyCode)
-      }
-      return item.amountChf
-    }
-  } else if (mapping.kind === 'accountToAccount') {
-    return mapping.amountChf
-  }
-  return 0
-}
+// Calculation functions moved to cashflowCalculationService.ts
 
 // Helper component: SectionCard
 interface SectionCardProps {

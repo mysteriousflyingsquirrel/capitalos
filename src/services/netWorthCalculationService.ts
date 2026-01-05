@@ -1,5 +1,5 @@
 import type { NetWorthItem, NetWorthTransaction, NetWorthCategory } from '../pages/NetWorth'
-import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from '../pages/NetWorth'
+import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from './balanceCalculationService'
 import type { CurrencyCode } from '../lib/currency'
 
 export interface CategoryTotals {
@@ -67,9 +67,9 @@ export class NetWorthCalculationService {
         if (!item.perpetualsData) {
           balance = 0
         } else {
-          const { openPositions, availableMargin, lockedMargin } = item.perpetualsData
+          const { openPositions, openOrders, availableMargin } = item.perpetualsData
           
-          // Sum all CHF balances directly (matching NetWorth page logic)
+          // Sum all CHF balances directly
           let totalChf = 0
           
           // Open Positions: convert each balance to CHF and sum
@@ -81,15 +81,14 @@ export class NetWorthCalculationService {
             totalChf += balanceChf
           })
           
-          // Open Orders: use account-level lockedMargin if available
-          // (per-order margin is not reliable from API)
-          if (lockedMargin !== null) {
-            const balanceUsd = lockedMargin
+          // Open Orders: convert each balance to CHF and sum
+          openOrders.forEach(order => {
+            const balanceUsd = order.margin
             const balanceChf = usdToChfRate && usdToChfRate > 0 
               ? balanceUsd * usdToChfRate 
               : convert(balanceUsd, 'USD')
             totalChf += balanceChf
-          }
+          })
           
           // Available Margin: convert each balance to CHF and sum
           availableMargin.forEach(margin => {
