@@ -30,6 +30,13 @@ export async function fetchKrakenPerpetualsData(uid: string): Promise<Perpetuals
         return null
       }
       
+      // For 401 errors (authentication/permission issues), return null gracefully
+      // The user may have an invalid key or the key check may have failed
+      if (response.status === 401) {
+        console.log('[Kraken Service] Authentication failed (401), returning null')
+        return null
+      }
+      
       console.error('[Kraken Service] Failed to fetch Kraken Futures Perpetuals data:', errorData)
       return null
     }

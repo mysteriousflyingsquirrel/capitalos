@@ -50,11 +50,18 @@ interface PerpetualsAvailableMargin {
   platform: string
 }
 
+interface PerpetualsLockedMargin {
+  id: string
+  asset: string
+  margin: number
+  platform: string
+}
+
 interface PerpetualsData {
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
   availableMargin: PerpetualsAvailableMargin[]
-  lockedMargin: number | null // Account-level locked margin from /fapi/v4/account (in USD/USDT)
+  lockedMargin: PerpetualsLockedMargin[] // Asset-based locked margin from /fapi/v4/account (in USD/USDT)
 }
 
 const ASTER_BASE_URL = 'https://fapi.asterdex.com'
@@ -340,11 +347,29 @@ async function fetchAsterPerpetualsData(
     fetchAccountData(apiKey, apiSecret),
   ])
 
+  // Convert lockedMargin from number | null to array format to match interface
+  const lockedMarginArray: Array<{
+    id: string
+    asset: string
+    margin: number
+    platform: string
+  }> = []
+  
+  if (accountData.lockedMargin !== null && accountData.lockedMargin > 0) {
+    // Aster uses USDT as the quote currency
+    lockedMarginArray.push({
+      id: 'aster-locked-margin-USDT',
+      asset: 'USDT',
+      margin: accountData.lockedMargin,
+      platform: 'Aster',
+    })
+  }
+
   return {
     openPositions,
     openOrders,
     availableMargin,
-    lockedMargin: accountData.lockedMargin,
+    lockedMargin: lockedMarginArray,
   }
 }
 

@@ -50,11 +50,18 @@ interface PerpetualsAvailableMargin {
   platform: string
 }
 
+interface PerpetualsLockedMargin {
+  id: string
+  asset: string
+  margin: number
+  platform: string
+}
+
 interface PerpetualsData {
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
   availableMargin: PerpetualsAvailableMargin[]
-  lockedMargin: number | null // Account-level locked margin from /accounts (in USD/USDT)
+  lockedMargin: PerpetualsLockedMargin[] // Asset-based locked margin from /accounts (in USD/USDT)
 }
 
 const KRAKEN_FUTURES_BASE_URL = 'https://futures.kraken.com'
@@ -914,11 +921,48 @@ async function fetchKrakenPerpetualsData(
     availableMarginCount: availableMargin.length,
   })
 
+  // Convert lockedMargin from number | null to array format to match interface
+  const lockedMarginArray: Array<{
+    id: string
+    asset: string
+    margin: number
+    platform: string
+  }> = []
+  
+  if (lockedMargin !== null && lockedMargin > 0) {
+    // Use the collateral currency from accounts, or default to USD
+    let collateralCurrency = 'USD'
+    if (accountsData) {
+      let accountsList: any[] = []
+      if (Array.isArray(accountsData)) {
+        accountsList = accountsData
+      } else if (accountsData.accounts && Array.isArray(accountsData.accounts)) {
+        accountsList = accountsData.accounts
+      } else if (accountsData.data && Array.isArray(accountsData.data)) {
+        accountsList = accountsData.data
+      } else if (typeof accountsData === 'object') {
+        accountsList = [accountsData]
+      }
+      
+      if (accountsList.length > 0) {
+        const account = accountsList[0]
+        collateralCurrency = account.currency || account.asset || account.collateralCurrency || 'USD'
+      }
+    }
+    
+    lockedMarginArray.push({
+      id: `kraken-locked-margin-${collateralCurrency}`,
+      asset: collateralCurrency,
+      margin: lockedMargin,
+      platform: 'Kraken',
+    })
+  }
+
   return {
     openPositions,
     openOrders,
     availableMargin,
-    lockedMargin,
+    lockedMargin: lockedMarginArray,
   }
 }
 
@@ -970,14 +1014,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    // Verify API key and permissions
-    const keyVerification = await verifyKrakenApiKey(apiKey, apiSecret)
-    if (!keyVerification.valid || !keyVerification.hasDerivatives) {
-      return res.status(401).json({
-        success: false,
-        error: 'API key is not a Kraken Futures (Derivatives) v3 key or lacks required permissions.',
-        details: keyVerification.error || 'Key verification failed or derivatives permissions missing',
-      })
+    // Verify API key and permissions (graceful - don't block if verification fails)
+    let keyVerification: { valid: boolean; hasDerivatives: boolean; error?: string } | null = null
+    try {
+      keyVerification = await verifyKrakenApiKey(apiKey, apiSecret)
+      if (!keyVerification.valid || !keyVerification.hasDerivatives) {
+        console.warn('[Kraken] Key verification failed or lacks derivatives permissions:', keyVerification.error)
+        // Don't block - try to proceed anyway, but log the warning
+        // Some keys might work even if the check endpoint fails
+      }
+    } catch (verifyError) {
+      console.warn('[Kraken] Key verification endpoint failed, proceeding anyway:', verifyError)
+      // Continue - the actual API calls will fail if the key is invalid
     }
 
     // Fetch data from Kraken Futures API

@@ -188,19 +188,18 @@ export function DataProvider({ children }: DataProviderProps) {
       })
 
       // Merge the data from both sources
+      // Ensure all values are arrays before spreading
+      const asterPositions = Array.isArray(asterData?.openPositions) ? asterData.openPositions : []
+      const krakenPositions = Array.isArray(krakenData?.openPositions) ? krakenData.openPositions : []
+      const asterLocked = Array.isArray(asterData?.lockedMargin) ? asterData.lockedMargin : []
+      const krakenLocked = Array.isArray(krakenData?.lockedMargin) ? krakenData.lockedMargin : []
+      const asterAvailable = Array.isArray(asterData?.availableMargin) ? asterData.availableMargin : []
+      const krakenAvailable = Array.isArray(krakenData?.availableMargin) ? krakenData.availableMargin : []
+      
       const mergedData = {
-        openPositions: [
-          ...(asterData?.openPositions || []),
-          ...(krakenData?.openPositions || []),
-        ],
-        lockedMargin: [
-          ...(asterData?.lockedMargin || []),
-          ...(krakenData?.lockedMargin || []),
-        ],
-        availableMargin: [
-          ...(asterData?.availableMargin || []),
-          ...(krakenData?.availableMargin || []),
-        ],
+        openPositions: [...asterPositions, ...krakenPositions],
+        lockedMargin: [...asterLocked, ...krakenLocked],
+        availableMargin: [...asterAvailable, ...krakenAvailable],
       }
 
       console.log('[DataContext] Merged data:', {
