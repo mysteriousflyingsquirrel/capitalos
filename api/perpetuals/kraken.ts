@@ -150,18 +150,32 @@ async function krakenFuturesRequest<T>(
       hasResult: !!data.result,
       hasData: !!data.data,
       dataKeys: data ? Object.keys(data) : [],
+      fullResponse: JSON.stringify(data, null, 2).substring(0, 2000), // Log first 2000 chars
     })
     
     // Kraken Futures API may return { result: 'success', serverTime: ..., ... } or direct data
     if (data.result === 'success' && data.data) {
+      console.log('[Kraken API] Extracting data from result.success.data')
       return data.data as T
     }
     
     // Some endpoints return data directly
     if (data.data) {
+      console.log('[Kraken API] Extracting data from data.data')
       return data.data as T
     }
 
+    // Check if the response itself is the data (for /openpositions)
+    if (endpoint === '/openpositions') {
+      console.log('[Kraken API] /openpositions endpoint - checking if response is direct array/object')
+      // If it's already an array or object with positions, return it
+      if (Array.isArray(data) || (data && typeof data === 'object' && !data.result)) {
+        console.log('[Kraken API] Returning data directly for /openpositions')
+        return data as T
+      }
+    }
+
+    console.log('[Kraken API] Returning full data object')
     return data as T
   } catch (error) {
     console.error('[Kraken API] Request failed:', {
@@ -187,9 +201,31 @@ async function fetchOpenPositions(
       apiSecret
     )
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Kraken] Open positions response keys:', Object.keys(positionsData || {}))
-      console.log('[Kraken] Number of positions:', Array.isArray(positionsData) ? positionsData.length : 'Not an array')
+    // Detailed logging of the raw response
+    console.log('[Kraken] Open positions raw response:', JSON.stringify(positionsData, null, 2).substring(0, 2000))
+    console.log('[Kraken] Open positions response type:', typeof positionsData)
+    console.log('[Kraken] Open positions response keys:', positionsData ? Object.keys(positionsData) : 'null/undefined')
+    
+    if (Array.isArray(positionsData)) {
+      console.log('[Kraken] Response is array, length:', positionsData.length)
+      if (positionsData.length > 0) {
+        console.log('[Kraken] First position structure:', JSON.stringify(positionsData[0], null, 2))
+        console.log('[Kraken] First position keys:', Object.keys(positionsData[0]))
+      }
+    } else if (positionsData && typeof positionsData === 'object') {
+      console.log('[Kraken] Response is object, checking for nested arrays...')
+      if (positionsData.positions) {
+        console.log('[Kraken] Found positions array, length:', Array.isArray(positionsData.positions) ? positionsData.positions.length : 'not array')
+        if (Array.isArray(positionsData.positions) && positionsData.positions.length > 0) {
+          console.log('[Kraken] First position in positions array:', JSON.stringify(positionsData.positions[0], null, 2))
+        }
+      }
+      if (positionsData.data) {
+        console.log('[Kraken] Found data array, length:', Array.isArray(positionsData.data) ? positionsData.data.length : 'not array')
+        if (Array.isArray(positionsData.data) && positionsData.data.length > 0) {
+          console.log('[Kraken] First position in data array:', JSON.stringify(positionsData.data[0], null, 2))
+        }
+      }
     }
 
     const positions: PerpetualsOpenPosition[] = []
@@ -198,21 +234,56 @@ async function fetchOpenPositions(
     let positionsList: any[] = []
     if (Array.isArray(positionsData)) {
       positionsList = positionsData
+      console.log('[Kraken] Using positionsData as array, length:', positionsList.length)
     } else if (positionsData?.positions && Array.isArray(positionsData.positions)) {
       positionsList = positionsData.positions
+      console.log('[Kraken] Using positionsData.positions, length:', positionsList.length)
     } else if (positionsData?.data && Array.isArray(positionsData.data)) {
       positionsList = positionsData.data
+      console.log('[Kraken] Using positionsData.data, length:', positionsList.length)
+    } else {
+      console.log('[Kraken] No positions array found in response structure')
+      // Try to find any array in the response
+      if (positionsData && typeof positionsData === 'object') {
+        for (const [key, value] of Object.entries(positionsData)) {
+          if (Array.isArray(value) && value.length > 0) {
+            console.log(`[Kraken] Found array at key "${key}" with ${value.length} items, checking if it's positions...`)
+            // Check if first item looks like a position
+            const firstItem = value[0]
+            if (firstItem && typeof firstItem === 'object') {
+              const hasSymbol = 'symbol' in firstItem || 'instrument' in firstItem || 'futures' in firstItem || 'type' in firstItem
+              const hasSize = 'size' in firstItem || 'qty' in firstItem || 'quantity' in firstItem
+              if (hasSymbol || hasSize) {
+                console.log(`[Kraken] Array at "${key}" looks like positions, using it`)
+                positionsList = value
+                break
+              }
+            }
+          }
+        }
+      }
     }
 
-    for (const pos of positionsList) {
+    console.log('[Kraken] Processing positions list, length:', positionsList.length)
+
+    for (let i = 0; i < positionsList.length; i++) {
+      const pos = positionsList[i]
+      console.log(`[Kraken] Processing position ${i}:`, JSON.stringify(pos, null, 2).substring(0, 500))
+      
       // Filter out positions with zero size
-      const size = parseFloat(pos.size || pos.qty || '0')
+      const size = parseFloat(pos.size || pos.qty || pos.quantity || pos.amount || '0')
+      console.log(`[Kraken] Position ${i} size:`, size)
+      
       if (Math.abs(size) < 0.0001) {
+        console.log(`[Kraken] Position ${i} has zero size, skipping`)
         continue
       }
 
-      const symbol = pos.symbol || pos.instrument || pos.futures || ''
+      const symbol = pos.symbol || pos.instrument || pos.futures || pos.type || pos.ticker || pos.pair || ''
+      console.log(`[Kraken] Position ${i} symbol:`, symbol)
+      
       if (!symbol) {
+        console.log(`[Kraken] Position ${i} has no symbol, keys:`, Object.keys(pos))
         continue
       }
 
@@ -222,35 +293,52 @@ async function fetchOpenPositions(
         pos.margin ||
         pos.initial_margin ||
         pos.marginUsed ||
+        pos.collateral ||
+        pos.marginBalance ||
         '0'
       )
+      console.log(`[Kraken] Position ${i} margin:`, margin, 'from fields:', {
+        initialMargin: pos.initialMargin,
+        margin: pos.margin,
+        initial_margin: pos.initial_margin,
+        marginUsed: pos.marginUsed,
+        collateral: pos.collateral,
+      })
 
       // Extract PnL - try multiple possible field names
       const pnl = parseFloat(
         pos.unrealizedPnl ||
         pos.unrealized_pnl ||
         pos.pnl ||
-        pos.unrealizedPnl ||
         pos.profitLoss ||
+        pos.unrealizedProfit ||
+        pos.unrealized_profit ||
+        pos.profit ||
         '0'
       )
-
-      if (process.env.NODE_ENV === 'development' && symbol) {
-        console.log(`[Kraken] Position ${symbol}: margin=${margin}, pnl=${pnl}`)
-      }
+      console.log(`[Kraken] Position ${i} pnl:`, pnl, 'from fields:', {
+        unrealizedPnl: pos.unrealizedPnl,
+        unrealized_pnl: pos.unrealized_pnl,
+        pnl: pos.pnl,
+        profitLoss: pos.profitLoss,
+        unrealizedProfit: pos.unrealizedProfit,
+      })
 
       positions.push({
-        id: `kraken-pos-${symbol}-${Date.now()}`,
+        id: `kraken-pos-${symbol}-${Date.now()}-${i}`,
         ticker: symbol,
         margin,
         pnl,
         platform: 'Kraken',
       })
+      
+      console.log(`[Kraken] Added position ${i}:`, { ticker: symbol, margin, pnl })
     }
 
+    console.log('[Kraken] Total positions extracted:', positions.length)
     return positions
   } catch (error) {
-    console.error('Error fetching Kraken open positions:', error)
+    console.error('[Kraken] Error fetching Kraken open positions:', error)
     throw error
   }
 }
