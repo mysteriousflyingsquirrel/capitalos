@@ -293,12 +293,12 @@ function NetWorthCategorySection({
                   <style>{`
                     @media (max-width: 767px) {
                       .perp-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
-                      .perp-table-pnl-col { width: calc((100% - 80px) * 1 / 6) !important; }
+                      .perp-table-holdings-col { width: calc((100% - 80px) * 1 / 6) !important; }
                       .perp-table-balance-col { width: calc((100% - 80px) * 2 / 6) !important; }
                     }
                     @media (min-width: 768px) {
                       .perp-table-item-col { width: calc((100% - 80px) * 3 / 8) !important; }
-                      .perp-table-pnl-col { width: calc((100% - 80px) * 1 / 8) !important; }
+                      .perp-table-holdings-col { width: calc((100% - 80px) * 1 / 8) !important; }
                       .perp-table-balance-col { width: calc((100% - 80px) * 2 / 8) !important; }
                       .perp-table-platform-col { width: calc((100% - 80px) * 2 / 8) !important; }
                     }
@@ -306,7 +306,7 @@ function NetWorthCategorySection({
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
                     <colgroup>
                       <col className="perp-table-item-col" />
-                      <col className="perp-table-pnl-col" />
+                      <col className="perp-table-holdings-col" />
                       <col className="perp-table-balance-col" />
                       <col className="perp-table-platform-col hidden md:table-column" />
                       <col style={{ width: '80px' }} />
@@ -317,7 +317,7 @@ function NetWorthCategorySection({
                           <Heading level={4}>Item</Heading>
                         </th>
                         <th className="text-right pb-2">
-                          <Heading level={4}>PnL</Heading>
+                          <Heading level={4}>Holdings</Heading>
                         </th>
                         <th className="text-right pb-2">
                           <Heading level={4}>Balance</Heading>
@@ -332,10 +332,13 @@ function NetWorthCategorySection({
                     </thead>
                     <tbody>
                       {items[0].perpetualsData.openPositions.map((pos) => {
+                        const holdingsUsd = pos.margin + pos.pnl
                         const balanceUsd = pos.margin + pos.pnl
                         const balanceChf = usdToChfRate && usdToChfRate > 0 
                           ? balanceUsd * usdToChfRate 
                           : convert(balanceUsd, 'USD')
+                        const pnlSign = pos.pnl >= 0 ? '+' : ''
+                        const pnlFormatted = formatNumber(Math.abs(pos.pnl), 'ch', { incognito: isIncognito })
                         return (
                           <tr key={pos.id} className="border-b border-border-subtle last:border-b-0">
                             <td className="py-2 pr-2">
@@ -344,8 +347,8 @@ function NetWorthCategorySection({
                               </div>
                             </td>
                             <td className="py-2 text-right px-2">
-                              <div className={`text2 whitespace-nowrap ${pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {formatUsd(pos.pnl)}
+                              <div className="text2 whitespace-nowrap">
+                                {formatUsd(holdingsUsd)} <span className={pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>({pnlSign}{pnlFormatted})</span>
                               </div>
                             </td>
                             <td className="py-2 text-right px-2">
@@ -406,7 +409,7 @@ function NetWorthCategorySection({
                           <Heading level={4}>Item</Heading>
                         </th>
                         <th className="text-right pb-2">
-                          <Heading level={4}>Margin</Heading>
+                          <Heading level={4}>Holdings</Heading>
                         </th>
                         <th className="text-right pb-2">
                           <Heading level={4}>Balance</Heading>
@@ -495,7 +498,7 @@ function NetWorthCategorySection({
                           <Heading level={4}>Item</Heading>
                         </th>
                         <th className="text-right pb-2">
-                          <Heading level={4}>Margin</Heading>
+                          <Heading level={4}>Holdings</Heading>
                         </th>
                         <th className="text-right pb-2">
                           <Heading level={4}>Balance</Heading>
