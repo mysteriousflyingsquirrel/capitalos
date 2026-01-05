@@ -366,12 +366,7 @@ function NetWorthCategorySection({
                                 </span>
                               </div>
                             </td>
-                            <td className="py-2 pr-0">
-                              <div className="flex items-center justify-end -space-x-1 -mr-1">
-                                <button className="text-text-muted hover:text-text-primary text-[0.567rem] md:text-xs">
-                                  ...
-                                </button>
-                              </div>
+                            <td className="py-2">
                             </td>
                           </tr>
                         )
@@ -458,12 +453,7 @@ function NetWorthCategorySection({
                                 </span>
                               </div>
                             </td>
-                            <td className="py-2 pr-0">
-                              <div className="flex items-center justify-end -space-x-1 -mr-1">
-                                <button className="text-text-muted hover:text-text-primary text-[0.567rem] md:text-xs">
-                                  ...
-                                </button>
-                              </div>
+                            <td className="py-2">
                             </td>
                           </tr>
                         )
@@ -550,12 +540,7 @@ function NetWorthCategorySection({
                                 </span>
                               </div>
                             </td>
-                            <td className="py-2 pr-0">
-                              <div className="flex items-center justify-end -space-x-1 -mr-1">
-                                <button className="text-text-muted hover:text-text-primary text-[0.567rem] md:text-xs">
-                                  ...
-                                </button>
-                              </div>
+                            <td className="py-2">
                             </td>
                           </tr>
                         )
