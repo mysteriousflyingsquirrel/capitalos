@@ -352,7 +352,7 @@ function NetWorthCategorySection({
                             </td>
                             <td className="py-2 text-right px-2">
                               <div className="text2 whitespace-nowrap">
-                                {formatUsd(holdingsUsd)} <span className={pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>({pnlSign}{pnlFormatted})</span>
+                                {formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })} <span className={pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>({pnlSign}{pnlFormatted})</span>
                               </div>
                             </td>
                             <td className="py-2 text-right px-2 perp-table-balance-cell">
