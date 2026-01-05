@@ -11,7 +11,6 @@ import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
-import { fetchKrakenPerpetualsData } from '../services/krakenService'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
 import {
@@ -293,16 +292,16 @@ function NetWorthCategorySection({
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc(100% * 3 / 6) !important; }
-                      .perp-table-holdings-col { width: calc(100% * 3 / 6) !important; }
-                      .perp-table-balance-col { width: calc(100% * 1 / 6) !important; }
+                      .perp-table-item-col { width: calc(100% / 3) !important; }
+                      .perp-table-holdings-col { width: calc(100% / 3) !important; }
+                      .perp-table-balance-col { width: calc(100% / 3) !important; }
                       .perp-table-balance-cell { padding-right: 0.25rem !important; }
                     }
                     @media (min-width: 768px) {
-                      .perp-table-item-col { width: calc(100% * 3 / 8) !important; }
-                      .perp-table-holdings-col { width: calc(100% * 2 / 8) !important; }
-                      .perp-table-balance-col { width: calc(100% * 2 / 8) !important; }
-                      .perp-table-platform-col { width: calc(100% * 1 / 8) !important; }
+                      .perp-table-item-col { width: calc(100% / 4) !important; }
+                      .perp-table-holdings-col { width: calc(100% / 4) !important; }
+                      .perp-table-balance-col { width: calc(100% / 4) !important; }
+                      .perp-table-platform-col { width: calc(100% / 4) !important; }
                     }
                   `}</style>
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -375,16 +374,16 @@ function NetWorthCategorySection({
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc(100% * 3 / 6) !important; }
-                      .perp-table-margin-col { width: calc(100% * 3 / 6) !important; }
-                      .perp-table-balance-col { width: calc(100% * 1 / 6) !important; }
+                      .perp-table-item-col { width: calc(100% / 3) !important; }
+                      .perp-table-margin-col { width: calc(100% / 3) !important; }
+                      .perp-table-balance-col { width: calc(100% / 3) !important; }
                       .perp-table-balance-cell { padding-right: 0.25rem !important; }
                     }
                     @media (min-width: 768px) {
-                      .perp-table-item-col { width: calc(100% * 3 / 8) !important; }
-                      .perp-table-margin-col { width: calc(100% * 2 / 8) !important; }
-                      .perp-table-balance-col { width: calc(100% * 2 / 8) !important; }
-                      .perp-table-platform-col { width: calc(100% * 1 / 8) !important; }
+                      .perp-table-item-col { width: calc(100% / 4) !important; }
+                      .perp-table-margin-col { width: calc(100% / 4) !important; }
+                      .perp-table-balance-col { width: calc(100% / 4) !important; }
+                      .perp-table-platform-col { width: calc(100% / 4) !important; }
                     }
                   `}</style>
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -454,16 +453,16 @@ function NetWorthCategorySection({
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc(100% * 3 / 6) !important; }
-                      .perp-table-margin-col { width: calc(100% * 3 / 6) !important; }
-                      .perp-table-balance-col { width: calc(100% * 1 / 6) !important; }
+                      .perp-table-item-col { width: calc(100% / 3) !important; }
+                      .perp-table-margin-col { width: calc(100% / 3) !important; }
+                      .perp-table-balance-col { width: calc(100% / 3) !important; }
                       .perp-table-balance-cell { padding-right: 0.25rem !important; }
                     }
                     @media (min-width: 768px) {
-                      .perp-table-item-col { width: calc(100% * 3 / 8) !important; }
-                      .perp-table-margin-col { width: calc(100% * 2 / 8) !important; }
-                      .perp-table-balance-col { width: calc(100% * 2 / 8) !important; }
-                      .perp-table-platform-col { width: calc(100% * 1 / 8) !important; }
+                      .perp-table-item-col { width: calc(100% / 4) !important; }
+                      .perp-table-margin-col { width: calc(100% / 4) !important; }
+                      .perp-table-balance-col { width: calc(100% / 4) !important; }
+                      .perp-table-platform-col { width: calc(100% / 4) !important; }
                     }
                   `}</style>
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -912,7 +911,6 @@ function NetWorth() {
           { id: 'revolut', name: 'Revolut', order: 0 },
           { id: 'yuh', name: 'yuh!', order: 0 },
           { id: 'saxo', name: 'SAXO', order: 0 },
-          { id: 'kraken', name: 'Kraken', order: 0 },
           { id: 'mexc', name: 'MEXC', order: 0 },
           { id: 'bingx', name: 'BingX', order: 0 },
           { id: 'exodus', name: 'Exodus', order: 0 },
@@ -958,37 +956,18 @@ function NetWorth() {
         setTransactions(txs)
         setPlatforms(loadedPlatforms)
         
-        // Fetch Aster and Kraken Perpetuals data if Perpetuals item exists
+        // Fetch Aster Perpetuals data if Perpetuals item exists
         const perpetualsItem = migratedItems.find(item => item.category === 'Perpetuals')
         if (perpetualsItem) {
-            Promise.all([
-              fetchAsterPerpetualsData(uid),
-              fetchKrakenPerpetualsData(uid),
-            ]).then(([asterData, krakenData]) => {
-              // Merge data from both sources
-              const mergedData: PerpetualsData = {
-                openPositions: [
-                  ...(asterData?.openPositions || []),
-                  ...(krakenData?.openPositions || []),
-                ],
-                lockedMargin: [
-                  ...(asterData?.lockedMargin ?? []),
-                  ...(krakenData?.lockedMargin ?? []),
-                ],
-                availableMargin: [
-                  ...(asterData?.availableMargin || []),
-                  ...(krakenData?.availableMargin || []),
-                ],
-              }
-              
-              // Only update if we have data from at least one source
-              if (asterData || krakenData) {
+            fetchAsterPerpetualsData(uid).then((asterData) => {
+              // Use Aster data directly
+              if (asterData) {
                 setNetWorthItems((prevItems) => {
                   return prevItems.map((item) => {
                     if (item.category === 'Perpetuals') {
                       return {
                         ...item,
-                        perpetualsData: mergedData,
+                        perpetualsData: asterData,
                       }
                     }
                     return item
@@ -1018,28 +997,9 @@ function NetWorth() {
     if (!perpetualsItem) return
 
     const refreshInterval = setInterval(() => {
-      Promise.all([
-        fetchAsterPerpetualsData(uid),
-        fetchKrakenPerpetualsData(uid),
-      ]).then(([asterData, krakenData]) => {
-        // Merge data from both sources
-        const mergedData: PerpetualsData = {
-          openPositions: [
-            ...(asterData?.openPositions || []),
-            ...(krakenData?.openPositions || []),
-          ],
-          lockedMargin: [
-            ...(asterData?.lockedMargin ?? []),
-            ...(krakenData?.lockedMargin ?? []),
-          ],
-          availableMargin: [
-            ...(asterData?.availableMargin || []),
-            ...(krakenData?.availableMargin || []),
-          ],
-        }
-        
-        // Only update if we have data from at least one source
-        if (asterData || krakenData) {
+      fetchAsterPerpetualsData(uid).then((asterData) => {
+        // Use Aster data directly
+        if (asterData) {
           setNetWorthItems((prevItems) => {
             return prevItems.map((item) => {
               if (item.category === 'Perpetuals') {

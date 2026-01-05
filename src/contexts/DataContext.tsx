@@ -12,7 +12,6 @@ import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotServic
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
-import { fetchKrakenPerpetualsData } from '../services/krakenService'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
 import type { InflowItem, OutflowItem } from '../pages/Cashflow'
@@ -147,7 +146,7 @@ export function DataProvider({ children }: DataProviderProps) {
     }
   }
 
-  // Fetch Aster and Kraken Perpetuals data and merge them
+  // Fetch Aster Perpetuals data
   const fetchPerpetualsData = async (items: NetWorthItem[]): Promise<NetWorthItem[]> => {
     console.log('[DataContext] fetchPerpetualsData called:', {
       hasUid: !!uid,
@@ -168,60 +167,31 @@ export function DataProvider({ children }: DataProviderProps) {
     }
 
     try {
-      console.log('[DataContext] Fetching Aster and Kraken data in parallel...')
+      console.log('[DataContext] Fetching Aster data...')
       
-      // Fetch both Aster and Kraken data in parallel
-      const [asterData, krakenData] = await Promise.all([
-        fetchAsterPerpetualsData(uid),
-        fetchKrakenPerpetualsData(uid),
-      ])
+      const asterData = await fetchAsterPerpetualsData(uid)
 
       console.log('[DataContext] Fetch results:', {
         asterData: !!asterData,
-        krakenData: !!krakenData,
         asterPositions: asterData?.openPositions?.length || 0,
-        krakenPositions: krakenData?.openPositions?.length || 0,
         asterLockedMargin: asterData?.lockedMargin?.length || 0,
-        krakenLockedMargin: krakenData?.lockedMargin?.length || 0,
         asterAvailableMargin: asterData?.availableMargin?.length || 0,
-        krakenAvailableMargin: krakenData?.availableMargin?.length || 0,
       })
 
-      // Merge the data from both sources
-      // Ensure all values are arrays before spreading
-      const asterPositions = Array.isArray(asterData?.openPositions) ? asterData.openPositions : []
-      const krakenPositions = Array.isArray(krakenData?.openPositions) ? krakenData.openPositions : []
-      const asterLocked = Array.isArray(asterData?.lockedMargin) ? asterData.lockedMargin : []
-      const krakenLocked = Array.isArray(krakenData?.lockedMargin) ? krakenData.lockedMargin : []
-      const asterAvailable = Array.isArray(asterData?.availableMargin) ? asterData.availableMargin : []
-      const krakenAvailable = Array.isArray(krakenData?.availableMargin) ? krakenData.availableMargin : []
-      
-      const mergedData = {
-        openPositions: [...asterPositions, ...krakenPositions],
-        lockedMargin: [...asterLocked, ...krakenLocked],
-        availableMargin: [...asterAvailable, ...krakenAvailable],
-      }
-
-      console.log('[DataContext] Merged data:', {
-        totalPositions: mergedData.openPositions.length,
-        totalLockedMargin: mergedData.lockedMargin.length,
-        totalAvailableMargin: mergedData.availableMargin.length,
-      })
-
-      // Only update if we have data from at least one source
-      if (asterData || krakenData) {
-        console.log('[DataContext] Updating items with merged Perpetuals data')
+      // Use Aster data directly
+      if (asterData) {
+        console.log('[DataContext] Updating items with Aster Perpetuals data')
         return items.map((item) => {
           if (item.category === 'Perpetuals') {
             return {
               ...item,
-              perpetualsData: mergedData,
+              perpetualsData: asterData,
             }
           }
           return item
         })
       } else {
-        console.log('[DataContext] No data from either source, keeping existing items')
+        console.log('[DataContext] No data from Aster, keeping existing items')
       }
     } catch (error) {
       console.error('[DataContext] Error fetching Perpetuals data:', error)

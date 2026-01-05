@@ -223,8 +223,6 @@ export interface UserSettings {
     rapidApiKey?: string
     asterApiKey?: string
     asterApiSecretKey?: string
-    krakenApiKey?: string
-    krakenApiSecretKey?: string
   }
 }
 
