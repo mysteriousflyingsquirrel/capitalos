@@ -292,15 +292,18 @@ function NetWorthCategorySection({
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc((100% - 80px) * 3 / 6) !important; }
-                      .perp-table-holdings-col { width: calc((100% - 80px) * 1 / 6) !important; }
-                      .perp-table-balance-col { width: calc((100% - 80px) * 2 / 6) !important; }
+                      .perp-table-item-col { width: calc((100% - 50px) * 3 / 6) !important; }
+                      .perp-table-holdings-col { width: calc((100% - 50px) * 2 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 50px) * 1 / 6) !important; }
+                      .perp-table-actions-col { width: 50px !important; }
+                      .perp-table-balance-cell { padding-right: 0.25rem !important; }
                     }
                     @media (min-width: 768px) {
                       .perp-table-item-col { width: calc((100% - 80px) * 3 / 8) !important; }
                       .perp-table-holdings-col { width: calc((100% - 80px) * 1 / 8) !important; }
                       .perp-table-balance-col { width: calc((100% - 80px) * 2 / 8) !important; }
                       .perp-table-platform-col { width: calc((100% - 80px) * 2 / 8) !important; }
+                      .perp-table-actions-col { width: 80px !important; }
                     }
                   `}</style>
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -309,7 +312,7 @@ function NetWorthCategorySection({
                       <col className="perp-table-holdings-col" />
                       <col className="perp-table-balance-col" />
                       <col className="perp-table-platform-col hidden md:table-column" />
-                      <col style={{ width: '80px' }} />
+                      <col className="perp-table-actions-col" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-border-subtle">
@@ -351,7 +354,7 @@ function NetWorthCategorySection({
                                 {formatUsd(holdingsUsd)} <span className={pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>({pnlSign}{pnlFormatted})</span>
                               </div>
                             </td>
-                            <td className="py-2 text-right px-2">
+                            <td className="py-2 text-right px-2 perp-table-balance-cell">
                               <div className="text2 whitespace-nowrap">
                                 {formatCurrency(balanceChf)}
                               </div>
