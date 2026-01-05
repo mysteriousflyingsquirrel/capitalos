@@ -189,10 +189,12 @@ async function krakenFuturesRequest<T>(
 
 /**
  * Fetches open positions from Kraken Futures API
+ * Combines /openpositions (instrument, direction, size) with /accounts (initial_margin, unrealized_pnl)
  */
 async function fetchOpenPositions(
   apiKey: string,
-  apiSecret: string
+  apiSecret: string,
+  accountsData: any
 ): Promise<PerpetualsOpenPosition[]> {
   try {
     const positionsData = await krakenFuturesRequest<any>(
@@ -205,32 +207,10 @@ async function fetchOpenPositions(
     console.log('[Kraken] Open positions raw response:', JSON.stringify(positionsData, null, 2).substring(0, 2000))
     console.log('[Kraken] Open positions response type:', typeof positionsData)
     console.log('[Kraken] Open positions response keys:', positionsData ? Object.keys(positionsData) : 'null/undefined')
-    
-    if (Array.isArray(positionsData)) {
-      console.log('[Kraken] Response is array, length:', positionsData.length)
-      if (positionsData.length > 0) {
-        console.log('[Kraken] First position structure:', JSON.stringify(positionsData[0], null, 2))
-        console.log('[Kraken] First position keys:', Object.keys(positionsData[0]))
-      }
-    } else if (positionsData && typeof positionsData === 'object') {
-      console.log('[Kraken] Response is object, checking for nested arrays...')
-      if (positionsData.positions) {
-        console.log('[Kraken] Found positions array, length:', Array.isArray(positionsData.positions) ? positionsData.positions.length : 'not array')
-        if (Array.isArray(positionsData.positions) && positionsData.positions.length > 0) {
-          console.log('[Kraken] First position in positions array:', JSON.stringify(positionsData.positions[0], null, 2))
-        }
-      }
-      if (positionsData.data) {
-        console.log('[Kraken] Found data array, length:', Array.isArray(positionsData.data) ? positionsData.data.length : 'not array')
-        if (Array.isArray(positionsData.data) && positionsData.data.length > 0) {
-          console.log('[Kraken] First position in data array:', JSON.stringify(positionsData.data[0], null, 2))
-        }
-      }
-    }
 
     const positions: PerpetualsOpenPosition[] = []
 
-    // Handle different response structures
+    // Handle different response structures for /openpositions
     let positionsList: any[] = []
     if (Array.isArray(positionsData)) {
       positionsList = positionsData
@@ -251,9 +231,9 @@ async function fetchOpenPositions(
             // Check if first item looks like a position
             const firstItem = value[0]
             if (firstItem && typeof firstItem === 'object') {
-              const hasSymbol = 'symbol' in firstItem || 'instrument' in firstItem || 'futures' in firstItem || 'type' in firstItem
+              const hasInstrument = 'instrument' in firstItem || 'symbol' in firstItem
               const hasSize = 'size' in firstItem || 'qty' in firstItem || 'quantity' in firstItem
-              if (hasSymbol || hasSize) {
+              if (hasInstrument || hasSize) {
                 console.log(`[Kraken] Array at "${key}" looks like positions, using it`)
                 positionsList = value
                 break
@@ -265,6 +245,45 @@ async function fetchOpenPositions(
     }
 
     console.log('[Kraken] Processing positions list, length:', positionsList.length)
+
+    // Build a map of instrument -> account data for quick lookup
+    const accountInstrumentMap = new Map<string, any>()
+    
+    if (accountsData) {
+      // Check different possible structures for accounts data
+      let accountsList: any[] = []
+      
+      if (Array.isArray(accountsData)) {
+        accountsList = accountsData
+      } else if (accountsData.accounts && Array.isArray(accountsData.accounts)) {
+        accountsList = accountsData.accounts
+      } else if (accountsData.data && Array.isArray(accountsData.data)) {
+        accountsList = accountsData.data
+      }
+      
+      console.log('[Kraken] Building instrument map from accounts, accounts count:', accountsList.length)
+      
+      for (const account of accountsList) {
+        // Accounts might have per-instrument entries or be account-level
+        if (account.instrument) {
+          const instrument = account.instrument
+          accountInstrumentMap.set(instrument, account)
+          console.log(`[Kraken] Mapped instrument "${instrument}" from accounts`)
+        }
+        
+        // Also check for nested positions/instruments in account
+        if (account.positions && Array.isArray(account.positions)) {
+          for (const pos of account.positions) {
+            if (pos.instrument) {
+              accountInstrumentMap.set(pos.instrument, pos)
+              console.log(`[Kraken] Mapped instrument "${pos.instrument}" from account positions`)
+            }
+          }
+        }
+      }
+      
+      console.log('[Kraken] Total instruments in account map:', accountInstrumentMap.size)
+    }
 
     for (let i = 0; i < positionsList.length; i++) {
       const pos = positionsList[i]
@@ -279,60 +298,63 @@ async function fetchOpenPositions(
         continue
       }
 
-      const symbol = pos.symbol || pos.instrument || pos.futures || pos.type || pos.ticker || pos.pair || ''
-      console.log(`[Kraken] Position ${i} symbol:`, symbol)
+      // Get instrument from /openpositions
+      const instrument = pos.instrument || pos.symbol || pos.futures || pos.type || pos.ticker || pos.pair || ''
+      console.log(`[Kraken] Position ${i} instrument:`, instrument)
       
-      if (!symbol) {
-        console.log(`[Kraken] Position ${i} has no symbol, keys:`, Object.keys(pos))
+      if (!instrument) {
+        console.log(`[Kraken] Position ${i} has no instrument, keys:`, Object.keys(pos))
         continue
       }
 
-      // Extract margin - try multiple possible field names
-      const margin = parseFloat(
-        pos.initialMargin ||
-        pos.margin ||
-        pos.initial_margin ||
-        pos.marginUsed ||
-        pos.collateral ||
-        pos.marginBalance ||
-        '0'
-      )
-      console.log(`[Kraken] Position ${i} margin:`, margin, 'from fields:', {
-        initialMargin: pos.initialMargin,
-        margin: pos.margin,
-        initial_margin: pos.initial_margin,
-        marginUsed: pos.marginUsed,
-        collateral: pos.collateral,
-      })
-
-      // Extract PnL - try multiple possible field names
-      const pnl = parseFloat(
-        pos.unrealizedPnl ||
-        pos.unrealized_pnl ||
-        pos.pnl ||
-        pos.profitLoss ||
-        pos.unrealizedProfit ||
-        pos.unrealized_profit ||
-        pos.profit ||
-        '0'
-      )
-      console.log(`[Kraken] Position ${i} pnl:`, pnl, 'from fields:', {
-        unrealizedPnl: pos.unrealizedPnl,
-        unrealized_pnl: pos.unrealized_pnl,
-        pnl: pos.pnl,
-        profitLoss: pos.profitLoss,
-        unrealizedProfit: pos.unrealizedProfit,
-      })
+      // Get margin and PnL from /accounts by matching instrument
+      let margin = 0
+      let pnl = 0
+      
+      const accountData = accountInstrumentMap.get(instrument)
+      if (accountData) {
+        margin = parseFloat(accountData.initial_margin || accountData.initialMargin || '0')
+        pnl = parseFloat(accountData.unrealized_pnl || accountData.unrealizedPnl || accountData.unrealizedPnl || '0')
+        console.log(`[Kraken] Position ${i} found in accounts:`, {
+          instrument,
+          initial_margin: accountData.initial_margin,
+          unrealized_pnl: accountData.unrealized_pnl,
+          margin,
+          pnl,
+        })
+      } else {
+        console.log(`[Kraken] Position ${i} instrument "${instrument}" not found in accounts map`)
+        // Try to find it by searching all accounts
+        if (accountsData) {
+          let accountsList: any[] = []
+          if (Array.isArray(accountsData)) {
+            accountsList = accountsData
+          } else if (accountsData.accounts && Array.isArray(accountsData.accounts)) {
+            accountsList = accountsData.accounts
+          } else if (accountsData.data && Array.isArray(accountsData.data)) {
+            accountsList = accountsData.data
+          }
+          
+          for (const account of accountsList) {
+            if (account.instrument === instrument) {
+              margin = parseFloat(account.initial_margin || account.initialMargin || '0')
+              pnl = parseFloat(account.unrealized_pnl || account.unrealizedPnl || '0')
+              console.log(`[Kraken] Position ${i} found in accounts (fallback search):`, { instrument, margin, pnl })
+              break
+            }
+          }
+        }
+      }
 
       positions.push({
-        id: `kraken-pos-${symbol}-${Date.now()}-${i}`,
-        ticker: symbol,
+        id: `kraken-pos-${instrument}-${Date.now()}-${i}`,
+        ticker: instrument,
         margin,
         pnl,
         platform: 'Kraken',
       })
       
-      console.log(`[Kraken] Added position ${i}:`, { ticker: symbol, margin, pnl })
+      console.log(`[Kraken] Added position ${i}:`, { ticker: instrument, margin, pnl, holdings: margin + pnl })
     }
 
     console.log('[Kraken] Total positions extracted:', positions.length)
@@ -650,30 +672,19 @@ async function fetchKrakenPerpetualsData(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsData> {
-  // Fetch accounts first (needed for margin calculations)
+  // Fetch accounts first (needed for margin calculations and position data)
   const accountsData = await fetchAccounts(apiKey, apiSecret)
   
-  // Fetch positions, orders, and margins in parallel
+  // Fetch positions (needs accountsData for margin/PnL), orders, and margins in parallel
   const [openPositions, openOrders, lockedMargin, availableMargin] = await Promise.all([
-    fetchOpenPositions(apiKey, apiSecret),
+    fetchOpenPositions(apiKey, apiSecret, accountsData),
     fetchOpenOrders(apiKey, apiSecret),
     fetchLockedMargin(apiKey, apiSecret, accountsData),
     fetchAvailableMargin(apiKey, apiSecret, accountsData),
   ])
 
-  // Enhance positions with account data if needed
-  // Try to match positions with account data for better margin/PnL
-  const enhancedPositions = openPositions.map(pos => {
-    // If position margin or PnL is 0, try to find it in accounts data
-    if ((pos.margin === 0 || pos.pnl === 0) && accountsData) {
-      // Look for position-specific data in accounts
-      // This is a fallback - the positions endpoint should ideally have this
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[Kraken] Position ${pos.ticker} has zero margin or PnL, attempting to enhance from accounts`)
-      }
-    }
-    return pos
-  })
+  // Positions are already enhanced with account data in fetchOpenPositions
+  const enhancedPositions = openPositions
 
   if (process.env.NODE_ENV === 'development') {
     // Sanity check: available + used + locked ~= equity (if available)
