@@ -34,9 +34,10 @@ export function calculateBalanceChf(
       return posSum + (pos.margin + pos.pnl)
     }, 0)
     
-    // Open Orders: use account-level lockedMargin if available, otherwise 0
-    // (per-order margin is not reliable from API)
-    const openOrdersTotal = lockedMargin !== null ? lockedMargin : 0
+    // Locked Margin: sum of all locked margin assets (in USD)
+    const lockedMarginTotal = lockedMargin.reduce((sum, margin) => {
+      return sum + margin.margin
+    }, 0)
     
     // Available Margin: balance = margin (in USD)
     const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
@@ -44,7 +45,7 @@ export function calculateBalanceChf(
     }, 0)
     
     // Total in USD - returns USD value, caller must convert to CHF
-    return openPositionsTotal + openOrdersTotal + availableMarginTotal
+    return openPositionsTotal + lockedMarginTotal + availableMarginTotal
   }
   
   // For Depreciating Assets, calculate depreciation based on time since purchase

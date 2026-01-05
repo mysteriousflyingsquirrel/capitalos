@@ -44,10 +44,10 @@ export interface PerpetualsOpenPosition {
   platform: string
 }
 
-export interface PerpetualsOpenOrder {
+export interface PerpetualsLockedMargin {
   id: string
-  name: string
-  margin: number | null // in quote currency (USD/USDT), null when not available from API
+  asset: string
+  margin: number // in quote currency (USD/USDT)
   platform: string
 }
 
@@ -60,9 +60,8 @@ export interface PerpetualsAvailableMargin {
 
 export interface PerpetualsData {
   openPositions: PerpetualsOpenPosition[]
-  openOrders: PerpetualsOpenOrder[]
+  lockedMargin: PerpetualsLockedMargin[] // Asset-based locked margin from /fapi/v4/account
   availableMargin: PerpetualsAvailableMargin[]
-  lockedMargin: number | null // Account-level locked margin from /fapi/v4/account (in USD/USDT)
 }
 
 export interface NetWorthItem {
@@ -99,9 +98,8 @@ const mockNetWorthItems: NetWorthItem[] = []
 // Empty data for Perpetuals category (will be populated from Aster API)
 const defaultPerpetualsData: PerpetualsData = {
   openPositions: [],
-  openOrders: [],
+  lockedMargin: [],
   availableMargin: [],
-  lockedMargin: null,
 }
 
 const initialMockTransactions: NetWorthTransaction[] = []
@@ -203,15 +201,14 @@ function NetWorthCategorySection({
         totalChf += balanceChf
       })
       
-      // Open Orders: use account-level lockedMargin if available
-      // (per-order margin is not reliable from API)
-      if (lockedMargin !== null && lockedMargin !== undefined) {
-        const balanceUsd = lockedMargin
+      // Locked Margin: convert each balance to CHF and sum
+      lockedMargin.forEach(margin => {
+        const balanceUsd = margin.margin
         const balanceChf = usdToChfRate && usdToChfRate > 0 
           ? balanceUsd * usdToChfRate 
           : convert(balanceUsd, 'USD')
         totalChf += balanceChf
-      }
+      })
       
       // Available Margin: convert each balance to CHF and sum
       availableMargin.forEach(margin => {
@@ -378,9 +375,9 @@ function NetWorthCategorySection({
                 </div>
               </div>
 
-              {/* Open Orders Table */}
+              {/* Locked Margin Table */}
               <div>
-                <Heading level={3} className="mb-3 text-text-secondary">Open Orders</Heading>
+                <Heading level={3} className="mb-3 text-text-secondary">Locked Margin</Heading>
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
@@ -423,39 +420,32 @@ function NetWorthCategorySection({
                       </tr>
                     </thead>
                     <tbody>
-                      {items[0].perpetualsData.openOrders.map((order) => {
-                        // Margin is null when not available from API
-                        const marginDisplay = order.margin !== null ? formatUsd(order.margin) : '—'
-                        const balanceDisplay = order.margin !== null 
-                          ? (() => {
-                              const balanceUsd = order.margin
-                              const balanceChf = usdToChfRate && usdToChfRate > 0 
-                                ? balanceUsd * usdToChfRate 
-                                : convert(balanceUsd, 'USD')
-                              return formatCurrency(balanceChf)
-                            })()
-                          : '—'
+                      {items[0].perpetualsData.lockedMargin.map((margin) => {
+                        const balanceUsd = margin.margin
+                        const balanceChf = usdToChfRate && usdToChfRate > 0 
+                          ? balanceUsd * usdToChfRate 
+                          : convert(balanceUsd, 'USD')
                         return (
-                          <tr key={order.id} className="border-b border-border-subtle last:border-b-0">
+                          <tr key={margin.id} className="border-b border-border-subtle last:border-b-0">
                             <td className="py-2 pr-2">
                               <div className="text2 truncate">
-                                {order.name}
+                                {margin.asset}
                               </div>
                             </td>
                             <td className="py-2 text-right px-2">
                               <div className="text2 whitespace-nowrap">
-                                {marginDisplay}
+                                {formatUsd(margin.margin)}
                               </div>
                             </td>
                             <td className="py-2 text-right px-2">
                               <div className="text2 whitespace-nowrap">
-                                {balanceDisplay}
+                                {formatCurrency(balanceChf)}
                               </div>
                             </td>
                             <td className="py-2 text-right pr-2 hidden md:table-cell">
                               <div className="flex items-center justify-end gap-2">
                                 <span className="text2 truncate">
-                                  {order.platform}
+                                  {margin.platform}
                                 </span>
                               </div>
                             </td>
@@ -999,7 +989,7 @@ function NetWorth() {
                 // Ensure lockedMargin is included (in case API returns old structure)
                 const perpetualsData: PerpetualsData = {
                   ...asterData,
-                  lockedMargin: asterData.lockedMargin ?? null,
+                  lockedMargin: asterData.lockedMargin ?? [],
                 }
                 // Update the Perpetuals item with live data from Aster
                 setNetWorthItems((prevItems) => {
@@ -1042,7 +1032,7 @@ function NetWorth() {
           // Ensure lockedMargin is included (in case API returns old structure)
           const perpetualsData: PerpetualsData = {
             ...asterData,
-            lockedMargin: asterData.lockedMargin ?? null,
+            lockedMargin: asterData.lockedMargin ?? [],
           }
           setNetWorthItems((prevItems) => {
             return prevItems.map((item) => {
