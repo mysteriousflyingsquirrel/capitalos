@@ -82,17 +82,45 @@ function generateKrakenSignature(
   // Step 3: message = postData + nonce + endpointPath
   const message = postData + nonce + endpointPath
   
+  console.log('[Kraken Signature] Generating signature:', {
+    postData: postData.substring(0, 100), // Log first 100 chars
+    postDataLength: postData.length,
+    nonce,
+    endpointPath,
+    messageLength: message.length,
+    messagePreview: message.substring(0, 150), // Log first 150 chars
+  })
+  
   // Step 4: sha256 = SHA256(message)
   const sha256 = crypto.createHash('sha256').update(message).digest()
+  console.log('[Kraken Signature] SHA256 computed:', {
+    sha256Length: sha256.length,
+    sha256Hex: sha256.toString('hex').substring(0, 32) + '...',
+  })
   
   // Step 5: secretDecoded = Base64Decode(apiSecret)
   const secretDecoded = Buffer.from(apiSecret, 'base64')
+  console.log('[Kraken Signature] Secret decoded:', {
+    apiSecretLength: apiSecret.length,
+    secretDecodedLength: secretDecoded.length,
+    secretDecodedPreview: secretDecoded.toString('hex').substring(0, 32) + '...',
+  })
   
   // Step 6: hmac = HMAC_SHA512(secretDecoded, sha256)
   const hmac = crypto.createHmac('sha512', secretDecoded).update(sha256).digest()
+  console.log('[Kraken Signature] HMAC computed:', {
+    hmacLength: hmac.length,
+    hmacHex: hmac.toString('hex').substring(0, 32) + '...',
+  })
   
   // Step 7: authent = Base64Encode(hmac)
-  return hmac.toString('base64')
+  const authent = hmac.toString('base64')
+  console.log('[Kraken Signature] Final signature (Base64):', {
+    authentLength: authent.length,
+    authentPreview: authent.substring(0, 32) + '...',
+  })
+  
+  return authent
 }
 
 /**
@@ -138,18 +166,6 @@ async function krakenFuturesRequest<T>(
   // Build URL
   const url = `${KRAKEN_FUTURES_BASE_URL}${endpointPath}${postData ? `?${postData}` : ''}`
   
-  console.log('[Kraken API] Making request:', {
-    endpoint,
-    endpointPath,
-    method,
-    url,
-    apiKeyLength: apiKey?.length || 0,
-    apiSecretLength: apiSecret?.length || 0,
-    nonce,
-    postData: postData.substring(0, 100), // Log first 100 chars
-    signatureLength: signature?.length || 0,
-  })
-  
   const headers: Record<string, string> = {
     'APIKey': apiKey,
     'Authent': signature,
@@ -167,53 +183,114 @@ async function krakenFuturesRequest<T>(
     headers['Content-Type'] = 'application/x-www-form-urlencoded'
   }
 
+  // Log full request details
+  console.log('[Kraken API] ========== REQUEST START ==========')
+  console.log('[Kraken API] Endpoint:', endpoint)
+  console.log('[Kraken API] Full Endpoint Path:', endpointPath)
+  console.log('[Kraken API] Method:', method)
+  console.log('[Kraken API] Full URL:', url)
+  console.log('[Kraken API] Headers:', {
+    APIKey: apiKey ? `${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}` : 'MISSING',
+    Authent: signature ? `${signature.substring(0, 16)}...${signature.substring(signature.length - 8)}` : 'MISSING',
+    Nonce: nonce,
+    'Content-Type': headers['Content-Type'],
+  })
+  console.log('[Kraken API] Post Data:', postData || '(empty)')
+  console.log('[Kraken API] Post Data Length:', postData.length)
+  console.log('[Kraken API] API Key Length:', apiKey?.length || 0)
+  console.log('[Kraken API] API Secret Length:', apiSecret?.length || 0)
+  console.log('[Kraken API] Signature Length:', signature?.length || 0)
+  console.log('[Kraken API] Request Options:', {
+    method: options.method,
+    hasBody: !!options.body,
+    bodyLength: options.body ? String(options.body).length : 0,
+  })
+
   try {
+    const requestStartTime = Date.now()
     const response = await fetch(url, options)
+    const requestDuration = Date.now() - requestStartTime
     
-    console.log('[Kraken API] Response received:', {
-      endpoint,
-      status: response.status,
-      statusText: response.statusText,
-    })
+    // Log response details
+    console.log('[Kraken API] ========== RESPONSE RECEIVED ==========')
+    console.log('[Kraken API] Endpoint:', endpoint)
+    console.log('[Kraken API] Status:', response.status)
+    console.log('[Kraken API] Status Text:', response.statusText)
+    console.log('[Kraken API] Request Duration:', `${requestDuration}ms`)
+    console.log('[Kraken API] Response Headers:', Object.fromEntries(response.headers.entries()))
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('[Kraken API] Error response:', {
-        endpoint,
-        status: response.status,
-        errorText: errorText.substring(0, 500),
-      })
+      console.error('[Kraken API] ========== ERROR RESPONSE ==========')
+      console.error('[Kraken API] Endpoint:', endpoint)
+      console.error('[Kraken API] Status:', response.status)
+      console.error('[Kraken API] Status Text:', response.statusText)
+      console.error('[Kraken API] Error Text (full):', errorText)
+      console.error('[Kraken API] Error Text (first 500 chars):', errorText.substring(0, 500))
+      console.error('[Kraken API] ======================================')
       throw new Error(
         `Kraken Futures API error (${response.status}): ${errorText.substring(0, 200)}`
       )
     }
 
-    const data = await response.json()
+    const responseText = await response.text()
+    console.log('[Kraken API] Response Text Length:', responseText.length)
+    console.log('[Kraken API] Response Text (first 1000 chars):', responseText.substring(0, 1000))
     
-    console.log('[Kraken API] Response data structure:', {
-      endpoint,
-      hasResult: !!data.result,
-      hasData: !!data.data,
-      dataKeys: data ? Object.keys(data) : [],
-    })
+    let data: any
+    try {
+      data = JSON.parse(responseText)
+    } catch (parseError) {
+      console.error('[Kraken API] ========== JSON PARSE ERROR ==========')
+      console.error('[Kraken API] Failed to parse response as JSON')
+      console.error('[Kraken API] Parse Error:', parseError)
+      console.error('[Kraken API] Response Text:', responseText)
+      console.error('[Kraken API] =======================================')
+      throw new Error(`Failed to parse Kraken API response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`)
+    }
+    
+    console.log('[Kraken API] ========== RESPONSE DATA ==========')
+    console.log('[Kraken API] Endpoint:', endpoint)
+    console.log('[Kraken API] Data Type:', typeof data)
+    console.log('[Kraken API] Is Array:', Array.isArray(data))
+    console.log('[Kraken API] Data Keys:', data ? Object.keys(data) : [])
+    console.log('[Kraken API] Has Result:', !!data.result)
+    console.log('[Kraken API] Has Data:', !!data.data)
+    console.log('[Kraken API] Result Value:', data.result)
+    console.log('[Kraken API] Full Data (first 2000 chars):', JSON.stringify(data, null, 2).substring(0, 2000))
+    console.log('[Kraken API] ===================================')
     
     // Kraken Futures API may return { result: 'success', data: ... } or direct data
+    let returnData: T
     if (data.result === 'success' && data.data !== undefined) {
-      return data.data as T
+      console.log('[Kraken API] Extracting data from result.success.data')
+      returnData = data.data as T
+    } else if (data.data !== undefined) {
+      console.log('[Kraken API] Extracting data from data.data')
+      returnData = data.data as T
+    } else {
+      console.log('[Kraken API] Returning data as-is')
+      returnData = data as T
     }
     
-    // Some endpoints return data directly
-    if (data.data !== undefined) {
-      return data.data as T
+    console.log('[Kraken API] ========== RETURNING DATA ==========')
+    console.log('[Kraken API] Endpoint:', endpoint)
+    console.log('[Kraken API] Return Data Type:', typeof returnData)
+    console.log('[Kraken API] Return Data Is Array:', Array.isArray(returnData))
+    if (returnData && typeof returnData === 'object') {
+      console.log('[Kraken API] Return Data Keys:', Object.keys(returnData))
     }
-
-    // Return the data as-is
-    return data as T
+    console.log('[Kraken API] Return Data Preview (first 1000 chars):', JSON.stringify(returnData, null, 2).substring(0, 1000))
+    console.log('[Kraken API] ========== REQUEST COMPLETE ==========')
+    
+    return returnData
   } catch (error) {
-    console.error('[Kraken API] Request failed:', {
-      endpoint,
-      error: error instanceof Error ? error.message : String(error),
-    })
+    console.error('[Kraken API] ========== REQUEST FAILED ==========')
+    console.error('[Kraken API] Endpoint:', endpoint)
+    console.error('[Kraken API] Error Type:', error instanceof Error ? error.constructor.name : typeof error)
+    console.error('[Kraken API] Error Message:', error instanceof Error ? error.message : String(error))
+    console.error('[Kraken API] Error Stack:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('[Kraken API] =====================================')
     throw error
   }
 }
