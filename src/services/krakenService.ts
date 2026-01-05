@@ -6,30 +6,52 @@ import type { PerpetualsData } from '../pages/NetWorth'
  * @returns Perpetuals data or null if error/not configured
  */
 export async function fetchKrakenPerpetualsData(uid: string): Promise<PerpetualsData | null> {
+  console.log('[Kraken Service] Fetching data for UID:', uid)
+  
   try {
-    const response = await fetch(`/api/perpetuals/kraken?uid=${encodeURIComponent(uid)}`)
+    const url = `/api/perpetuals/kraken?uid=${encodeURIComponent(uid)}`
+    console.log('[Kraken Service] Fetching from:', url)
+    
+    const response = await fetch(url)
+    
+    console.log('[Kraken Service] Response status:', response.status, response.statusText)
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
       
+      console.log('[Kraken Service] Error response:', {
+        status: response.status,
+        error: errorData,
+      })
+      
       // Don't log errors for missing credentials (user hasn't configured yet)
       if (response.status === 400 && errorData.error?.includes('not configured')) {
+        console.log('[Kraken Service] Credentials not configured, returning null')
         return null
       }
       
-      console.error('Failed to fetch Kraken Futures Perpetuals data:', errorData)
+      console.error('[Kraken Service] Failed to fetch Kraken Futures Perpetuals data:', errorData)
       return null
     }
 
     const result = await response.json()
     
+    console.log('[Kraken Service] Response received:', {
+      success: result.success,
+      hasData: !!result.data,
+      positionsCount: result.data?.openPositions?.length || 0,
+      lockedMarginCount: result.data?.lockedMargin?.length || 0,
+      availableMarginCount: result.data?.availableMargin?.length || 0,
+    })
+    
     if (result.success && result.data) {
       return result.data
     }
 
+    console.log('[Kraken Service] Response missing success or data')
     return null
   } catch (error) {
-    console.error('Error fetching Kraken Futures Perpetuals data:', error)
+    console.error('[Kraken Service] Error fetching Kraken Futures Perpetuals data:', error)
     return null
   }
 }

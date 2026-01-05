@@ -149,21 +149,43 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Fetch Aster and Kraken Perpetuals data and merge them
   const fetchPerpetualsData = async (items: NetWorthItem[]): Promise<NetWorthItem[]> => {
+    console.log('[DataContext] fetchPerpetualsData called:', {
+      hasUid: !!uid,
+      uid: uid,
+      itemsCount: items.length,
+      hasPerpetualsItem: !!items.find((item) => item.category === 'Perpetuals'),
+    })
+    
     if (!uid) {
+      console.log('[DataContext] No UID, skipping Perpetuals fetch')
       return items
     }
 
     const perpetualsItem = items.find((item) => item.category === 'Perpetuals')
     if (!perpetualsItem) {
+      console.log('[DataContext] No Perpetuals item found, skipping fetch')
       return items
     }
 
     try {
+      console.log('[DataContext] Fetching Aster and Kraken data in parallel...')
+      
       // Fetch both Aster and Kraken data in parallel
       const [asterData, krakenData] = await Promise.all([
         fetchAsterPerpetualsData(uid),
         fetchKrakenPerpetualsData(uid),
       ])
+
+      console.log('[DataContext] Fetch results:', {
+        asterData: !!asterData,
+        krakenData: !!krakenData,
+        asterPositions: asterData?.openPositions?.length || 0,
+        krakenPositions: krakenData?.openPositions?.length || 0,
+        asterLockedMargin: asterData?.lockedMargin?.length || 0,
+        krakenLockedMargin: krakenData?.lockedMargin?.length || 0,
+        asterAvailableMargin: asterData?.availableMargin?.length || 0,
+        krakenAvailableMargin: krakenData?.availableMargin?.length || 0,
+      })
 
       // Merge the data from both sources
       const mergedData = {
@@ -181,8 +203,15 @@ export function DataProvider({ children }: DataProviderProps) {
         ],
       }
 
+      console.log('[DataContext] Merged data:', {
+        totalPositions: mergedData.openPositions.length,
+        totalLockedMargin: mergedData.lockedMargin.length,
+        totalAvailableMargin: mergedData.availableMargin.length,
+      })
+
       // Only update if we have data from at least one source
       if (asterData || krakenData) {
+        console.log('[DataContext] Updating items with merged Perpetuals data')
         return items.map((item) => {
           if (item.category === 'Perpetuals') {
             return {
@@ -192,9 +221,11 @@ export function DataProvider({ children }: DataProviderProps) {
           }
           return item
         })
+      } else {
+        console.log('[DataContext] No data from either source, keeping existing items')
       }
     } catch (error) {
-      console.error('Error fetching Perpetuals data:', error)
+      console.error('[DataContext] Error fetching Perpetuals data:', error)
     }
 
     return items

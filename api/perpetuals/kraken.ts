@@ -91,6 +91,16 @@ async function krakenFuturesRequest<T>(
 
   const url = `${KRAKEN_FUTURES_BASE_URL}${endpoint}`
   
+  console.log('[Kraken API] Making request:', {
+    endpoint,
+    method,
+    url,
+    apiKeyLength: apiKey?.length || 0,
+    apiSecretLength: apiSecret?.length || 0,
+    nonce,
+    signatureLength: signature?.length || 0,
+  })
+  
   const headers: Record<string, string> = {
     'APIKey': apiKey,
     'Authent': signature,
@@ -111,28 +121,56 @@ async function krakenFuturesRequest<T>(
     options.body = postData
   }
 
-  const response = await fetch(url, options)
+  try {
+    const response = await fetch(url, options)
+    
+    console.log('[Kraken API] Response received:', {
+      endpoint,
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+    })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(
-      `Kraken Futures API error (${response.status}): ${errorText}`
-    )
-  }
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[Kraken API] Error response:', {
+        endpoint,
+        status: response.status,
+        errorText,
+      })
+      throw new Error(
+        `Kraken Futures API error (${response.status}): ${errorText}`
+      )
+    }
 
-  const data = await response.json()
-  
-  // Kraken Futures API may return { result: 'success', serverTime: ..., ... } or direct data
-  if (data.result === 'success' && data.data) {
-    return data.data as T
-  }
-  
-  // Some endpoints return data directly
-  if (data.data) {
-    return data.data as T
-  }
+    const data = await response.json()
+    
+    console.log('[Kraken API] Response data structure:', {
+      endpoint,
+      hasResult: !!data.result,
+      hasData: !!data.data,
+      dataKeys: data ? Object.keys(data) : [],
+    })
+    
+    // Kraken Futures API may return { result: 'success', serverTime: ..., ... } or direct data
+    if (data.result === 'success' && data.data) {
+      return data.data as T
+    }
+    
+    // Some endpoints return data directly
+    if (data.data) {
+      return data.data as T
+    }
 
-  return data as T
+    return data as T
+  } catch (error) {
+    console.error('[Kraken API] Request failed:', {
+      endpoint,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+    throw error
+  }
 }
 
 /**
@@ -586,6 +624,13 @@ async function fetchKrakenPerpetualsData(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('[Kraken API] Request received:', {
+    method: req.method,
+    url: req.url,
+    query: req.query,
+    hasUid: !!req.query?.uid,
+  })
+  
   // Only allow GET requests
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed. Use GET.' })
@@ -599,10 +644,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const uid = req.query?.uid as string
 
     if (!uid || typeof uid !== 'string') {
+      console.log('[Kraken API] Missing UID in request')
       return res.status(400).json({ 
         error: 'User ID (uid) is required. Provide it as a query parameter ?uid=your-user-id' 
       })
     }
+    
+    console.log('[Kraken API] Processing request for UID:', uid)
 
     const db = admin.firestore()
 
@@ -614,17 +662,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const settings = settingsDoc.data()
+    
+    // Debug logging - show full structure (redacted)
+    const redactedSettings = settings ? JSON.parse(JSON.stringify(settings)) : null
+    if (redactedSettings?.apiKeys) {
+      Object.keys(redactedSettings.apiKeys).forEach(key => {
+        if (redactedSettings.apiKeys[key] && typeof redactedSettings.apiKeys[key] === 'string') {
+          const value = redactedSettings.apiKeys[key]
+          redactedSettings.apiKeys[key] = value.length > 0 
+            ? `${value.substring(0, 4)}...${value.substring(value.length - 4)} (length: ${value.length})`
+            : 'empty'
+        }
+      })
+    }
+    
+    console.log('[Kraken API] Settings loaded:', {
+      hasSettings: !!settings,
+      hasApiKeys: !!settings?.apiKeys,
+      apiKeysKeys: settings?.apiKeys ? Object.keys(settings.apiKeys) : [],
+      hasKrakenApiKey: !!settings?.apiKeys?.krakenApiKey,
+      hasKrakenApiSecretKey: !!settings?.apiKeys?.krakenApiSecretKey,
+      krakenApiKeyLength: settings?.apiKeys?.krakenApiKey?.length || 0,
+      krakenApiSecretKeyLength: settings?.apiKeys?.krakenApiSecretKey?.length || 0,
+      redactedSettings: redactedSettings,
+    })
+    
+    // Also check for alternative field names (in case of confusion)
+    console.log('[Kraken API] Checking for alternative field names:', {
+      hasKrakenPublicKey: !!settings?.apiKeys?.krakenPublicKey,
+      hasKrakenSecretKey: !!settings?.apiKeys?.krakenSecretKey,
+      allApiKeyFields: settings?.apiKeys ? Object.keys(settings.apiKeys).filter(k => k.toLowerCase().includes('kraken')) : [],
+    })
+    
     const apiKey = settings?.apiKeys?.krakenApiKey
     const apiSecret = settings?.apiKeys?.krakenApiSecretKey
 
     if (!apiKey || !apiSecret) {
+      console.log('[Kraken API] Missing credentials:', {
+        apiKey: !!apiKey,
+        apiSecret: !!apiSecret,
+        apiKeyValue: apiKey ? `${apiKey.substring(0, 4)}...` : 'missing',
+        apiSecretValue: apiSecret ? `${apiSecret.substring(0, 4)}...` : 'missing',
+      })
       return res.status(400).json({ 
         error: 'Kraken Futures API credentials not configured. Please configure API Key and Secret Key in Settings.' 
       })
     }
 
+    console.log('[Kraken API] Credentials found, starting fetch...')
+    
     // Fetch data from Kraken Futures API
     const perpetualsData = await fetchKrakenPerpetualsData(apiKey, apiSecret)
+    
+    console.log('[Kraken API] Fetch completed:', {
+      positionsCount: perpetualsData.openPositions.length,
+      lockedMarginCount: perpetualsData.lockedMargin.length,
+      availableMarginCount: perpetualsData.availableMargin.length,
+    })
 
     // Return the data
     return res.status(200).json({
