@@ -328,7 +328,7 @@ function Dashboard() {
             if (item.category === 'Perpetuals') {
               return {
                 ...item,
-                perpetualsData: mergedData,
+                perpetualsData: asterData,
               }
             }
             return item
@@ -349,7 +349,7 @@ function Dashboard() {
               if (item.category === 'Perpetuals') {
                 return {
                   ...item,
-                  perpetualsData: mergedData,
+                  perpetualsData: asterData,
                 }
               }
               return item
