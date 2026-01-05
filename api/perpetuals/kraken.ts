@@ -547,14 +547,52 @@ async function fetchOpenPositions(
   try {
     console.log('[Kraken] Fetching open positions from /openpositions (source of truth)')
     
-    const positionsData = await krakenFuturesRequest<any>(
-      '/openpositions',
-      apiKey,
-      apiSecret
-    )
+    // Try both endpoint variations
+    let positionsData: any = null
+    let endpointUsed = '/openpositions'
     
+    try {
+      positionsData = await krakenFuturesRequest<any>(
+        '/openpositions',
+        apiKey,
+        apiSecret
+      )
+      endpointUsed = '/openpositions'
+    } catch (error1) {
+      console.log('[Kraken] /openpositions failed, trying /open_positions...')
+      try {
+        positionsData = await krakenFuturesRequest<any>(
+          '/open_positions',
+          apiKey,
+          apiSecret
+        )
+        endpointUsed = '/open_positions'
+      } catch (error2) {
+        console.error('[Kraken] Both endpoint variations failed:', { error1, error2 })
+        throw error1 // Throw the first error
+      }
+    }
+    
+    console.log('[Kraken] Successfully fetched from:', endpointUsed)
     console.log('[Kraken] /openpositions response type:', typeof positionsData)
     console.log('[Kraken] /openpositions is array:', Array.isArray(positionsData))
+    console.log('[Kraken] /openpositions full response (first 2000 chars):', JSON.stringify(positionsData, null, 2).substring(0, 2000))
+    
+    if (positionsData && typeof positionsData === 'object' && !Array.isArray(positionsData)) {
+      console.log('[Kraken] Response is object, keys:', Object.keys(positionsData))
+      // Log all top-level keys and their types
+      for (const [key, value] of Object.entries(positionsData)) {
+        console.log(`[Kraken] Response key "${key}":`, {
+          type: typeof value,
+          isArray: Array.isArray(value),
+          valuePreview: Array.isArray(value) 
+            ? `Array[${value.length}]` 
+            : typeof value === 'object' && value !== null
+            ? `Object with keys: ${Object.keys(value as any).join(', ')}`
+            : String(value).substring(0, 100)
+        })
+      }
+    }
     
     // Parse positions list from response
     let positionsList: any[] = []
@@ -562,14 +600,57 @@ async function fetchOpenPositions(
       positionsList = positionsData
       console.log('[Kraken] Using positionsData as array, length:', positionsList.length)
     } else if (positionsData && typeof positionsData === 'object') {
-      // Try to find positions array in response
-      const possibleKeys = ['positions', 'openPositions', 'open_positions', 'data']
+      // Try to find positions array in response - check more possible keys
+      const possibleKeys = [
+        'positions', 
+        'openPositions', 
+        'open_positions', 
+        'data',
+        'result',
+        'openpositions', // lowercase
+        'openPositionsData',
+        'positionsData'
+      ]
+      
       for (const key of possibleKeys) {
-        if (Array.isArray(positionsData[key])) {
-          positionsList = positionsData[key]
-          console.log(`[Kraken] Found positions array at key "${key}", length:`, positionsList.length)
-          break
+        if (positionsData[key] !== undefined) {
+          console.log(`[Kraken] Found key "${key}":`, {
+            type: typeof positionsData[key],
+            isArray: Array.isArray(positionsData[key]),
+            value: Array.isArray(positionsData[key]) 
+              ? `Array[${positionsData[key].length}]` 
+              : positionsData[key]
+          })
+          
+          if (Array.isArray(positionsData[key])) {
+            positionsList = positionsData[key]
+            console.log(`[Kraken] Using positions array from key "${key}", length:`, positionsList.length)
+            break
+          } else if (typeof positionsData[key] === 'object' && positionsData[key] !== null) {
+            // Maybe it's nested further
+            const nested = positionsData[key]
+            if (Array.isArray(nested)) {
+              positionsList = nested
+              console.log(`[Kraken] Using nested array from key "${key}", length:`, positionsList.length)
+              break
+            }
+            // Check if nested object has positions
+            for (const nestedKey of ['positions', 'data', 'openPositions', 'open_positions']) {
+              if (Array.isArray(nested[nestedKey])) {
+                positionsList = nested[nestedKey]
+                console.log(`[Kraken] Using nested array from "${key}.${nestedKey}", length:`, positionsList.length)
+                break
+              }
+            }
+            if (positionsList.length > 0) break
+          }
         }
+      }
+      
+      // If still no positions found, log the entire structure for debugging
+      if (positionsList.length === 0) {
+        console.warn('[Kraken] No positions array found in response. Full response structure:')
+        console.warn(JSON.stringify(positionsData, null, 2).substring(0, 3000))
       }
     }
     
@@ -622,8 +703,33 @@ async function fetchOpenPositions(
       const pos = positionsList[i]
       
       // Get instrument/symbol from /openpositions
-      const instrument = pos.instrument || pos.symbol || pos.type || pos.futures || ''
-      const size = parseFloat(pos.size || pos.qty || pos.quantity || pos.amount || '0')
+      // Try multiple possible field names based on Kraken API docs
+      const instrument = pos.instrument || 
+                        pos.symbol || 
+                        pos.type || 
+                        pos.futures || 
+                        pos.futuresSymbol ||
+                        pos.contract ||
+                        pos.contractSymbol ||
+                        pos.ticker ||
+                        ''
+      
+      // Get size - try multiple field names
+      const size = parseFloat(
+        pos.size || 
+        pos.qty || 
+        pos.quantity || 
+        pos.amount || 
+        pos.positionSize ||
+        pos.volume ||
+        '0'
+      )
+      
+      // Log the position structure for debugging
+      if (i === 0) {
+        console.log('[Kraken] First position object keys:', Object.keys(pos))
+        console.log('[Kraken] First position object:', JSON.stringify(pos, null, 2).substring(0, 500))
+      }
       
       // Filter out zero-size positions
       if (!instrument || Math.abs(size) < 0.0001) {
@@ -658,11 +764,139 @@ async function fetchOpenPositions(
     }
     
     console.log('[Kraken] Total positions extracted from /openpositions:', positions.length)
+    
+    // If no positions found from /openpositions, try to extract from /accounts as fallback
+    if (positions.length === 0 && accountsData) {
+      console.log('[Kraken] No positions from /openpositions, trying to extract from /accounts as fallback...')
+      const fallbackPositions = extractPositionsFromAccounts(accountsData)
+      if (fallbackPositions.length > 0) {
+        console.log('[Kraken] Found', fallbackPositions.length, 'positions from /accounts fallback')
+        return fallbackPositions
+      }
+    }
+    
     return positions
   } catch (error) {
     console.error('[Kraken] Error fetching open positions:', error)
+    // If /openpositions fails, try fallback to /accounts
+    if (accountsData) {
+      console.log('[Kraken] /openpositions failed, trying /accounts fallback...')
+      try {
+        const fallbackPositions = extractPositionsFromAccounts(accountsData)
+        if (fallbackPositions.length > 0) {
+          console.log('[Kraken] Found', fallbackPositions.length, 'positions from /accounts fallback')
+          return fallbackPositions
+        }
+      } catch (fallbackError) {
+        console.error('[Kraken] Fallback to /accounts also failed:', fallbackError)
+      }
+    }
     throw error
   }
+}
+
+/**
+ * Fallback: Extract positions from /accounts data
+ * Used when /openpositions returns empty or fails
+ */
+function extractPositionsFromAccounts(accountsData: any): PerpetualsOpenPosition[] {
+  const positions: PerpetualsOpenPosition[] = []
+  
+  if (!accountsData) {
+    return positions
+  }
+
+  console.log('[Kraken] Extracting positions from /accounts (fallback)')
+  
+  // Handle different possible structures
+  let accountsList: any[] = []
+  
+  if (Array.isArray(accountsData)) {
+    accountsList = accountsData
+  } else if (accountsData.accounts && Array.isArray(accountsData.accounts)) {
+    accountsList = accountsData.accounts
+  } else if (accountsData.data && Array.isArray(accountsData.data)) {
+    accountsList = accountsData.data
+  } else if (typeof accountsData === 'object') {
+    accountsList = [accountsData]
+  }
+
+  for (let i = 0; i < accountsList.length; i++) {
+    const account = accountsList[i]
+    
+    // Check if account has per-instrument positions
+    if (account.positions && Array.isArray(account.positions)) {
+      for (const pos of account.positions) {
+        const instrument = pos.instrument || pos.symbol || pos.type || ''
+        const size = parseFloat(pos.size || pos.qty || pos.quantity || '0')
+        
+        if (!instrument || Math.abs(size) < 0.0001) {
+          continue
+        }
+        
+        const margin = parseFloat(
+          pos.initial_margin ||
+          pos.initialMargin ||
+          pos.margin ||
+          '0'
+        )
+        const pnl = parseFloat(
+          pos.unrealized_pnl ||
+          pos.unrealizedPnl ||
+          pos.pnl ||
+          '0'
+        )
+        
+        positions.push({
+          id: `kraken-pos-${instrument}-${Date.now()}-${i}`,
+          ticker: instrument,
+          margin,
+          pnl,
+          platform: 'Kraken',
+        })
+        
+        console.log(`[Kraken] Extracted position from /accounts: ${instrument}, margin: ${margin}, pnl: ${pnl}`)
+      }
+    }
+    
+    // Also check for instrument-level fields directly in account
+    if (account.instrument) {
+      const instrument = account.instrument
+      const size = parseFloat(account.size || account.qty || account.quantity || '0')
+      
+      if (Math.abs(size) < 0.0001) {
+        continue
+      }
+      
+      const margin = parseFloat(
+        account.initial_margin ||
+        account.initialMargin ||
+        account.margin ||
+        '0'
+      )
+      const pnl = parseFloat(
+        account.unrealized_pnl ||
+        account.unrealizedPnl ||
+        account.pnl ||
+        '0'
+      )
+      
+      if (margin > 0 || pnl !== 0) {
+        positions.push({
+          id: `kraken-pos-${instrument}-${Date.now()}-${i}`,
+          ticker: instrument,
+          margin,
+          pnl,
+          platform: 'Kraken',
+        })
+        
+        console.log(`[Kraken] Extracted position from account object: ${instrument}, margin: ${margin}, pnl: ${pnl}`)
+      }
+    }
+  }
+
+  console.log('[Kraken] Total positions extracted from /accounts (fallback):', positions.length)
+  return positions
 }
 
 /**
