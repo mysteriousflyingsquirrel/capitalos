@@ -297,9 +297,55 @@ async function krakenFuturesRequest<T>(
 /**
  * Unwraps Kraken API response to extract the actual payload
  * Handles different response wrapper structures
+ * Based on Kraken Futures API v3 documentation
  */
 function unwrapKrakenResponse<T>(json: any, endpoint: string): T {
-  // If result is "success", look for payload in various possible keys
+  // Log the raw response for debugging
+  console.log(`[Kraken API] Unwrapping response for endpoint: ${endpoint}`)
+  console.log(`[Kraken API] Response has result field: ${!!json.result}`)
+  console.log(`[Kraken API] Result value: ${json.result}`)
+  
+  // Handle endpoint-specific response structures
+  if (endpoint === '/openpositions' || endpoint === '/open_positions') {
+    // For /openpositions, the response structure is: { result: "success", openPositions: [...] }
+    if (json.result === 'success') {
+      // Check for openPositions field (camelCase)
+      if (Array.isArray(json.openPositions)) {
+        console.log(`[Kraken API] Found openPositions array with ${json.openPositions.length} items`)
+        return json.openPositions as T
+      }
+      // Check for open_positions field (snake_case)
+      if (Array.isArray(json.open_positions)) {
+        console.log(`[Kraken API] Found open_positions array with ${json.open_positions.length} items`)
+        return json.open_positions as T
+      }
+      // Check for positions field
+      if (Array.isArray(json.positions)) {
+        console.log(`[Kraken API] Found positions array with ${json.positions.length} items`)
+        return json.positions as T
+      }
+      // Check for data field
+      if (Array.isArray(json.data)) {
+        console.log(`[Kraken API] Found data array with ${json.data.length} items`)
+        return json.data as T
+      }
+      // If result is success but no array found, return empty array
+      console.warn(`[Kraken API] Result is success but no positions array found. Available keys: ${Object.keys(json).join(', ')}`)
+      return [] as T
+    }
+    // If result is not "success", check if it's already an array (direct response)
+    if (Array.isArray(json)) {
+      console.log(`[Kraken API] Response is already an array with ${json.length} items`)
+      return json as T
+    }
+    // If result is error, log and return empty array
+    if (json.result === 'error' || json.error) {
+      console.error(`[Kraken API] Error in response:`, json.error || json)
+      return [] as T
+    }
+  }
+  
+  // For other endpoints, use general unwrapping
   if (json.result === 'success') {
     const possibleKeys = ['data', 'accounts', 'openPositions', 'open_positions', 'positions', 'orders', 'openOrders', 'open_orders']
     
@@ -316,7 +362,7 @@ function unwrapKrakenResponse<T>(json: any, endpoint: string): T {
     return rest as T
   }
   
-  // If result is not "success", return as-is
+  // If result is not "success", return as-is (might be direct data or error)
   console.log('[Kraken API] Response does not have result="success", returning as-is')
   return json as T
 }
@@ -1098,16 +1144,51 @@ async function fetchKrakenPerpetualsData(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsData> {
-  // Fetch accounts first (needed for margin metrics and position enrichment)
-  const accountsData = await fetchAccounts(apiKey, apiSecret)
+  let accountsData: any = null
+  let openPositions: PerpetualsOpenPosition[] = []
   
-  // Fetch open positions from /openpositions (source of truth)
-  // This will also enrich with margin/PnL from accounts if available
-  const openPositions = await fetchOpenPositions(apiKey, apiSecret, accountsData)
+  try {
+    // Fetch accounts first (needed for margin metrics and position enrichment)
+    accountsData = await fetchAccounts(apiKey, apiSecret)
+  } catch (error) {
+    console.error('[Kraken] Failed to fetch accounts:', error)
+    // Continue with empty accountsData - we'll return empty data
+  }
   
-  // Extract margin metrics from /accounts
-  const lockedMargin = extractLockedMarginFromAccounts(accountsData)
-  const availableMargin = extractAvailableMarginFromAccounts(accountsData)
+  try {
+    // Fetch open positions from /openpositions (source of truth)
+    // This will also enrich with margin/PnL from accounts if available
+    openPositions = await fetchOpenPositions(apiKey, apiSecret, accountsData)
+  } catch (error) {
+    console.error('[Kraken] Failed to fetch open positions:', error)
+    // Try fallback to extract from accounts
+    if (accountsData) {
+      try {
+        console.log('[Kraken] Attempting fallback: extracting positions from /accounts...')
+        openPositions = extractPositionsFromAccounts(accountsData)
+        console.log('[Kraken] Fallback extracted', openPositions.length, 'positions')
+      } catch (fallbackError) {
+        console.error('[Kraken] Fallback also failed:', fallbackError)
+        openPositions = []
+      }
+    } else {
+      openPositions = []
+    }
+  }
+  
+  // Extract margin metrics from /accounts (handle null accountsData)
+  let lockedMargin: number | null = null
+  let availableMargin: PerpetualsAvailableMargin[] = []
+  
+  if (accountsData) {
+    try {
+      lockedMargin = extractLockedMarginFromAccounts(accountsData)
+      availableMargin = extractAvailableMarginFromAccounts(accountsData)
+    } catch (error) {
+      console.error('[Kraken] Failed to extract margin metrics:', error)
+      // Continue with empty values
+    }
+  }
   
   // Optionally fetch open orders (for display only, not used for margin calculations)
   const openOrders = await fetchOpenOrders(apiKey, apiSecret).catch(() => [])
