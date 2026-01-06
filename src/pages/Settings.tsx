@@ -15,7 +15,7 @@ import {
 import { savePlatforms, loadPlatforms, saveCashflowAccountflowMappings, loadCashflowAccountflowMappings, type Platform } from '../services/storageService'
 import { getYearsWithCryptoActivity, generateCryptoTaxReport } from '../services/cryptoTaxReportService'
 import { generateCryptoTaxReportPDF } from '../services/pdfService'
-import { saveSnapshots, hasSnapshotForDate } from '../services/snapshotService'
+import { saveSnapshots, hasSnapshotForDate, createSnapshot, getTodayUTCDate, getToday2359UTCTimestamp } from '../services/snapshotService'
 
 function Settings() {
   const { baseCurrency, exchangeRates, isLoading, error, convert } = useCurrency()
@@ -363,45 +363,35 @@ function Settings() {
     setSnapshotSuccess(false)
 
     try {
-      // Use the globally calculated totals from DataContext (same as Dashboard and NetWorth display)
-      const { calculationResult, snapshots } = data
+      // Get data from DataContext
+      const { snapshots, netWorthItems, transactions, cryptoPrices, stockPrices, usdToChfRate } = data
 
-      if (!calculationResult) {
-        throw new Error('Calculation data not available. Please wait for data to load.')
+      if (!netWorthItems || !transactions || !cryptoPrices || !stockPrices) {
+        throw new Error('Data not available. Please wait for data to load.')
       }
 
       // Get today's date in UTC
-      const now = new Date()
-      const year = now.getUTCFullYear()
-      const month = String(now.getUTCMonth() + 1).padStart(2, '0')
-      const day = String(now.getUTCDate()).padStart(2, '0')
-      const date = `${year}-${month}-${day}`
+      const todayDate = getTodayUTCDate()
 
       // Check if snapshot already exists for this date
-      if (hasSnapshotForDate(snapshots, date)) {
-        setSnapshotError(`A snapshot already exists for ${date}.`)
+      if (hasSnapshotForDate(snapshots, todayDate)) {
+        setSnapshotError(`A snapshot already exists for ${todayDate}.`)
         setTimeout(() => setSnapshotError(null), 5000)
         return
       }
 
-      // Create snapshot using the globally calculated category totals
-      const newSnapshot = {
-        date,
-        timestamp: now.getTime(),
-        categories: {
-          'Cash': calculationResult.categoryTotals['Cash'] || 0,
-          'Bank Accounts': calculationResult.categoryTotals['Bank Accounts'] || 0,
-          'Retirement Funds': calculationResult.categoryTotals['Retirement Funds'] || 0,
-          'Index Funds': calculationResult.categoryTotals['Index Funds'] || 0,
-          'Stocks': calculationResult.categoryTotals['Stocks'] || 0,
-          'Commodities': calculationResult.categoryTotals['Commodities'] || 0,
-          'Crypto': calculationResult.categoryTotals['Crypto'] || 0,
-          'Perpetuals': calculationResult.categoryTotals['Perpetuals'] || 0,
-          'Real Estate': calculationResult.categoryTotals['Real Estate'] || 0,
-          'Depreciating Assets': calculationResult.categoryTotals['Depreciating Assets'] || 0,
-        },
-        total: calculationResult.totalNetWorthChf,
-      }
+      // Create snapshot using the same calculation logic as the frontend
+      const newSnapshot = createSnapshot(
+        netWorthItems,
+        transactions,
+        cryptoPrices,
+        stockPrices,
+        convert,
+        usdToChfRate
+      )
+
+      // Override timestamp to be end of day UTC for consistency
+      newSnapshot.timestamp = getToday2359UTCTimestamp()
 
       // Add the new snapshot to the existing snapshots and save
       const updatedSnapshots = [...snapshots, newSnapshot]

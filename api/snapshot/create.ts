@@ -269,15 +269,36 @@ function createSnapshot(
     return rate ? amount / rate : amount
   }
 
-  // Use the same service as the frontend (Dashboard, NetWorth, DataContext)
-  const result = NetWorthCalculationService.calculateTotals(
-    items as any, // Type assertion needed due to slight type differences
-    transactions as any,
-    cryptoPrices,
-    stockPrices,
+  // Debug logging
+  console.log('[Snapshot] Creating snapshot with:', {
+    itemsCount: items.length,
+    transactionsCount: transactions.length,
+    cryptoPricesCount: Object.keys(cryptoPrices).length,
+    stockPricesCount: Object.keys(stockPrices).length,
+    hasUsdToChfRate: !!usdToChfRate,
     usdToChfRate,
-    convert
-  )
+    exchangeRates,
+  })
+
+  // Use the same service as the frontend (Dashboard, NetWorth, DataContext)
+  let result
+  try {
+    result = NetWorthCalculationService.calculateTotals(
+      items as any, // Type assertion needed due to slight type differences
+      transactions as any,
+      cryptoPrices,
+      stockPrices,
+      usdToChfRate,
+      convert
+    )
+    console.log('[Snapshot] Calculation result:', {
+      categoryTotals: result.categoryTotals,
+      totalNetWorthChf: result.totalNetWorthChf,
+    })
+  } catch (error) {
+    console.error('[Snapshot] Error calculating totals:', error)
+    throw error
+  }
 
   // Convert the categoryTotals to the snapshot format
   const categories: Record<string, number> = {
@@ -294,6 +315,12 @@ function createSnapshot(
   }
 
   const total = result.totalNetWorthChf
+  
+  console.log('[Snapshot] Final snapshot:', {
+    date: new Date().toISOString().split('T')[0],
+    categories,
+    total,
+  })
   
   // Use UTC explicitly to avoid timezone issues
   // When cron runs at 00:00 UTC, we want to create snapshot for yesterday at 23:59:59 UTC
@@ -378,17 +405,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fetchUsdToChfRate(),
     ])
 
+    // Debug: Log what we're working with
+    console.log('[Snapshot] Data loaded:', {
+      itemsCount: items.length,
+      transactionsCount: transactions.length,
+      itemsByCategory: items.reduce((acc, item) => {
+        acc[item.category] = (acc[item.category] || 0) + 1
+        return acc
+      }, {} as Record<string, number>),
+      hasPerpetualsItem: items.some(item => item.category === 'Perpetuals'),
+      perpetualsItemHasData: items.find(item => item.category === 'Perpetuals')?.perpetualsData ? 'yes' : 'no',
+      cryptoPricesCount: Object.keys(cryptoPrices).length,
+      stockPricesCount: Object.keys(stockPrices).length,
+      usdToChfRate,
+      exchangeRates,
+    })
+
     // Create snapshot
     // Note: Items may already have perpetualsData if they were loaded with it from the frontend
     // We use the same calculation logic as the frontend, which uses item.perpetualsData if available
-    const snapshot = createSnapshot(
-      items,
-      transactions,
-      cryptoPrices,
-      stockPrices,
-      exchangeRates,
-      usdToChfRate
-    )
+    let snapshot
+    try {
+      snapshot = createSnapshot(
+        items,
+        transactions,
+        cryptoPrices,
+        stockPrices,
+        exchangeRates,
+        usdToChfRate
+      )
+      console.log('[Snapshot] Snapshot created successfully:', {
+        date: snapshot.date,
+        total: snapshot.total,
+        categories: snapshot.categories,
+      })
+    } catch (error) {
+      console.error('[Snapshot] Error creating snapshot:', error)
+      throw error
+    }
 
     // If called around 00:00 UTC (cron job), create snapshot for yesterday at 23:59:59 UTC
     // This ensures the snapshot represents the end of the previous day, not the start of the new day

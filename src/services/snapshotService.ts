@@ -1,6 +1,6 @@
-import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
-import { calculateBalanceChf, calculateCoinAmount } from './balanceCalculationService'
-import type { NetWorthCategory } from '../pages/NetWorth'
+import type { NetWorthItem, NetWorthTransaction, NetWorthCategory } from '../pages/NetWorth'
+import { NetWorthCalculationService } from './netWorthCalculationService'
+import type { CurrencyCode } from '../lib/currency'
 
 export interface NetWorthSnapshot {
   /** ISO date string (YYYY-MM-DD) */
@@ -71,61 +71,40 @@ export async function saveSnapshots(snapshots: NetWorthSnapshot[], uid?: string)
 
 /**
  * Creates a snapshot of the current net worth state.
- * Calculates total value per category and overall total in CHF.
+ * Uses NetWorthCalculationService for consistent calculation logic with frontend.
  */
 export function createSnapshot(
   items: NetWorthItem[],
   transactions: NetWorthTransaction[],
-  cryptoPrices?: Record<string, number>,
-  convert?: (amount: number, from: import('../lib/currency').CurrencyCode) => number,
-  usdToChfRate?: number | null
+  cryptoPrices: Record<string, number>,
+  stockPrices: Record<string, number>,
+  convert: (amount: number, from: CurrencyCode) => number,
+  usdToChfRate: number | null
 ): NetWorthSnapshot {
+  // Use the same service as the frontend
+  const result = NetWorthCalculationService.calculateTotals(
+    items,
+    transactions,
+    cryptoPrices,
+    stockPrices,
+    usdToChfRate,
+    convert
+  )
+
   const categories: Record<NetWorthCategory, number> = {
-    'Cash': 0,
-    'Bank Accounts': 0,
-    'Retirement Funds': 0,
-    'Index Funds': 0,
-    'Stocks': 0,
-    'Commodities': 0,
-    'Crypto': 0,
-    'Real Estate': 0,
-    'Depreciating Assets': 0,
+    'Cash': result.categoryTotals['Cash'] || 0,
+    'Bank Accounts': result.categoryTotals['Bank Accounts'] || 0,
+    'Retirement Funds': result.categoryTotals['Retirement Funds'] || 0,
+    'Index Funds': result.categoryTotals['Index Funds'] || 0,
+    'Stocks': result.categoryTotals['Stocks'] || 0,
+    'Commodities': result.categoryTotals['Commodities'] || 0,
+    'Crypto': result.categoryTotals['Crypto'] || 0,
+    'Perpetuals': result.categoryTotals['Perpetuals'] || 0,
+    'Real Estate': result.categoryTotals['Real Estate'] || 0,
+    'Depreciating Assets': result.categoryTotals['Depreciating Assets'] || 0,
   }
 
-  items.forEach(item => {
-    if (item.category === 'Crypto') {
-      const coinAmount = calculateCoinAmount(item.id, transactions)
-      const ticker = item.name.trim().toUpperCase()
-      const currentPriceUsd = cryptoPrices && cryptoPrices[ticker] ? cryptoPrices[ticker] : 0
-      
-      if (currentPriceUsd > 0) {
-        // Use usdToChfRate (from CryptoCompare) to match Dashboard calculation, fallback to convert if not available
-        const valueUsd = coinAmount * currentPriceUsd
-        if (usdToChfRate && usdToChfRate > 0) {
-          categories[item.category] += valueUsd * usdToChfRate
-        } else if (convert) {
-          categories[item.category] += convert(valueUsd, 'USD')
-        } else {
-          // Last resort: treat as CHF (shouldn't happen)
-          categories[item.category] += valueUsd
-        }
-      } else {
-        // Fallback: calculateBalanceChf returns USD for crypto, need to convert to CHF
-        const balanceUsd = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-        if (usdToChfRate && usdToChfRate > 0) {
-          categories[item.category] += balanceUsd * usdToChfRate
-        } else if (convert) {
-          categories[item.category] += convert(balanceUsd, 'USD')
-        } else {
-          categories[item.category] += balanceUsd
-        }
-      }
-    } else {
-      categories[item.category] += calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
-    }
-  })
-
-  const total = Object.values(categories).reduce((sum, val) => sum + val, 0)
+  const total = result.totalNetWorthChf
   const now = new Date()
   const date = now.toISOString().split('T')[0]
 
