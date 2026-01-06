@@ -11,7 +11,6 @@ import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
-import { fetchKrakenPerpetualsData } from '../services/krakenService'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
 import {
@@ -990,7 +989,7 @@ function NetWorth() {
     loadData()
   }, [uid])
 
-  // Periodically refresh Aster and Kraken Perpetuals data (every 5 minutes)
+  // Periodically refresh Aster Perpetuals data (every 5 minutes)
   useEffect(() => {
     if (!uid) return
 
@@ -999,30 +998,9 @@ function NetWorth() {
     if (!hasPerpetualsItem) return
 
     const refreshInterval = setInterval(() => {
-      // Fetch both Aster and Kraken data in parallel
-      Promise.all([
-        fetchAsterPerpetualsData(uid),
-        fetchKrakenPerpetualsData(uid),
-      ]).then(([asterData, krakenData]) => {
-        // Merge data from both sources
-        const mergedData = {
-          openPositions: [
-            ...(asterData?.openPositions || []),
-            ...(krakenData?.openPositions || []),
-          ],
-          lockedMargin: [
-            ...(asterData?.lockedMargin || []),
-            ...(krakenData?.lockedMargin || []),
-          ],
-          availableMargin: [
-            ...(asterData?.availableMargin || []),
-            ...(krakenData?.availableMargin || []),
-          ],
-        }
-        
-        // Only update if we have data from at least one source
-        // Use functional update to avoid stale closure issues
-        if (asterData || krakenData) {
+      fetchAsterPerpetualsData(uid).then((asterData) => {
+        // Only update if we have data
+        if (asterData) {
           setNetWorthItems((prevItems) => {
             // Check if Perpetuals item still exists before updating
             const hasPerpetuals = prevItems.some(item => item.category === 'Perpetuals')
@@ -1035,7 +1013,7 @@ function NetWorth() {
               if (item.category === 'Perpetuals') {
                 return {
                   ...item,
-                  perpetualsData: mergedData,
+                  perpetualsData: asterData,
                 }
               }
               return item
