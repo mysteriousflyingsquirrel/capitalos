@@ -3,6 +3,7 @@ import Heading from '../components/Heading'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useApiKeys } from '../contexts/ApiKeysContext'
+import { useData } from '../contexts/DataContext'
 import type { CurrencyCode } from '../lib/currency'
 import { supportedCurrencies } from '../lib/currency'
 import {
@@ -14,11 +15,13 @@ import {
 import { savePlatforms, loadPlatforms, saveCashflowAccountflowMappings, loadCashflowAccountflowMappings, type Platform } from '../services/storageService'
 import { getYearsWithCryptoActivity, generateCryptoTaxReport } from '../services/cryptoTaxReportService'
 import { generateCryptoTaxReportPDF } from '../services/pdfService'
+import { saveSnapshots, hasSnapshotForDate } from '../services/snapshotService'
 
 function Settings() {
   const { baseCurrency, exchangeRates, isLoading, error, convert } = useCurrency()
   const { uid, user } = useAuth()
   const { rapidApiKey, setRapidApiKey, asterApiKey, setAsterApiKey, asterApiSecretKey, setAsterApiSecretKey, isLoading: apiKeysLoading } = useApiKeys()
+  const { data } = useData()
   const [exportLoading, setExportLoading] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [exportSuccess, setExportSuccess] = useState(false)
@@ -48,6 +51,10 @@ function Settings() {
   const [showRapidApiKey, setShowRapidApiKey] = useState(false)
   const [showAsterApiKey, setShowAsterApiKey] = useState(false)
   const [showAsterApiSecretKey, setShowAsterApiSecretKey] = useState(false)
+  // Snapshot creation
+  const [creatingSnapshot, setCreatingSnapshot] = useState(false)
+  const [snapshotError, setSnapshotError] = useState<string | null>(null)
+  const [snapshotSuccess, setSnapshotSuccess] = useState(false)
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -342,6 +349,73 @@ function Settings() {
       setTimeout(() => setApiKeyError(null), 5000)
     } finally {
       setApiKeySaving(false)
+    }
+  }
+
+  const handleCreateSnapshot = async () => {
+    if (!uid) {
+      alert('Please sign in to create a snapshot.')
+      return
+    }
+
+    setCreatingSnapshot(true)
+    setSnapshotError(null)
+    setSnapshotSuccess(false)
+
+    try {
+      // Use the globally calculated totals from DataContext (same as Dashboard and NetWorth display)
+      const { calculationResult, snapshots } = data
+
+      if (!calculationResult) {
+        throw new Error('Calculation data not available. Please wait for data to load.')
+      }
+
+      // Get today's date in UTC
+      const now = new Date()
+      const year = now.getUTCFullYear()
+      const month = String(now.getUTCMonth() + 1).padStart(2, '0')
+      const day = String(now.getUTCDate()).padStart(2, '0')
+      const date = `${year}-${month}-${day}`
+
+      // Check if snapshot already exists for this date
+      if (hasSnapshotForDate(snapshots, date)) {
+        setSnapshotError(`A snapshot already exists for ${date}.`)
+        setTimeout(() => setSnapshotError(null), 5000)
+        return
+      }
+
+      // Create snapshot using the globally calculated category totals
+      const newSnapshot = {
+        date,
+        timestamp: now.getTime(),
+        categories: {
+          'Cash': calculationResult.categoryTotals['Cash'] || 0,
+          'Bank Accounts': calculationResult.categoryTotals['Bank Accounts'] || 0,
+          'Retirement Funds': calculationResult.categoryTotals['Retirement Funds'] || 0,
+          'Index Funds': calculationResult.categoryTotals['Index Funds'] || 0,
+          'Stocks': calculationResult.categoryTotals['Stocks'] || 0,
+          'Commodities': calculationResult.categoryTotals['Commodities'] || 0,
+          'Crypto': calculationResult.categoryTotals['Crypto'] || 0,
+          'Perpetuals': calculationResult.categoryTotals['Perpetuals'] || 0,
+          'Real Estate': calculationResult.categoryTotals['Real Estate'] || 0,
+          'Depreciating Assets': calculationResult.categoryTotals['Depreciating Assets'] || 0,
+        },
+        total: calculationResult.totalNetWorthChf,
+      }
+
+      // Add the new snapshot to the existing snapshots and save
+      const updatedSnapshots = [...snapshots, newSnapshot]
+      await saveSnapshots(updatedSnapshots, uid)
+
+      setSnapshotSuccess(true)
+      setTimeout(() => setSnapshotSuccess(false), 5000)
+    } catch (error) {
+      console.error('Snapshot creation error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create snapshot'
+      setSnapshotError(errorMessage)
+      setTimeout(() => setSnapshotError(null), 5000)
+    } finally {
+      setCreatingSnapshot(false)
     }
   }
 
@@ -807,6 +881,45 @@ function Settings() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Developer Section */}
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+          <Heading level={2} className="mb-4">Developer</Heading>
+          
+          <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
+            Developer tools and utilities for testing and debugging.
+          </p>
+
+          <div className="space-y-4">
+            {/* Create Snapshot */}
+            <div>
+              <Heading level={3} className="mb-2 text-text-secondary">Create Snapshot</Heading>
+              <p className="text-text-muted text-[0.567rem] md:text-xs mb-4">
+                Manually create a snapshot of your current net worth. This will calculate and store the total value of all categories in CHF.
+              </p>
+              
+              {snapshotError && (
+                <div className="mb-4 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+                  {snapshotError}
+                </div>
+              )}
+
+              {snapshotSuccess && (
+                <div className="mb-4 text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
+                  Snapshot created successfully!
+                </div>
+              )}
+
+              <button
+                onClick={handleCreateSnapshot}
+                disabled={creatingSnapshot || !uid}
+                className="w-full py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creatingSnapshot ? 'Creating Snapshot...' : 'Create Snapshot'}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* About Section */}

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import admin from 'firebase-admin'
 import type { CurrencyCode } from '../../src/lib/currency'
+import { NetWorthCalculationService } from '../../src/services/netWorthCalculationService'
 
 // Initialize Firebase Admin SDK
 let adminInitialized = false
@@ -52,9 +53,17 @@ interface PerpetualsAvailableMargin {
   platform: string
 }
 
+interface PerpetualsLockedMargin {
+  id: string
+  asset: string
+  margin: number
+  platform: string
+}
+
 interface PerpetualsData {
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
+  lockedMargin: PerpetualsLockedMargin[]
   availableMargin: PerpetualsAvailableMargin[]
 }
 
@@ -77,6 +86,7 @@ interface NetWorthTransaction {
   pricePerItemChf: number
   pricePerItem?: number
   date: string
+  cryptoType?: 'BUY' | 'SELL' | 'ADJUSTMENT'
 }
 
 interface NetWorthSnapshot {
@@ -93,117 +103,9 @@ interface UserSettings {
   }
 }
 
-// Helper function to calculate coin amount (for Crypto)
-// Supports ADJUSTMENT transaction type
-function calculateCoinAmount(itemId: string, transactions: NetWorthTransaction[]): number {
-  return transactions
-    .filter(tx => tx.itemId === itemId)
-    .reduce((sum, tx) => {
-      // Handle Crypto-specific transaction types
-      if (tx.cryptoType) {
-        switch (tx.cryptoType) {
-          case 'BUY':
-            return sum + tx.amount
-          case 'SELL':
-            return sum - tx.amount
-          case 'ADJUSTMENT':
-            // ADJUSTMENT applies signed delta (can be positive or negative)
-            return sum + tx.amount
-          default:
-            return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
-        }
-      }
-      // Legacy BUY/SELL using 'side' field
-      return sum + (tx.side === 'buy' ? 1 : -1) * tx.amount
-    }, 0)
-}
-
-// Helper function to calculate balance in CHF
-function calculateBalanceChf(
-  itemId: string,
-  transactions: NetWorthTransaction[],
-  item?: NetWorthItem,
-  cryptoPrices?: Record<string, number>,
-  exchangeRates?: Record<CurrencyCode, number>,
-  usdToChfRate?: number | null
-): number {
-  // For Crypto with current prices
-  if (item?.category === 'Crypto' && cryptoPrices && item.name) {
-    const coinAmount = calculateCoinAmount(itemId, transactions)
-    const ticker = item.name.trim().toUpperCase()
-    const currentPrice = cryptoPrices[ticker]
-    if (currentPrice !== undefined && currentPrice > 0) {
-      // Price is in USD - convert to CHF
-      const valueUsd = coinAmount * currentPrice
-      if (usdToChfRate && usdToChfRate > 0) {
-        return valueUsd * usdToChfRate
-      } else if (exchangeRates && exchangeRates.USD) {
-        // Convert using exchange rates: 1 USD = 1 / rates.USD CHF
-        return valueUsd / exchangeRates.USD
-      } else {
-        // Fallback: assume 1:1 (shouldn't happen)
-        return valueUsd
-      }
-    }
-  }
-
-  // For Depreciating Assets
-  if (item?.category === 'Depreciating Assets' && item.monthlyDepreciationChf && item.monthlyDepreciationChf > 0) {
-    const itemTransactions = transactions.filter(tx => 
-      tx.itemId === itemId && !tx.id.startsWith('depr-')
-    )
-    
-    let baseBalance = itemTransactions.reduce((sum, tx) => {
-      const txValue = tx.amount * (tx.side === 'buy' ? 1 : -1)
-      
-      if (tx.pricePerItem !== undefined && tx.currency && exchangeRates) {
-        const priceInOriginalCurrency = tx.pricePerItem
-        const totalInOriginalCurrency = txValue * priceInOriginalCurrency
-        // Convert to CHF
-        if (tx.currency === 'CHF') {
-          return sum + totalInOriginalCurrency
-        } else if (exchangeRates[tx.currency as CurrencyCode]) {
-          return sum + totalInOriginalCurrency / exchangeRates[tx.currency as CurrencyCode]
-        }
-      }
-      return sum + txValue * tx.pricePerItemChf
-    }, 0)
-    
-    const buyTransactions = itemTransactions
-      .filter(tx => tx.side === 'buy')
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    
-    if (buyTransactions.length > 0) {
-      const firstBuyDate = new Date(buyTransactions[0].date)
-      const now = new Date()
-      const monthsDiff = (now.getFullYear() - firstBuyDate.getFullYear()) * 12 + 
-                         (now.getMonth() - firstBuyDate.getMonth())
-      const depreciationAmount = monthsDiff * item.monthlyDepreciationChf
-      baseBalance = Math.max(0, baseBalance - depreciationAmount)
-    }
-    
-    return baseBalance
-  }
-
-  // For all other categories
-  return transactions
-    .filter(tx => tx.itemId === itemId)
-    .reduce((sum, tx) => {
-      const txValue = tx.amount * (tx.side === 'buy' ? 1 : -1)
-      
-      if (tx.pricePerItem !== undefined && tx.currency && exchangeRates) {
-        const priceInOriginalCurrency = tx.pricePerItem
-        const totalInOriginalCurrency = txValue * priceInOriginalCurrency
-        // Convert to CHF
-        if (tx.currency === 'CHF') {
-          return sum + totalInOriginalCurrency
-        } else if (exchangeRates[tx.currency as CurrencyCode]) {
-          return sum + totalInOriginalCurrency / exchangeRates[tx.currency as CurrencyCode]
-        }
-      }
-      return sum + txValue * tx.pricePerItemChf
-    }, 0)
-}
+// Note: Calculation logic is now handled by NetWorthCalculationService
+// which uses balanceCalculationService internally
+// This ensures consistency with the frontend (Dashboard, NetWorth, DataContext)
 
 // Fetch crypto prices from CryptoCompare
 async function fetchCryptoPrices(tickers: string[]): Promise<Record<string, number>> {
@@ -347,7 +249,9 @@ async function fetchExchangeRates(): Promise<Record<CurrencyCode, number>> {
   }
 }
 
+
 // Create snapshot function
+// Uses the same calculation logic as the frontend via NetWorthCalculationService
 function createSnapshot(
   items: NetWorthItem[],
   transactions: NetWorthTransaction[],
@@ -356,109 +260,40 @@ function createSnapshot(
   exchangeRates: Record<CurrencyCode, number>,
   usdToChfRate: number | null
 ): NetWorthSnapshot {
-  const categories: Record<string, number> = {
-    'Cash': 0,
-    'Bank Accounts': 0,
-    'Retirement Funds': 0,
-    'Index Funds': 0,
-    'Stocks': 0,
-    'Commodities': 0,
-    'Crypto': 0,
-    'Perpetuals': 0,
-    'Real Estate': 0,
-    'Depreciating Assets': 0,
+  // Create a convert function that matches the frontend's convert function signature
+  // The frontend uses exchange rates where 1 CHF = rates[currency], so to convert FROM currency TO CHF:
+  // amountInChf = amountInCurrency / rates[currency]
+  const convert = (amount: number, from: CurrencyCode): number => {
+    if (from === 'CHF') return amount
+    const rate = exchangeRates[from]
+    return rate ? amount / rate : amount
   }
 
-  items.forEach(item => {
-    if (item.category === 'Crypto') {
-      const coinAmount = calculateCoinAmount(item.id, transactions)
-      const ticker = item.name.trim().toUpperCase()
-      const currentPriceUsd = cryptoPrices[ticker] || 0
-      
-      if (currentPriceUsd > 0) {
-        const valueUsd = coinAmount * currentPriceUsd
-        if (usdToChfRate && usdToChfRate > 0) {
-          categories[item.category] += valueUsd * usdToChfRate
-        } else if (exchangeRates.USD) {
-          categories[item.category] += valueUsd / exchangeRates.USD
-        } else {
-          categories[item.category] += valueUsd
-        }
-      } else {
-        const balanceUsd = calculateBalanceChf(item.id, transactions, item, cryptoPrices, exchangeRates, usdToChfRate)
-        if (usdToChfRate && usdToChfRate > 0) {
-          categories[item.category] += balanceUsd * usdToChfRate
-        } else if (exchangeRates.USD) {
-          categories[item.category] += balanceUsd / exchangeRates.USD
-        } else {
-          categories[item.category] += balanceUsd
-        }
-      }
-    } else if (item.category === 'Perpetuals') {
-      // For Perpetuals: calculate from subcategories
-      if (!item.perpetualsData) {
-        categories[item.category] += 0
-      } else {
-        const { openPositions, openOrders, availableMargin } = item.perpetualsData
-        
-        // Open Positions: balance = margin + pnl (in USD)
-        const openPositionsTotal = openPositions.reduce((posSum, pos) => {
-          return posSum + (pos.margin + pos.pnl)
-        }, 0)
-        
-        // Open Orders: balance = margin (in USD)
-        const openOrdersTotal = openOrders.reduce((orderSum, order) => {
-          return orderSum + order.margin
-        }, 0)
-        
-        // Available Margin: balance = margin (in USD)
-        const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
-          return marginSum + margin.margin
-        }, 0)
-        
-        // Total in USD, convert to CHF
-        const totalUsd = openPositionsTotal + openOrdersTotal + availableMarginTotal
-        if (usdToChfRate && usdToChfRate > 0) {
-          categories[item.category] += totalUsd * usdToChfRate
-        } else if (exchangeRates.USD && exchangeRates.USD > 0) {
-          categories[item.category] += totalUsd / exchangeRates.USD
-        } else {
-          categories[item.category] += totalUsd
-        }
-      }
-    } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
-      // For stocks/index funds/commodities, use current prices if available
-      const ticker = item.name.trim().toUpperCase()
-      const currentPriceUsd = stockPrices[ticker]
-      
-      if (currentPriceUsd && currentPriceUsd > 0) {
-        // Calculate holdings (quantity)
-        const holdings = transactions
-          .filter(tx => tx.itemId === item.id)
-          .reduce((sum, tx) => sum + (tx.side === 'buy' ? 1 : -1) * tx.amount, 0)
-        
-        // Value in USD
-        const valueUsd = holdings * currentPriceUsd
-        
-        // Convert to CHF
-        if (usdToChfRate && usdToChfRate > 0) {
-          categories[item.category] += valueUsd * usdToChfRate
-        } else if (exchangeRates.USD && exchangeRates.USD > 0) {
-          categories[item.category] += valueUsd / exchangeRates.USD
-        } else {
-          // Fallback: assume 1 USD = 1 CHF (shouldn't happen)
-          categories[item.category] += valueUsd
-        }
-      } else {
-        // Fallback to transaction-based calculation
-        categories[item.category] += calculateBalanceChf(item.id, transactions, item, cryptoPrices, exchangeRates, usdToChfRate)
-      }
-    } else {
-      categories[item.category] += calculateBalanceChf(item.id, transactions, item, cryptoPrices, exchangeRates, usdToChfRate)
-    }
-  })
+  // Use the same service as the frontend (Dashboard, NetWorth, DataContext)
+  const result = NetWorthCalculationService.calculateTotals(
+    items as any, // Type assertion needed due to slight type differences
+    transactions as any,
+    cryptoPrices,
+    stockPrices,
+    usdToChfRate,
+    convert
+  )
 
-  const total = Object.values(categories).reduce((sum, val) => sum + val, 0)
+  // Convert the categoryTotals to the snapshot format
+  const categories: Record<string, number> = {
+    'Cash': result.categoryTotals['Cash'] || 0,
+    'Bank Accounts': result.categoryTotals['Bank Accounts'] || 0,
+    'Retirement Funds': result.categoryTotals['Retirement Funds'] || 0,
+    'Index Funds': result.categoryTotals['Index Funds'] || 0,
+    'Stocks': result.categoryTotals['Stocks'] || 0,
+    'Commodities': result.categoryTotals['Commodities'] || 0,
+    'Crypto': result.categoryTotals['Crypto'] || 0,
+    'Perpetuals': result.categoryTotals['Perpetuals'] || 0,
+    'Real Estate': result.categoryTotals['Real Estate'] || 0,
+    'Depreciating Assets': result.categoryTotals['Depreciating Assets'] || 0,
+  }
+
+  const total = result.totalNetWorthChf
   
   // Use UTC explicitly to avoid timezone issues
   // When cron runs at 00:00 UTC, we want to create snapshot for yesterday at 23:59:59 UTC
@@ -530,6 +365,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cryptoTickers = [...new Set(cryptoItems.map(item => item.name.trim().toUpperCase()))]
     const stockTickers = [...new Set(stockItems.map(item => item.name.trim().toUpperCase()))]
 
+    // Note: We don't fetch Perpetuals API data here because:
+    // 1. It doesn't work on localhost
+    // 2. The snapshot should use the same calculation logic as the frontend
+    // 3. If perpetualsData is not in the item, it will be calculated as 0
+    // The frontend will have already populated perpetualsData if available
+
     const [cryptoPrices, stockPrices, exchangeRates, usdToChfRate] = await Promise.all([
       fetchCryptoPrices(cryptoTickers),
       rapidApiKey ? fetchStockPrices(stockTickers, rapidApiKey) : Promise.resolve({}),
@@ -538,6 +379,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ])
 
     // Create snapshot
+    // Note: Items may already have perpetualsData if they were loaded with it from the frontend
+    // We use the same calculation logic as the frontend, which uses item.perpetualsData if available
     const snapshot = createSnapshot(
       items,
       transactions,
@@ -604,10 +447,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Error creating snapshot:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-    return res.status(500).json({
-      success: false,
-      error: errorMessage,
-    })
+    
+    // Ensure we always return a JSON response
+    try {
+      return res.status(500).json({
+        success: false,
+        error: errorMessage,
+      })
+    } catch (jsonError) {
+      // If JSON serialization fails, try to send a plain text response
+      console.error('Failed to send JSON error response:', jsonError)
+      return res.status(500).send(`Error: ${errorMessage}`)
+    }
   }
 }
 
