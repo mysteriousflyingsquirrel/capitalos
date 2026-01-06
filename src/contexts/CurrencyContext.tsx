@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import type { CurrencyCode } from '../lib/currency'
 import { getExchangeRates, type ExchangeRates } from '../services/exchangeRateService'
 import { saveUserSettings, loadUserSettings } from '../services/firestoreService'
@@ -49,7 +49,8 @@ function CurrencyProviderInner({ children }: CurrencyProviderProps) {
   }, []) // Run once on mount
 
   // Convert amount from one currency to base currency
-  const convert = (amount: number, from: CurrencyCode): number => {
+  // Memoized to prevent unnecessary re-renders in components that depend on it
+  const convert = useCallback((amount: number, from: CurrencyCode): number => {
     // If from is already base currency, no conversion needed
     if (from === baseCurrency) {
       return amount
@@ -71,7 +72,7 @@ function CurrencyProviderInner({ children }: CurrencyProviderProps) {
     }
 
     return amount / rate
-  }
+  }, [exchangeRates, baseCurrency])
 
   return (
     <CurrencyContext.Provider
