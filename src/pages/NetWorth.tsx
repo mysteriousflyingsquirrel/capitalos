@@ -11,6 +11,7 @@ import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
+import { fetchKrakenPerpetualsData } from '../services/krakenService'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
 import {
@@ -989,18 +990,47 @@ function NetWorth() {
     loadData()
   }, [uid])
 
-  // Periodically refresh Aster Perpetuals data (every 5 minutes)
+  // Periodically refresh Aster and Kraken Perpetuals data (every 5 minutes)
   useEffect(() => {
     if (!uid) return
 
-    const perpetualsItem = netWorthItems.find(item => item.category === 'Perpetuals')
-    if (!perpetualsItem) return
+    // Check if Perpetuals item exists - use a ref to avoid dependency issues
+    const hasPerpetualsItem = netWorthItems.some(item => item.category === 'Perpetuals')
+    if (!hasPerpetualsItem) return
 
     const refreshInterval = setInterval(() => {
-      fetchAsterPerpetualsData(uid).then((asterData) => {
-        // Use Aster data directly
-        if (asterData) {
+      // Fetch both Aster and Kraken data in parallel
+      Promise.all([
+        fetchAsterPerpetualsData(uid),
+        fetchKrakenPerpetualsData(uid),
+      ]).then(([asterData, krakenData]) => {
+        // Merge data from both sources
+        const mergedData = {
+          openPositions: [
+            ...(asterData?.openPositions || []),
+            ...(krakenData?.openPositions || []),
+          ],
+          lockedMargin: [
+            ...(asterData?.lockedMargin || []),
+            ...(krakenData?.lockedMargin || []),
+          ],
+          availableMargin: [
+            ...(asterData?.availableMargin || []),
+            ...(krakenData?.availableMargin || []),
+          ],
+        }
+        
+        // Only update if we have data from at least one source
+        // Use functional update to avoid stale closure issues
+        if (asterData || krakenData) {
           setNetWorthItems((prevItems) => {
+            // Check if Perpetuals item still exists before updating
+            const hasPerpetuals = prevItems.some(item => item.category === 'Perpetuals')
+            if (!hasPerpetuals) {
+              console.warn('Perpetuals item removed during refresh, skipping update')
+              return prevItems
+            }
+            
             return prevItems.map((item) => {
               if (item.category === 'Perpetuals') {
                 return {
@@ -1014,11 +1044,12 @@ function NetWorth() {
         }
       }).catch((error) => {
         console.error('Failed to refresh Perpetuals data:', error)
+        // Keep existing data if fetch fails - don't clear items
       })
     }, 5 * 60 * 1000) // 5 minutes
 
     return () => clearInterval(refreshInterval)
-  }, [uid, netWorthItems])
+  }, [uid]) // Only depend on uid, not netWorthItems to avoid recreating interval
 
   // Save to Firestore whenever data changes
   useEffect(() => {
