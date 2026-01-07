@@ -11,6 +11,8 @@ interface ApiKeysContextType {
   setAsterApiKey: (key: string) => Promise<void>
   asterApiSecretKey: string | null
   setAsterApiSecretKey: (key: string) => Promise<void>
+  hyperliquidWalletAddress: string | null
+  setHyperliquidWalletAddress: (address: string) => Promise<void>
   isLoading: boolean
 }
 
@@ -25,6 +27,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const [rapidApiKey, setRapidApiKeyState] = useState<string | null>(null)
   const [asterApiKey, setAsterApiKeyState] = useState<string | null>(null)
   const [asterApiSecretKey, setAsterApiSecretKeyState] = useState<string | null>(null)
+  const [hyperliquidWalletAddress, setHyperliquidWalletAddressState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   // Load API keys from Firestore on mount
@@ -53,6 +56,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           // Load other API keys
           setAsterApiKeyState(settings.apiKeys.asterApiKey || null)
           setAsterApiSecretKeyState(settings.apiKeys.asterApiSecretKey || null)
+          setHyperliquidWalletAddressState(settings.apiKeys.hyperliquidWalletAddress || null)
         } else {
           // No settings found, try environment variable for RapidAPI
           const envKey = import.meta.env.VITE_RAPIDAPI_KEY
@@ -64,6 +68,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           // Set others to null
           setAsterApiKeyState(null)
           setAsterApiSecretKeyState(null)
+          setHyperliquidWalletAddressState(null)
         }
       } catch (error) {
         console.error('Error loading API keys:', error)
@@ -183,6 +188,42 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     }
   }
 
+  // Save Hyperliquid wallet address to Firestore
+  const setHyperliquidWalletAddress = async (address: string) => {
+    if (!uid) {
+      console.error('Cannot save wallet address: user not authenticated')
+      return
+    }
+
+    try {
+      const trimmedAddress = address.trim()
+      const docRef = doc(db, `users/${uid}/settings/user`)
+      
+      if (trimmedAddress) {
+        // Address has value - load existing settings and update
+        const existingSettings = await loadUserSettings(uid) || {}
+        const updatedSettings: UserSettings = {
+          ...existingSettings,
+          apiKeys: {
+            ...existingSettings.apiKeys,
+            hyperliquidWalletAddress: trimmedAddress,
+          },
+        }
+        await saveUserSettings(uid, updatedSettings)
+      } else {
+        // Address is empty - use updateDoc with deleteField() to remove it
+        await updateDoc(docRef, {
+          'apiKeys.hyperliquidWalletAddress': deleteField(),
+        })
+      }
+      
+      setHyperliquidWalletAddressState(trimmedAddress || null)
+    } catch (error) {
+      console.error('Error saving wallet address:', error)
+      throw error
+    }
+  }
+
   return (
     <ApiKeysContext.Provider
       value={{
@@ -192,6 +233,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         setAsterApiKey,
         asterApiSecretKey,
         setAsterApiSecretKey,
+        hyperliquidWalletAddress,
+        setHyperliquidWalletAddress,
         isLoading,
       }}
     >

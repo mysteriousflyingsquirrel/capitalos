@@ -223,6 +223,7 @@ export interface UserSettings {
     rapidApiKey?: string
     asterApiKey?: string
     asterApiSecretKey?: string
+    hyperliquidWalletAddress?: string
   }
 }
 

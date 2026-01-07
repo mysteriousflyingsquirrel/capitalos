@@ -12,6 +12,7 @@ import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotServic
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
+import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
 import type { InflowItem, OutflowItem } from '../pages/Cashflow'
@@ -167,31 +168,59 @@ export function DataProvider({ children }: DataProviderProps) {
     }
 
     try {
-      console.log('[DataContext] Fetching Aster data...')
+      console.log('[DataContext] Fetching Aster and Hyperliquid data...')
       
-      const asterData = await fetchAsterPerpetualsData(uid)
+      // Fetch both Aster and Hyperliquid data in parallel
+      const [asterData, hyperliquidData] = await Promise.all([
+        fetchAsterPerpetualsData(uid),
+        fetchHyperliquidPerpetualsData(uid),
+      ])
 
       console.log('[DataContext] Fetch results:', {
         asterData: !!asterData,
         asterPositions: asterData?.openPositions?.length || 0,
         asterLockedMargin: asterData?.lockedMargin?.length || 0,
         asterAvailableMargin: asterData?.availableMargin?.length || 0,
+        hyperliquidData: !!hyperliquidData,
+        hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
+        hyperliquidLockedMargin: hyperliquidData?.lockedMargin?.length || 0,
+        hyperliquidAvailableMargin: hyperliquidData?.availableMargin?.length || 0,
       })
 
-      // Use Aster data directly
-      if (asterData) {
-        console.log('[DataContext] Updating items with Aster Perpetuals data')
+      // Merge Aster and Hyperliquid data
+      const mergedData = {
+        openPositions: [
+          ...(Array.isArray(asterData?.openPositions) ? asterData.openPositions : []),
+          ...(Array.isArray(hyperliquidData?.openPositions) ? hyperliquidData.openPositions : []),
+        ],
+        openOrders: [
+          ...(Array.isArray(asterData?.openOrders) ? asterData.openOrders : []),
+          ...(Array.isArray(hyperliquidData?.openOrders) ? hyperliquidData.openOrders : []),
+        ],
+        availableMargin: [
+          ...(Array.isArray(asterData?.availableMargin) ? asterData.availableMargin : []),
+          ...(Array.isArray(hyperliquidData?.availableMargin) ? hyperliquidData.availableMargin : []),
+        ],
+        lockedMargin: [
+          ...(Array.isArray(asterData?.lockedMargin) ? asterData.lockedMargin : []),
+          ...(Array.isArray(hyperliquidData?.lockedMargin) ? hyperliquidData.lockedMargin : []),
+        ],
+      }
+
+      // Update items with merged data
+      if (asterData || hyperliquidData) {
+        console.log('[DataContext] Updating items with merged Perpetuals data')
         return items.map((item) => {
           if (item.category === 'Perpetuals') {
             return {
               ...item,
-              perpetualsData: asterData,
+              perpetualsData: mergedData,
             }
           }
           return item
         })
       } else {
-        console.log('[DataContext] No data from Aster, keeping existing items')
+        console.log('[DataContext] No data from Aster or Hyperliquid, keeping existing items')
       }
     } catch (error) {
       console.error('[DataContext] Error fetching Perpetuals data:', error)

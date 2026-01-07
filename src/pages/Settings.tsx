@@ -20,7 +20,7 @@ import { saveSnapshots, hasSnapshotForDate, createSnapshot, getTodayUTCDate, get
 function Settings() {
   const { baseCurrency, exchangeRates, isLoading, error, convert } = useCurrency()
   const { uid, user } = useAuth()
-  const { rapidApiKey, setRapidApiKey, asterApiKey, setAsterApiKey, asterApiSecretKey, setAsterApiSecretKey, isLoading: apiKeysLoading } = useApiKeys()
+  const { rapidApiKey, setRapidApiKey, asterApiKey, setAsterApiKey, asterApiSecretKey, setAsterApiSecretKey, hyperliquidWalletAddress, setHyperliquidWalletAddress, isLoading: apiKeysLoading } = useApiKeys()
   const { data } = useData()
   const [exportLoading, setExportLoading] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -44,6 +44,7 @@ function Settings() {
   const [rapidApiKeyInput, setRapidApiKeyInput] = useState('')
   const [asterApiKeyInput, setAsterApiKeyInput] = useState('')
   const [asterApiSecretKeyInput, setAsterApiSecretKeyInput] = useState('')
+  const [hyperliquidWalletAddressInput, setHyperliquidWalletAddressInput] = useState('')
   const [apiKeySaving, setApiKeySaving] = useState(false)
   const [apiKeyError, setApiKeyError] = useState<string | null>(null)
   const [apiKeySuccess, setApiKeySuccess] = useState(false)
@@ -51,6 +52,7 @@ function Settings() {
   const [showRapidApiKey, setShowRapidApiKey] = useState(false)
   const [showAsterApiKey, setShowAsterApiKey] = useState(false)
   const [showAsterApiSecretKey, setShowAsterApiSecretKey] = useState(false)
+  const [showHyperliquidWalletAddress, setShowHyperliquidWalletAddress] = useState(false)
   // Snapshot creation
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
@@ -176,8 +178,9 @@ function Settings() {
       setRapidApiKeyInput(rapidApiKey || '')
       setAsterApiKeyInput(asterApiKey || '')
       setAsterApiSecretKeyInput(asterApiSecretKey || '')
+      setHyperliquidWalletAddressInput(hyperliquidWalletAddress || '')
     }
-  }, [rapidApiKey, asterApiKey, asterApiSecretKey, apiKeysLoading])
+  }, [rapidApiKey, asterApiKey, asterApiSecretKey, hyperliquidWalletAddress, apiKeysLoading])
 
   // Load platforms on mount
   // Load available years for crypto tax report
@@ -330,6 +333,7 @@ function Settings() {
       await setRapidApiKey(rapidApiKeyInput || '')
       await setAsterApiKey(asterApiKeyInput || '')
       await setAsterApiSecretKey(asterApiSecretKeyInput || '')
+      await setHyperliquidWalletAddress(hyperliquidWalletAddressInput || '')
 
       setApiKeySuccess(true)
       setTimeout(() => setApiKeySuccess(false), 3000)
@@ -608,6 +612,55 @@ function Settings() {
                   {!apiKeysLoading && (
                     <p className="mt-1 text-text-muted text-[0.567rem] md:text-xs">
                       {asterApiSecretKey ? '✓ API secret key is configured' : '⚠️ No API secret key configured'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Hyperliquid Group */}
+            <div className="space-y-4">
+              <Heading level={3} className="text-text-secondary mb-2">Hyperliquid</Heading>
+              <p className="text-text-muted text-[0.567rem] md:text-xs mb-3">
+                Required for fetching open positions, locked margin, and available margin from Hyperliquid exchange. Enter your wallet address for read-only access.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-2">
+                    Wallet Address
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showHyperliquidWalletAddress ? "text" : "password"}
+                      value={hyperliquidWalletAddressInput}
+                      onChange={(e) => setHyperliquidWalletAddressInput(e.target.value)}
+                      placeholder="Enter your Hyperliquid wallet address"
+                      className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 pr-10 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue font-mono"
+                      disabled={apiKeysLoading || apiKeySaving}
+                      autoComplete="off"
+                      spellCheck="false"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowHyperliquidWalletAddress(!showHyperliquidWalletAddress)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors p-1"
+                      disabled={apiKeysLoading || apiKeySaving}
+                    >
+                      {showHyperliquidWalletAddress ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  {!apiKeysLoading && (
+                    <p className="mt-1 text-text-muted text-[0.567rem] md:text-xs">
+                      {hyperliquidWalletAddress ? '✓ Wallet address is configured' : '⚠️ No wallet address configured'}
                     </p>
                   )}
                 </div>
