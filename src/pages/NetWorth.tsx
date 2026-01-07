@@ -10,7 +10,7 @@ import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } 
 import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
-import { fetchAsterPerpetualsData } from '../services/asterService'
+import { useData } from '../contexts/DataContext'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
 import {
@@ -980,12 +980,24 @@ function NetWorth() {
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch', { incognito: isIncognito })
   
-  // Load data from Firestore on mount
+  // Load data from DataContext (includes merged Perpetuals data)
+  const { data, loading: dataLoading } = useData()
+  // Use local state for items/transactions that we can edit and save
+  // Initialize from DataContext, but allow local updates
   const [netWorthItems, setNetWorthItems] = useState<NetWorthItem[]>([])
   const [transactions, setTransactions] = useState<NetWorthTransaction[]>([])
   const [platforms, setPlatforms] = useState<Platform[]>([])
-  const [dataLoading, setDataLoading] = useState(true)
   const isManuallySaving = useRef(false)
+  
+  // Sync with DataContext when it updates (this ensures we get the merged Perpetuals data)
+  useEffect(() => {
+    if (data.netWorthItems.length > 0 || netWorthItems.length === 0) {
+      setNetWorthItems(data.netWorthItems)
+    }
+    if (data.transactions.length > 0 || transactions.length === 0) {
+      setTransactions(data.transactions)
+    }
+  }, [data.netWorthItems, data.transactions])
 
   // Store current crypto prices (ticker -> USD price)
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
@@ -996,17 +1008,11 @@ function NetWorth() {
   const [usdToChfRate, setUsdToChfRate] = useState<number | null>(null)
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
 
-  // Load data from Firestore on mount and when uid changes
+  // Load platforms from Firestore (data items come from DataContext)
   useEffect(() => {
-    if (!uid) {
-      setNetWorthItems([])
-      setTransactions([])
-      setDataLoading(false)
-      return
-    }
+    if (!uid) return
 
-    const loadData = async () => {
-      setDataLoading(true)
+    const loadPlatformsData = async () => {
       try {
         const defaultPlatforms: Platform[] = [
           { id: 'physical', name: 'Physical', order: 0 },
@@ -1025,112 +1031,17 @@ function NetWorth() {
           { id: 'wallet', name: 'Wallet', order: 0 },
           { id: 'other', name: 'Other', order: 0 },
         ]
-        const [items, txs, loadedPlatforms] = await Promise.all([
-          loadNetWorthItems(mockNetWorthItems, uid),
-          loadNetWorthTransactions(initialMockTransactions, uid),
-          loadPlatforms(defaultPlatforms, uid),
-        ])
-        console.log('Loaded transactions from Firestore:', txs.length, txs)
-        
-        // Ensure Perpetuals items don't have perpetualsData loaded from Firebase (it's fetched live)
-        const migratedItems = items.map(item => {
-          if (item.category === 'Perpetuals') {
-            // Remove perpetualsData if it exists (shouldn't be in Firebase, but clean up just in case)
-            const { perpetualsData, ...itemWithoutPerpetualsData } = item
-            return itemWithoutPerpetualsData
-          }
-          return item
-        })
-        
-        // If no Perpetuals item exists, add one (without perpetualsData - will be fetched from API)
-        const hasPerpetuals = migratedItems.some(item => item.category === 'Perpetuals')
-        if (!hasPerpetuals) {
-          migratedItems.push({
-            id: 'perpetuals-default',
-            category: 'Perpetuals',
-            name: 'Perpetuals',
-            platform: 'Aster',
-            currency: 'USD',
-            // No perpetualsData - will be fetched from Aster API
-          })
-        }
-        
-        setNetWorthItems(migratedItems)
-        setTransactions(txs)
+        const loadedPlatforms = await loadPlatforms(defaultPlatforms, uid)
         setPlatforms(loadedPlatforms)
-        
-        // Fetch Aster Perpetuals data if Perpetuals item exists
-        const perpetualsItem = migratedItems.find(item => item.category === 'Perpetuals')
-        if (perpetualsItem) {
-            fetchAsterPerpetualsData(uid).then((asterData) => {
-              // Use Aster data directly
-              if (asterData) {
-                setNetWorthItems((prevItems) => {
-                  return prevItems.map((item) => {
-                    if (item.category === 'Perpetuals') {
-                      return {
-                        ...item,
-                        perpetualsData: asterData,
-                      }
-                    }
-                    return item
-                  })
-                })
-              }
-            }).catch((error) => {
-              console.error('Failed to fetch Perpetuals data:', error)
-              // Keep existing data if fetch fails
-            })
-        }
       } catch (error) {
-        console.error('Failed to load data:', error)
-      } finally {
-        setDataLoading(false)
+        console.error('Failed to load platforms:', error)
       }
     }
 
-    loadData()
+    loadPlatformsData()
   }, [uid])
 
-  // Periodically refresh Aster Perpetuals data (every 5 minutes)
-  useEffect(() => {
-    if (!uid) return
-
-    // Check if Perpetuals item exists - use a ref to avoid dependency issues
-    const hasPerpetualsItem = netWorthItems.some(item => item.category === 'Perpetuals')
-    if (!hasPerpetualsItem) return
-
-    const refreshInterval = setInterval(() => {
-      fetchAsterPerpetualsData(uid).then((asterData) => {
-        // Only update if we have data
-        if (asterData) {
-          setNetWorthItems((prevItems) => {
-            // Check if Perpetuals item still exists before updating
-            const hasPerpetuals = prevItems.some(item => item.category === 'Perpetuals')
-            if (!hasPerpetuals) {
-              console.warn('Perpetuals item removed during refresh, skipping update')
-              return prevItems
-            }
-            
-            return prevItems.map((item) => {
-              if (item.category === 'Perpetuals') {
-                return {
-                  ...item,
-                  perpetualsData: asterData,
-                }
-              }
-              return item
-            })
-          })
-        }
-      }).catch((error) => {
-        console.error('Failed to refresh Perpetuals data:', error)
-        // Keep existing data if fetch fails - don't clear items
-      })
-    }, 5 * 60 * 1000) // 5 minutes
-
-    return () => clearInterval(refreshInterval)
-  }, [uid]) // Only depend on uid, not netWorthItems to avoid recreating interval
+  // Perpetuals data is refreshed by DataContext, no need to refresh here
 
   // Save to Firestore whenever data changes
   useEffect(() => {
