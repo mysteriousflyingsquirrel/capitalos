@@ -346,15 +346,15 @@ function NetWorthCategorySection({
                         const pnlSign = pos.pnl >= 0 ? '+' : ''
                         const pnlFormatted = formatNumber(Math.abs(pos.pnl), 'ch', { incognito: isIncognito })
                         
-                        // Format second line: leverage, direction, and funding rate
-                        // Format: "1x Long / 0.00025%"
+                        // Format second line: direction arrow, leverage, and funding rate
+                        // Format: "▼ 1x / +0.00250%"
                         const secondLineParts: string[] = []
                         
-                        // Add leverage and direction if available
+                        // Add direction arrow and leverage if available
                         if (pos.leverage !== null && pos.leverage !== undefined && pos.positionSide) {
+                          const directionArrow = pos.positionSide === 'LONG' ? '▲' : '▼'
                           const leverageStr = `${pos.leverage}x`
-                          const directionStr = pos.positionSide === 'LONG' ? 'Long' : 'Short'
-                          secondLineParts.push(`${leverageStr} ${directionStr}`)
+                          secondLineParts.push(`${directionArrow} ${leverageStr}`)
                         }
                         
                         // Add funding rate if available
