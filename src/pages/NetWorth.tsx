@@ -287,8 +287,36 @@ function NetWorthCategorySection({
       <div className="space-y-3 w-full">
         {/* Perpetuals category: render three subcategory tables */}
         {category === 'Perpetuals' ? (
-          items.length > 0 && items[0]?.perpetualsData ? (
-            <div className="space-y-6">
+          (() => {
+            // Find the Perpetuals item (should be the first one, but be safe)
+            const perpetualsItem = items.find(item => item.category === 'Perpetuals') || items[0]
+            const perpetualsData = perpetualsItem?.perpetualsData
+            
+            // Debug logging
+            if (items.length > 0) {
+              console.log('[NetWorth] Perpetuals category render:', {
+                itemsCount: items.length,
+                hasPerpetualsItem: !!perpetualsItem,
+                hasPerpetualsData: !!perpetualsData,
+                positionsCount: perpetualsData?.openPositions?.length || 0,
+                availableMarginCount: perpetualsData?.availableMargin?.length || 0,
+                lockedMarginCount: perpetualsData?.lockedMargin?.length || 0,
+                openPositions: perpetualsData?.openPositions,
+                availableMargin: perpetualsData?.availableMargin,
+                lockedMargin: perpetualsData?.lockedMargin,
+              })
+            }
+            
+            if (!perpetualsData) {
+              return (
+                <div className="text-center text-text-muted text-[0.567rem] md:text-xs py-4">
+                  No Perpetuals data available. Please configure your API credentials in Settings.
+                </div>
+              )
+            }
+            
+            return (
+              <div className="space-y-6">
               {/* Open Positions Table */}
               <div>
                 <Heading level={3} className="mb-3 text-text-secondary">Open Positions</Heading>
@@ -337,7 +365,7 @@ function NetWorthCategorySection({
                       </tr>
                     </thead>
                     <tbody>
-                      {items[0].perpetualsData.openPositions.map((pos) => {
+                      {perpetualsData.openPositions.map((pos) => {
                         const holdingsUsd = pos.margin + pos.pnl
                         const balanceUsd = pos.margin + pos.pnl
                         const balanceChf = usdToChfRate && usdToChfRate > 0 
@@ -462,7 +490,7 @@ function NetWorthCategorySection({
                       </tr>
                     </thead>
                     <tbody>
-                      {items[0].perpetualsData.lockedMargin.map((margin) => {
+                      {perpetualsData.lockedMargin.map((margin) => {
                         const balanceUsd = margin.margin
                         const balanceChf = usdToChfRate && usdToChfRate > 0 
                           ? balanceUsd * usdToChfRate 
@@ -550,7 +578,7 @@ function NetWorthCategorySection({
                       </tr>
                     </thead>
                     <tbody>
-                      {items[0].perpetualsData.availableMargin.map((margin) => {
+                      {perpetualsData.availableMargin.map((margin) => {
                         const balanceUsd = margin.margin
                         const balanceChf = usdToChfRate && usdToChfRate > 0 
                           ? balanceUsd * usdToChfRate 
@@ -589,12 +617,9 @@ function NetWorthCategorySection({
                   </table>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="text-center text-text-muted text-[0.567rem] md:text-xs py-4">
-              No Perpetuals data yet.
-            </div>
-          )
+              </div>
+            )
+          })()
         ) : (
           /* Regular table structure for other categories */
           <div className="w-full overflow-hidden">
