@@ -42,6 +42,7 @@ export interface PerpetualsOpenPosition {
   margin: number // in quote currency (USD/USDT)
   pnl: number // in quote currency (USD/USDT)
   platform: string
+  fundingRate?: number | null // funding rate as decimal (e.g., 0.00002 for 0.002%)
 }
 
 export interface PerpetualsLockedMargin {
@@ -336,11 +337,20 @@ function NetWorthCategorySection({
                           : convert(balanceUsd, 'USD')
                         const pnlSign = pos.pnl >= 0 ? '+' : ''
                         const pnlFormatted = formatNumber(Math.abs(pos.pnl), 'ch', { incognito: isIncognito })
+                        // Format funding rate: convert decimal to percentage (e.g., 0.00002 -> 0.002%)
+                        const fundingRateDisplay = pos.fundingRate !== null && pos.fundingRate !== undefined
+                          ? (() => {
+                              const ratePercent = pos.fundingRate * 100
+                              const sign = ratePercent >= 0 ? '+' : ''
+                              return ` / ${sign}${ratePercent.toFixed(3)}%`
+                            })()
+                          : ''
+
                         return (
                           <tr key={pos.id} className="border-b border-border-subtle last:border-b-0">
                             <td className="py-2 pr-2">
                               <div className="text2 truncate">
-                                {pos.ticker}
+                                {pos.ticker}{fundingRateDisplay}
                               </div>
                             </td>
                             <td className="py-2 text-right px-2">
