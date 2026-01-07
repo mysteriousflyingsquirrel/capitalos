@@ -354,7 +354,7 @@ function NetWorthCategorySection({
                                 {fundingRateDisplay && (
                                   <>
                                     <br />
-                                    <span className="text-sm text-text-secondary">
+                                    <span className="text-[0.9em]">
                                       {fundingRateDisplay}
                                     </span>
                                   </>
