@@ -435,12 +435,22 @@ async function fetchHyperliquidPerpetualsData(
     fetchLockedMargin(walletAddress),
   ])
 
-  return {
+  const result = {
     openPositions,
     openOrders: [], // Hyperliquid may not have open orders endpoint or different structure
     availableMargin,
     lockedMargin,
   }
+  
+  console.log('[Hyperliquid] Returning PerpetualsData:', {
+    openPositionsCount: result.openPositions.length,
+    openOrdersCount: result.openOrders.length,
+    availableMarginCount: result.availableMargin.length,
+    lockedMarginCount: result.lockedMargin.length,
+    openPositions: result.openPositions.map(p => ({ id: p.id, ticker: p.ticker, platform: p.platform })),
+  })
+  
+  return result
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

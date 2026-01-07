@@ -201,24 +201,36 @@ export function DataProvider({ children }: DataProviderProps) {
       })
 
       // Merge Aster and Hyperliquid data
+      // Create defensive copies to prevent mutation
+      const asterPositions = Array.isArray(asterData?.openPositions) ? [...asterData.openPositions] : []
+      const hyperliquidPositions = Array.isArray(hyperliquidData?.openPositions) ? [...hyperliquidData.openPositions] : []
+      const asterOrders = Array.isArray(asterData?.openOrders) ? [...asterData.openOrders] : []
+      const hyperliquidOrders = Array.isArray(hyperliquidData?.openOrders) ? [...hyperliquidData.openOrders] : []
+      const asterAvailableMargin = Array.isArray(asterData?.availableMargin) ? [...asterData.availableMargin] : []
+      const hyperliquidAvailableMargin = Array.isArray(hyperliquidData?.availableMargin) ? [...hyperliquidData.availableMargin] : []
+      const asterLockedMargin = Array.isArray(asterData?.lockedMargin) ? [...asterData.lockedMargin] : []
+      const hyperliquidLockedMargin = Array.isArray(hyperliquidData?.lockedMargin) ? [...hyperliquidData.lockedMargin] : []
+      
+      console.log('[DataContext] Before merge - counts:', {
+        asterPositions: asterPositions.length,
+        hyperliquidPositions: hyperliquidPositions.length,
+        asterOrders: asterOrders.length,
+        hyperliquidOrders: hyperliquidOrders.length,
+      })
+      
       const mergedData = {
-        openPositions: [
-          ...(Array.isArray(asterData?.openPositions) ? asterData.openPositions : []),
-          ...(Array.isArray(hyperliquidData?.openPositions) ? hyperliquidData.openPositions : []),
-        ],
-        openOrders: [
-          ...(Array.isArray(asterData?.openOrders) ? asterData.openOrders : []),
-          ...(Array.isArray(hyperliquidData?.openOrders) ? hyperliquidData.openOrders : []),
-        ],
-        availableMargin: [
-          ...(Array.isArray(asterData?.availableMargin) ? asterData.availableMargin : []),
-          ...(Array.isArray(hyperliquidData?.availableMargin) ? hyperliquidData.availableMargin : []),
-        ],
-        lockedMargin: [
-          ...(Array.isArray(asterData?.lockedMargin) ? asterData.lockedMargin : []),
-          ...(Array.isArray(hyperliquidData?.lockedMargin) ? hyperliquidData.lockedMargin : []),
-        ],
+        openPositions: [...asterPositions, ...hyperliquidPositions],
+        openOrders: [...asterOrders, ...hyperliquidOrders],
+        availableMargin: [...asterAvailableMargin, ...hyperliquidAvailableMargin],
+        lockedMargin: [...asterLockedMargin, ...hyperliquidLockedMargin],
       }
+      
+      console.log('[DataContext] After merge - mergedData structure:', {
+        openPositionsCount: mergedData.openPositions.length,
+        openOrdersCount: mergedData.openOrders.length,
+        openPositionsIds: mergedData.openPositions.map(p => p.id),
+        openOrdersIds: mergedData.openOrders.map(o => o.id),
+      })
 
       console.log('[DataContext] Merged data:', {
         openPositions: mergedData.openPositions,
@@ -232,15 +244,51 @@ export function DataProvider({ children }: DataProviderProps) {
       // Update items with merged data
       if (asterData || hyperliquidData) {
         console.log('[DataContext] Updating items with merged Perpetuals data')
-        return items.map((item) => {
+        console.log('[DataContext] Merged data being set:', {
+          openPositionsCount: mergedData.openPositions.length,
+          openOrdersCount: mergedData.openOrders.length,
+          availableMarginCount: mergedData.availableMargin.length,
+          lockedMarginCount: mergedData.lockedMargin.length,
+          openPositions: mergedData.openPositions,
+        })
+        
+        const updatedItems = items.map((item) => {
           if (item.category === 'Perpetuals') {
-            return {
-              ...item,
-              perpetualsData: mergedData,
+            // Create a deep copy of mergedData to prevent mutation
+            const perpetualsDataCopy = {
+              openPositions: mergedData.openPositions.map(p => ({ ...p })),
+              openOrders: mergedData.openOrders.map(o => ({ ...o })),
+              availableMargin: mergedData.availableMargin.map(m => ({ ...m })),
+              lockedMargin: mergedData.lockedMargin.map(m => ({ ...m })),
             }
+            
+            const updatedItem = {
+              ...item,
+              perpetualsData: perpetualsDataCopy,
+            }
+            console.log('[DataContext] Updated Perpetuals item:', {
+              itemId: updatedItem.id,
+              hasPerpetualsData: !!updatedItem.perpetualsData,
+              positionsCount: updatedItem.perpetualsData?.openPositions?.length || 0,
+              openOrdersCount: updatedItem.perpetualsData?.openOrders?.length || 0,
+              positionsIds: updatedItem.perpetualsData?.openPositions?.map(p => p.id),
+              ordersIds: updatedItem.perpetualsData?.openOrders?.map(o => o.id),
+            })
+            return updatedItem
           }
           return item
         })
+        
+        const finalPerpetualsItem = updatedItems.find(i => i.category === 'Perpetuals')
+        console.log('[DataContext] Final Perpetuals item before return:', {
+          hasItem: !!finalPerpetualsItem,
+          hasPerpetualsData: !!finalPerpetualsItem?.perpetualsData,
+          positionsCount: finalPerpetualsItem?.perpetualsData?.openPositions?.length || 0,
+          openOrdersCount: finalPerpetualsItem?.perpetualsData?.openOrders?.length || 0,
+          positionsIds: finalPerpetualsItem?.perpetualsData?.openPositions?.map(p => p.id),
+          ordersIds: finalPerpetualsItem?.perpetualsData?.openOrders?.map(o => o.id),
+        })
+        return updatedItems
       } else {
         console.log('[DataContext] No data from Aster or Hyperliquid, keeping existing items')
       }
@@ -301,6 +349,16 @@ export function DataProvider({ children }: DataProviderProps) {
       )
       
       // Step 5: Update state
+      const perpetualsItem = itemsWithPerpetuals.find(item => item.category === 'Perpetuals')
+      console.log('[DataContext] Before setData - Perpetuals item:', {
+        hasItem: !!perpetualsItem,
+        hasPerpetualsData: !!perpetualsItem?.perpetualsData,
+        openPositionsCount: perpetualsItem?.perpetualsData?.openPositions?.length || 0,
+        openOrdersCount: perpetualsItem?.perpetualsData?.openOrders?.length || 0,
+        openPositions: perpetualsItem?.perpetualsData?.openPositions,
+        openOrders: perpetualsItem?.perpetualsData?.openOrders,
+      })
+      
       setData({
         netWorthItems: itemsWithPerpetuals,
         transactions: firebaseData.transactions,
@@ -312,6 +370,17 @@ export function DataProvider({ children }: DataProviderProps) {
         usdToChfRate: cryptoData.usdToChfRate,
         calculationResult,
       })
+      
+      // Log after state update (in next tick)
+      setTimeout(() => {
+        const currentPerpetualsItem = itemsWithPerpetuals.find(item => item.category === 'Perpetuals')
+        console.log('[DataContext] After setData - Perpetuals item:', {
+          hasItem: !!currentPerpetualsItem,
+          hasPerpetualsData: !!currentPerpetualsItem?.perpetualsData,
+          openPositionsCount: currentPerpetualsItem?.perpetualsData?.openPositions?.length || 0,
+          openOrdersCount: currentPerpetualsItem?.perpetualsData?.openOrders?.length || 0,
+        })
+      }, 0)
       
       setLoading(false)
     } catch (err) {
