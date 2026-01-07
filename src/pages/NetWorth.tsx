@@ -385,7 +385,7 @@ function NetWorthCategorySection({
                         const balanceChf = usdToChfRate && usdToChfRate > 0 
                           ? balanceUsd * usdToChfRate 
                           : convert(balanceUsd, 'USD')
-                        const pnlSign = pos.pnl >= 0 ? '+' : ''
+                        const pnlSign = pos.pnl >= 0 ? '+' : '-'
                         const pnlFormatted = formatNumber(Math.abs(pos.pnl), 'ch', { incognito: isIncognito })
                         
                         // Format second line: direction arrow, leverage, and funding rate
@@ -393,10 +393,19 @@ function NetWorthCategorySection({
                         const secondLineParts: string[] = []
                         
                         // Add direction arrow and leverage if available
-                        if (pos.leverage !== null && pos.leverage !== undefined && pos.positionSide) {
+                        // Show direction if we have positionSide, even without leverage
+                        if (pos.positionSide) {
                           const directionArrow = pos.positionSide === 'LONG' ? '▲' : '▼'
-                          const leverageStr = `${pos.leverage}x`
-                          secondLineParts.push(`${directionArrow} ${leverageStr}`)
+                          if (pos.leverage !== null && pos.leverage !== undefined) {
+                            const leverageStr = `${pos.leverage}x`
+                            secondLineParts.push(`${directionArrow} ${leverageStr}`)
+                          } else {
+                            // Show just direction if no leverage
+                            secondLineParts.push(directionArrow)
+                          }
+                        } else if (pos.leverage !== null && pos.leverage !== undefined) {
+                          // Show just leverage if no direction
+                          secondLineParts.push(`${pos.leverage}x`)
                         }
                         
                         // Add funding rate if available
