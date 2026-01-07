@@ -337,12 +337,12 @@ function NetWorthCategorySection({
                           : convert(balanceUsd, 'USD')
                         const pnlSign = pos.pnl >= 0 ? '+' : ''
                         const pnlFormatted = formatNumber(Math.abs(pos.pnl), 'ch', { incognito: isIncognito })
-                        // Format funding rate: convert decimal to percentage (e.g., 0.00002 -> 0.002%)
+                        // Format funding rate: convert decimal to percentage (e.g., 0.00002 -> 0.0020%)
                         const fundingRateDisplay = pos.fundingRate !== null && pos.fundingRate !== undefined
                           ? (() => {
                               const ratePercent = pos.fundingRate * 100
                               const sign = ratePercent >= 0 ? '+' : ''
-                              return ` / ${sign}${ratePercent.toFixed(3)}%`
+                              return ` / ${sign}${ratePercent.toFixed(5)}%`
                             })()
                           : ''
 
