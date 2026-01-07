@@ -18,16 +18,11 @@ import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useApiKeys } from '../contexts/ApiKeysContext'
+import { useData } from '../contexts/DataContext'
 import { formatMoney } from '../lib/currency'
 import { formatDate } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
-import {
-  loadNetWorthItems,
-  loadNetWorthTransactions,
-  loadCashflowInflowItems,
-  loadCashflowOutflowItems,
-} from '../services/storageService'
-import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotService'
+import type { NetWorthSnapshot } from '../services/snapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from '../services/balanceCalculationService'
@@ -35,7 +30,6 @@ import type { InflowItem, OutflowItem } from './Cashflow'
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
-import { fetchAsterPerpetualsData } from '../services/asterService'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -149,13 +143,14 @@ function Dashboard() {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { rapidApiKey } = useApiKeys()
 
-  // Load data from Firestore
+  // Load data from DataContext (includes merged Perpetuals data)
   const { uid } = useAuth()
-  const [netWorthItems, setNetWorthItems] = useState([])
-  const [transactions, setTransactions] = useState([])
-  const [inflowItems, setInflowItems] = useState([])
-  const [outflowItems, setOutflowItems] = useState([])
-  const [snapshots, setSnapshots] = useState<NetWorthSnapshot[]>([])
+  const { data } = useData()
+  const netWorthItems = data.netWorthItems
+  const transactions = data.transactions
+  const inflowItems = data.inflowItems
+  const outflowItems = data.outflowItems
+  const snapshots = data.snapshots
   
   // Store current crypto prices (ticker -> USD price)
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
@@ -174,47 +169,7 @@ function Dashboard() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  useEffect(() => {
-    if (uid) {
-      Promise.all([
-        loadNetWorthItems([], uid),
-        loadNetWorthTransactions([], uid),
-        loadCashflowInflowItems([], uid),
-        loadCashflowOutflowItems([], uid),
-        loadSnapshots(uid),
-      ]).then(([items, txs, inflow, outflow, loadedSnapshots]) => {
-        setNetWorthItems(items)
-        setTransactions(txs)
-        setInflowItems(inflow)
-        setOutflowItems(outflow)
-        setSnapshots(loadedSnapshots)
-        
-        // Fetch Aster Perpetuals data if Perpetuals item exists
-        const perpetualsItem = items.find((item: NetWorthItem) => item.category === 'Perpetuals')
-        if (perpetualsItem) {
-          fetchAsterPerpetualsData(uid).then((asterData) => {
-            // Use Aster data directly
-            if (asterData) {
-              setNetWorthItems((prevItems) => {
-                return prevItems.map((item: NetWorthItem) => {
-                  if (item.category === 'Perpetuals') {
-                    return {
-                      ...item,
-                      perpetualsData: asterData,
-                    }
-                  }
-                  return item
-                })
-              })
-            }
-          }).catch((error) => {
-            console.error('Failed to fetch Perpetuals data:', error)
-            // Keep existing data if fetch fails
-          })
-        }
-      })
-    }
-  }, [uid])
+  // Data is loaded by DataContext, no need to load here
 
   // Fetch crypto prices and USD→CHF rate for all crypto items
   const fetchAllCryptoPrices = async (showLoading = false) => {
@@ -312,57 +267,7 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [netWorthItems]) // Re-fetch when items change
 
-  // Periodically refresh Aster Perpetuals data (every 5 minutes)
-  useEffect(() => {
-    if (!uid) return
-
-    const perpetualsItem = netWorthItems.find((item: NetWorthItem) => item.category === 'Perpetuals')
-    if (!perpetualsItem) return
-
-    // Fetch immediately
-    fetchAsterPerpetualsData(uid).then((asterData) => {
-      // Use Aster data directly
-      if (asterData) {
-        setNetWorthItems((prevItems: NetWorthItem[]) => {
-          return prevItems.map((item: NetWorthItem) => {
-            if (item.category === 'Perpetuals') {
-              return {
-                ...item,
-                perpetualsData: asterData,
-              }
-            }
-            return item
-          })
-        })
-      }
-    }).catch((error) => {
-      console.error('Failed to refresh Perpetuals data:', error)
-    })
-
-    // Set up interval to refresh every 5 minutes
-    const refreshInterval = setInterval(() => {
-      fetchAsterPerpetualsData(uid).then((asterData) => {
-        // Use Aster data directly
-        if (asterData) {
-          setNetWorthItems((prevItems: NetWorthItem[]) => {
-            return prevItems.map((item: NetWorthItem) => {
-              if (item.category === 'Perpetuals') {
-                return {
-                  ...item,
-                  perpetualsData: asterData,
-                }
-              }
-              return item
-            })
-          })
-        }
-      }).catch((error) => {
-        console.error('Failed to refresh Perpetuals data:', error)
-      })
-    }, 5 * 60 * 1000) // 5 minutes
-
-    return () => clearInterval(refreshInterval)
-  }, [uid, netWorthItems])
+  // Perpetuals data is refreshed by DataContext, no need to refresh here
 
   // Pull-to-refresh functionality for mobile
   useEffect(() => {
