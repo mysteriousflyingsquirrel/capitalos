@@ -26,7 +26,6 @@ function initializeAdmin() {
   }
 }
 
-// Types matching the frontend
 interface PerpetualsOpenPosition {
   id: string
   ticker: string
@@ -68,13 +67,8 @@ interface PerpetualsData {
 
 const HYPERLIQUID_BASE_URL = 'https://api.hyperliquid.xyz'
 
-/**
- * Fetches user state from Hyperliquid API
- * Uses POST /info endpoint with user address
- */
 async function fetchUserState(walletAddress: string): Promise<any> {
   try {
-    console.log('[Hyperliquid] Fetching user state for address:', walletAddress)
     const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
       method: 'POST',
       headers: {
@@ -93,10 +87,7 @@ async function fetchUserState(walletAddress: string): Promise<any> {
     }
 
     const data = await response.json()
-    console.log('[Hyperliquid] User state response keys:', Object.keys(data))
-    console.log('[Hyperliquid] User state response (first 2000 chars):', JSON.stringify(data).substring(0, 2000))
     
-    // Return the clearinghouseState if it exists, otherwise return the whole response
     if (data.clearinghouseState) {
       return data.clearinghouseState
     }
@@ -107,12 +98,6 @@ async function fetchUserState(walletAddress: string): Promise<any> {
   }
 }
 
-/**
- * Fetches funding rates for all assets from Hyperliquid API
- * Returns a map of coin -> funding rate
- * According to Hyperliquid docs, metaAndAssetCtxs returns [meta, assetContexts]
- * where assetContexts is an array that corresponds to universe by index
- */
 async function fetchAllFundingRates(): Promise<Map<string, number>> {
   try {
     const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
@@ -132,9 +117,6 @@ async function fetchAllFundingRates(): Promise<Map<string, number>> {
 
     const data = await response.json()
     
-    // According to Hyperliquid docs, response is [meta, assetContexts]
-    // meta contains universe array with asset names
-    // assetContexts contains funding rates in same order
     let universe: any[] = []
     let assetContexts: any[] = []
     
@@ -150,24 +132,19 @@ async function fetchAllFundingRates(): Promise<Map<string, number>> {
       assetContexts = data.assetContexts || []
     }
     
-    console.log('[Hyperliquid] Funding rates - universe length:', universe.length, 'assetContexts length:', assetContexts.length)
-    
     const fundingRateMap = new Map<string, number>()
     
-    // Match by index: universe[i] corresponds to assetContexts[i]
     for (let i = 0; i < Math.min(universe.length, assetContexts.length); i++) {
       const asset = universe[i]
       const context = assetContexts[i]
       
       if (asset && context) {
         const coin = asset.name || asset.coin || asset.symbol
-        // Funding rate is in the 'funding' field (per Hyperliquid docs)
         const funding = context.funding || context.fundingRate
         
         if (coin && funding !== undefined && funding !== null) {
           const rate = parseFloat(funding)
           fundingRateMap.set(coin, rate)
-          console.log('[Hyperliquid] Funding rate for', coin, ':', rate)
         }
       }
     }
@@ -179,71 +156,42 @@ async function fetchAllFundingRates(): Promise<Map<string, number>> {
   }
 }
 
-/**
- * Fetches open positions from Hyperliquid API
- */
 async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpenPosition[]> {
   try {
     const userState = await fetchUserState(walletAddress)
     
-    console.log('[Hyperliquid] User state structure:', {
-      hasAssetPositions: !!userState.assetPositions,
-      assetPositionsType: typeof userState.assetPositions,
-      isArray: Array.isArray(userState.assetPositions),
-      topLevelKeys: Object.keys(userState),
-    })
-    
-    // Extract positions from user state
-    // Note: Structure may vary - adjust based on actual API response
     const positions: PerpetualsOpenPosition[] = []
-    
-    // Try different possible response structures
     let assetPositions: any[] = []
     
     if (userState.assetPositions && Array.isArray(userState.assetPositions)) {
       assetPositions = userState.assetPositions
-      console.log('[Hyperliquid] Found assetPositions array with', assetPositions.length, 'items')
     } else if (userState.positions && Array.isArray(userState.positions)) {
       assetPositions = userState.positions
-      console.log('[Hyperliquid] Found positions array with', assetPositions.length, 'items')
     } else if (userState.clearinghouseState?.assetPositions && Array.isArray(userState.clearinghouseState.assetPositions)) {
       assetPositions = userState.clearinghouseState.assetPositions
-      console.log('[Hyperliquid] Found clearinghouseState.assetPositions array with', assetPositions.length, 'items')
     } else if (userState.clearinghouseState?.userState?.assetPositions && Array.isArray(userState.clearinghouseState.userState.assetPositions)) {
       assetPositions = userState.clearinghouseState.userState.assetPositions
-      console.log('[Hyperliquid] Found clearinghouseState.userState.assetPositions array with', assetPositions.length, 'items')
-    } else {
-      console.warn('[Hyperliquid] No positions array found. Full response structure:', JSON.stringify(userState).substring(0, 2000))
     }
     
     if (assetPositions.length > 0) {
-      // Collect unique symbols for funding rate fetching
       const symbols = new Set<string>()
       
       for (const pos of assetPositions) {
         const position = pos.position || pos
-        console.log('[Hyperliquid] Processing position:', JSON.stringify(position).substring(0, 500))
         const size = parseFloat(position.szi || position.size || position.position?.szi || position.position?.size || '0')
         
-        // Filter out zero-size positions
         if (Math.abs(size) < 0.0001) {
-          console.log('[Hyperliquid] Skipping zero-size position')
           continue
         }
 
         const symbol = position.coin || position.symbol || position.position?.coin || position.position?.symbol || ''
         if (symbol) {
           symbols.add(symbol)
-          console.log('[Hyperliquid] Added symbol:', symbol)
-        } else {
-          console.warn('[Hyperliquid] Position has no symbol:', position)
         }
       }
 
-      // Fetch all funding rates at once (more efficient than per-symbol)
       const fundingRateMap = await fetchAllFundingRates()
 
-      // Process positions
       for (const pos of assetPositions) {
         const position = pos.position || pos
         const size = parseFloat(position.szi || position.size || position.position?.szi || position.position?.size || '0')
@@ -253,10 +201,7 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
         }
 
         const symbol = position.coin || position.symbol || position.position?.coin || position.position?.symbol || ''
-        const entryPx = parseFloat(position.entryPx || position.entryPrice || position.position?.entryPx || position.position?.entryPrice || '0')
         
-        // Extract leverage from position.leverage.value (per Hyperliquid API docs)
-        // Structure: { "leverage": { "value": 20, "type": "isolated", "rawUsd": "-95.059824" } }
         let leverage: number | null = null
         
         if (position.leverage) {
@@ -273,9 +218,6 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           }
         }
         
-        console.log('[Hyperliquid] Leverage for', symbol, ':', leverage, 'from position.leverage:', position.leverage)
-        
-        // Calculate margin and PnL - try multiple field names
         const margin = parseFloat(
           position.marginUsed || 
           position.margin || 
@@ -286,28 +228,14 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           '0'
         )
         
-        // PnL - try multiple field names
         const unrealizedPnl = parseFloat(
-          position.unrealizedPnl || 
           position.unrealizedPnl || 
           position.position?.unrealizedPnl ||
           position.pnl ||
           position.position?.pnl ||
-          position.unrealizedPnl ||
-          position.position?.unrealizedPnl ||
           '0'
         )
         
-        console.log('[Hyperliquid] Position parsed:', {
-          symbol,
-          size,
-          margin,
-          pnl: unrealizedPnl,
-          leverage,
-          entryPx,
-        })
-        
-        // Determine position side: positive size = LONG, negative = SHORT
         const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
         const fundingRate = fundingRateMap.get(symbol) ?? null
 
@@ -323,8 +251,6 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
         })
       }
     }
-    
-    console.log('[Hyperliquid] Total positions found:', positions.length)
 
     return positions
   } catch (error) {
@@ -333,41 +259,22 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
   }
 }
 
-/**
- * Fetches available margin from Hyperliquid API
- */
 async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAvailableMargin[]> {
   try {
     const userState = await fetchUserState(walletAddress)
     
-    console.log('[Hyperliquid] Fetching available margin, userState keys:', Object.keys(userState))
-    
     const margins: PerpetualsAvailableMargin[] = []
-    
-    // Extract available balance from user state - try multiple structures
     let availableBalance = 0
-    let asset = 'USDC'
     
-    // Try clearinghouseState.userState.marginSummary
     if (userState.clearinghouseState?.userState?.marginSummary) {
       const summary = userState.clearinghouseState.userState.marginSummary
       availableBalance = parseFloat(summary.accountValue || summary.availableBalance || summary.accountEquity || '0')
-      console.log('[Hyperliquid] Found marginSummary in clearinghouseState.userState:', availableBalance)
-    }
-    // Try clearinghouseState.marginSummary
-    else if (userState.clearinghouseState?.marginSummary) {
+    } else if (userState.clearinghouseState?.marginSummary) {
       const summary = userState.clearinghouseState.marginSummary
       availableBalance = parseFloat(summary.accountValue || summary.availableBalance || summary.accountEquity || '0')
-      console.log('[Hyperliquid] Found marginSummary in clearinghouseState:', availableBalance)
-    }
-    // Try marginSummary at top level
-    else if (userState.marginSummary) {
+    } else if (userState.marginSummary) {
       availableBalance = parseFloat(userState.marginSummary.accountValue || userState.marginSummary.availableBalance || userState.marginSummary.accountEquity || '0')
-      console.log('[Hyperliquid] Found marginSummary at top level:', availableBalance)
-    }
-    // Try balances array
-    else if (userState.balances && Array.isArray(userState.balances)) {
-      console.log('[Hyperliquid] Found balances array with', userState.balances.length, 'items')
+    } else if (userState.balances && Array.isArray(userState.balances)) {
       for (const balance of userState.balances) {
         const balanceAsset = balance.coin || balance.asset || 'USDC'
         const available = parseFloat(balance.available || balance.availableBalance || '0')
@@ -382,10 +289,7 @@ async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAv
         }
       }
       return margins
-    }
-    // Try userState.balances
-    else if (userState.userState?.balances && Array.isArray(userState.userState.balances)) {
-      console.log('[Hyperliquid] Found userState.balances array')
+    } else if (userState.userState?.balances && Array.isArray(userState.userState.balances)) {
       for (const balance of userState.userState.balances) {
         const balanceAsset = balance.coin || balance.asset || 'USDC'
         const available = parseFloat(balance.available || balance.availableBalance || '0')
@@ -411,7 +315,6 @@ async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAv
       })
     }
     
-    console.log('[Hyperliquid] Available margin found:', margins.length, 'items')
     return margins
   } catch (error) {
     console.error('[Hyperliquid] Error fetching available margin:', error)
@@ -419,36 +322,21 @@ async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAv
   }
 }
 
-/**
- * Fetches locked margin from Hyperliquid API
- */
 async function fetchLockedMargin(walletAddress: string): Promise<PerpetualsLockedMargin[]> {
   try {
     const userState = await fetchUserState(walletAddress)
     
-    console.log('[Hyperliquid] Fetching locked margin')
-    
     const lockedMargins: PerpetualsLockedMargin[] = []
-    
-    // Extract locked margin from user state - try multiple structures
     let marginUsed = 0
     
-    // Try clearinghouseState.userState.marginSummary
     if (userState.clearinghouseState?.userState?.marginSummary) {
       const summary = userState.clearinghouseState.userState.marginSummary
-      marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || summary.marginUsed || '0')
-      console.log('[Hyperliquid] Found locked margin in clearinghouseState.userState:', marginUsed)
-    }
-    // Try clearinghouseState.marginSummary
-    else if (userState.clearinghouseState?.marginSummary) {
+      marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || '0')
+    } else if (userState.clearinghouseState?.marginSummary) {
       const summary = userState.clearinghouseState.marginSummary
-      marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || summary.marginUsed || '0')
-      console.log('[Hyperliquid] Found locked margin in clearinghouseState:', marginUsed)
-    }
-    // Try marginSummary at top level
-    else if (userState.marginSummary) {
+      marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || '0')
+    } else if (userState.marginSummary) {
       marginUsed = parseFloat(userState.marginSummary.marginUsed || userState.marginSummary.totalMarginUsed || '0')
-      console.log('[Hyperliquid] Found locked margin at top level:', marginUsed)
     }
     
     if (marginUsed > 0) {
@@ -460,7 +348,6 @@ async function fetchLockedMargin(walletAddress: string): Promise<PerpetualsLocke
       })
     }
     
-    console.log('[Hyperliquid] Locked margin found:', lockedMargins.length, 'items')
     return lockedMargins
   } catch (error) {
     console.error('[Hyperliquid] Error fetching locked margin:', error)
@@ -468,9 +355,6 @@ async function fetchLockedMargin(walletAddress: string): Promise<PerpetualsLocke
   }
 }
 
-/**
- * Fetches all Perpetuals data from Hyperliquid API
- */
 async function fetchHyperliquidPerpetualsData(
   walletAddress: string
 ): Promise<PerpetualsData> {
@@ -481,22 +365,12 @@ async function fetchHyperliquidPerpetualsData(
     fetchLockedMargin(walletAddress),
   ])
 
-  const result = {
+  return {
     openPositions,
-    openOrders: [], // Hyperliquid may not have open orders endpoint or different structure
+    openOrders: [],
     availableMargin,
     lockedMargin,
   }
-  
-  console.log('[Hyperliquid] Returning PerpetualsData:', {
-    openPositionsCount: result.openPositions.length,
-    openOrdersCount: result.openOrders.length,
-    availableMarginCount: result.availableMargin.length,
-    lockedMarginCount: result.lockedMargin.length,
-    openPositions: result.openPositions.map(p => ({ id: p.id, ticker: p.ticker, platform: p.platform })),
-  })
-  
-  return result
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
