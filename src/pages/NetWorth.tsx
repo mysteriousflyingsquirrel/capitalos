@@ -293,17 +293,31 @@ function NetWorthCategorySection({
             const perpetualsData = perpetualsItem?.perpetualsData
             
             // Debug logging
-            if (items.length > 0) {
-              console.log('[NetWorth] Perpetuals category render:', {
-                itemsCount: items.length,
-                hasPerpetualsItem: !!perpetualsItem,
-                hasPerpetualsData: !!perpetualsData,
-                positionsCount: perpetualsData?.openPositions?.length || 0,
-                availableMarginCount: perpetualsData?.availableMargin?.length || 0,
-                lockedMarginCount: perpetualsData?.lockedMargin?.length || 0,
-                openPositions: perpetualsData?.openPositions,
-                availableMargin: perpetualsData?.availableMargin,
-                lockedMargin: perpetualsData?.lockedMargin,
+            console.log('[NetWorth] Perpetuals category render - START:', {
+              itemsCount: items.length,
+              items: items,
+              itemsCategories: items.map(i => i.category),
+              perpetualsItem: perpetualsItem,
+              hasPerpetualsItem: !!perpetualsItem,
+              perpetualsItemId: perpetualsItem?.id,
+              perpetualsItemCategory: perpetualsItem?.category,
+              perpetualsData: perpetualsData,
+              hasPerpetualsData: !!perpetualsData,
+              positionsCount: perpetualsData?.openPositions?.length || 0,
+              availableMarginCount: perpetualsData?.availableMargin?.length || 0,
+              lockedMarginCount: perpetualsData?.lockedMargin?.length || 0,
+            })
+            
+            if (perpetualsData) {
+              console.log('[NetWorth] Perpetuals data details:', {
+                openPositions: perpetualsData.openPositions,
+                availableMargin: perpetualsData.availableMargin,
+                lockedMargin: perpetualsData.lockedMargin,
+              })
+            } else {
+              console.warn('[NetWorth] No perpetualsData found!', {
+                items: items,
+                perpetualsItem: perpetualsItem,
               })
             }
             
