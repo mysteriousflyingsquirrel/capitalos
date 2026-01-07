@@ -69,11 +69,16 @@ export class NetWorthCalculationService {
         } else {
           const { openPositions, lockedMargin, availableMargin } = item.perpetualsData
           
+          // Ensure arrays exist and are actually arrays
+          const safeOpenPositions = Array.isArray(openPositions) ? openPositions : []
+          const safeLockedMargin = Array.isArray(lockedMargin) ? lockedMargin : []
+          const safeAvailableMargin = Array.isArray(availableMargin) ? availableMargin : []
+          
           // Sum all CHF balances directly
           let totalChf = 0
           
           // Open Positions: convert each balance to CHF and sum
-          openPositions.forEach(pos => {
+          safeOpenPositions.forEach(pos => {
             const balanceUsd = pos.margin + pos.pnl
             const balanceChf = usdToChfRate && usdToChfRate > 0 
               ? balanceUsd * usdToChfRate 
@@ -82,7 +87,7 @@ export class NetWorthCalculationService {
           })
           
           // Locked Margin: convert each balance to CHF and sum
-          lockedMargin.forEach(margin => {
+          safeLockedMargin.forEach(margin => {
             const balanceUsd = margin.margin
             const balanceChf = usdToChfRate && usdToChfRate > 0 
               ? balanceUsd * usdToChfRate 
@@ -91,7 +96,7 @@ export class NetWorthCalculationService {
           })
           
           // Available Margin: convert each balance to CHF and sum
-          availableMargin.forEach(margin => {
+          safeAvailableMargin.forEach(margin => {
             const balanceUsd = margin.margin
             const balanceChf = usdToChfRate && usdToChfRate > 0 
               ? balanceUsd * usdToChfRate 
