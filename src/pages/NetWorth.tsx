@@ -43,6 +43,8 @@ export interface PerpetualsOpenPosition {
   pnl: number // in quote currency (USD/USDT)
   platform: string
   fundingRate?: number | null // funding rate as decimal (e.g., 0.00002 for 0.002%)
+  leverage?: number | null // leverage (e.g., 1 for 1x)
+  positionSide?: 'LONG' | 'SHORT' | null // position direction
 }
 
 export interface PerpetualsLockedMargin {
@@ -337,13 +339,27 @@ function NetWorthCategorySection({
                           : convert(balanceUsd, 'USD')
                         const pnlSign = pos.pnl >= 0 ? '+' : ''
                         const pnlFormatted = formatNumber(Math.abs(pos.pnl), 'ch', { incognito: isIncognito })
-                        // Format funding rate: convert decimal to percentage (e.g., 0.00002 -> 0.0020%)
-                        const fundingRateDisplay = pos.fundingRate !== null && pos.fundingRate !== undefined
-                          ? (() => {
-                              const ratePercent = pos.fundingRate * 100
-                              const sign = ratePercent >= 0 ? '+' : ''
-                              return `${sign}${ratePercent.toFixed(5)}%`
-                            })()
+                        
+                        // Format second line: leverage, direction, and funding rate
+                        // Format: "1x Long / 0.00025%"
+                        const secondLineParts: string[] = []
+                        
+                        // Add leverage and direction if available
+                        if (pos.leverage !== null && pos.leverage !== undefined && pos.positionSide) {
+                          const leverageStr = `${pos.leverage}x`
+                          const directionStr = pos.positionSide === 'LONG' ? 'Long' : 'Short'
+                          secondLineParts.push(`${leverageStr} ${directionStr}`)
+                        }
+                        
+                        // Add funding rate if available
+                        if (pos.fundingRate !== null && pos.fundingRate !== undefined) {
+                          const ratePercent = pos.fundingRate * 100
+                          const sign = ratePercent >= 0 ? '+' : ''
+                          secondLineParts.push(`${sign}${ratePercent.toFixed(5)}%`)
+                        }
+                        
+                        const secondLineDisplay = secondLineParts.length > 0
+                          ? secondLineParts.join(' / ')
                           : null
 
                         return (
@@ -351,19 +367,22 @@ function NetWorthCategorySection({
                             <td className="py-2 pr-2">
                               <div className="text2 leading-tight">
                                 {pos.ticker}
-                                {fundingRateDisplay && (
+                                {secondLineDisplay && (
                                   <>
                                     <br />
                                     <span className="text-[0.9em]">
-                                      {fundingRateDisplay}
+                                      {secondLineDisplay}
                                     </span>
                                   </>
                                 )}
                               </div>
                             </td>
                             <td className="py-2 text-right px-2">
-                              <div className="text2 whitespace-nowrap">
-                                {formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })} <span className={pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}>({pnlSign}{pnlFormatted})</span>
+                              <div className="text2 leading-tight">
+                                <div>{formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })}</div>
+                                <div className={`text-[0.9em] ${pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {pnlSign}{pnlFormatted}
+                                </div>
                               </div>
                             </td>
                             <td className="py-2 text-right px-2 perp-table-balance-cell">

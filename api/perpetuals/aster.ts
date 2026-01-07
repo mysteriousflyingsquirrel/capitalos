@@ -35,6 +35,8 @@ interface PerpetualsOpenPosition {
   pnl: number // in USD/USDT
   platform: string
   fundingRate?: number | null // funding rate as decimal (e.g., 0.00002 for 0.002%)
+  leverage?: number | null // leverage (e.g., 1 for 1x)
+  positionSide?: 'LONG' | 'SHORT' | null // position direction
 }
 
 interface PerpetualsOpenOrder {
@@ -205,6 +207,26 @@ async function fetchOpenPositions(
       const margin = parseFloat(pos.isolatedMargin || pos.initialMargin || '0')
       const unrealizedPnl = parseFloat(pos.unRealizedProfit || '0')
       const fundingRate = fundingRateMap.get(symbol) ?? null
+      
+      // Extract leverage
+      const leverage = pos.leverage !== undefined && pos.leverage !== null
+        ? parseFloat(pos.leverage || '0')
+        : null
+      
+      // Determine position side: if positionAmt is positive = LONG, negative = SHORT
+      // Also check positionSide field if available
+      let positionSide: 'LONG' | 'SHORT' | null = null
+      if (pos.positionSide) {
+        // Use positionSide field if available (BOTH, LONG, SHORT)
+        const side = String(pos.positionSide).toUpperCase()
+        if (side === 'LONG' || side === 'SHORT') {
+          positionSide = side as 'LONG' | 'SHORT'
+        }
+      }
+      // Fallback: determine from positionAmt
+      if (!positionSide) {
+        positionSide = positionAmt > 0 ? 'LONG' : positionAmt < 0 ? 'SHORT' : null
+      }
 
       positions.push({
         id: `aster-pos-${symbol}-${pos.updateTime || Date.now()}`,
@@ -213,6 +235,8 @@ async function fetchOpenPositions(
         pnl: unrealizedPnl,
         platform: 'Aster',
         fundingRate,
+        leverage,
+        positionSide,
       })
     }
   }
