@@ -23,6 +23,19 @@ export async function fetchAsterPerpetualsData(uid: string): Promise<PerpetualsD
 
     const result = await response.json()
     
+    console.log('[AsterService] API response:', {
+      success: result.success,
+      hasData: !!result.data,
+      dataStructure: result.data ? {
+        openPositions: result.data.openPositions,
+        availableMargin: result.data.availableMargin,
+        lockedMargin: result.data.lockedMargin,
+        openPositionsCount: result.data.openPositions?.length || 0,
+        availableMarginCount: result.data.availableMargin?.length || 0,
+        lockedMarginCount: result.data.lockedMargin?.length || 0,
+      } : null,
+    })
+    
     if (result.success && result.data) {
       return result.data
     }

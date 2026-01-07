@@ -23,10 +23,25 @@ export async function fetchHyperliquidPerpetualsData(uid: string): Promise<Perpe
 
     const result = await response.json()
     
+    console.log('[HyperliquidService] API response:', {
+      success: result.success,
+      hasData: !!result.data,
+      dataStructure: result.data ? {
+        openPositions: result.data.openPositions,
+        availableMargin: result.data.availableMargin,
+        lockedMargin: result.data.lockedMargin,
+        openPositionsCount: result.data.openPositions?.length || 0,
+        availableMarginCount: result.data.availableMargin?.length || 0,
+        lockedMarginCount: result.data.lockedMargin?.length || 0,
+      } : null,
+    })
+    
     if (result.success && result.data) {
+      console.log('[HyperliquidService] Returning data:', result.data)
       return result.data
     }
 
+    console.log('[HyperliquidService] No data to return')
     return null
   } catch (error) {
     console.error('Error fetching Hyperliquid Perpetuals data:', error)

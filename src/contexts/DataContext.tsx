@@ -187,6 +187,19 @@ export function DataProvider({ children }: DataProviderProps) {
         hyperliquidAvailableMargin: hyperliquidData?.availableMargin?.length || 0,
       })
 
+      // Log the actual data structures
+      console.log('[DataContext] Aster data structure:', {
+        openPositions: asterData?.openPositions,
+        availableMargin: asterData?.availableMargin,
+        lockedMargin: asterData?.lockedMargin,
+      })
+      
+      console.log('[DataContext] Hyperliquid data structure:', {
+        openPositions: hyperliquidData?.openPositions,
+        availableMargin: hyperliquidData?.availableMargin,
+        lockedMargin: hyperliquidData?.lockedMargin,
+      })
+
       // Merge Aster and Hyperliquid data
       const mergedData = {
         openPositions: [
@@ -206,6 +219,15 @@ export function DataProvider({ children }: DataProviderProps) {
           ...(Array.isArray(hyperliquidData?.lockedMargin) ? hyperliquidData.lockedMargin : []),
         ],
       }
+
+      console.log('[DataContext] Merged data:', {
+        openPositions: mergedData.openPositions,
+        availableMargin: mergedData.availableMargin,
+        lockedMargin: mergedData.lockedMargin,
+        openPositionsCount: mergedData.openPositions.length,
+        availableMarginCount: mergedData.availableMargin.length,
+        lockedMarginCount: mergedData.lockedMargin.length,
+      })
 
       // Update items with merged data
       if (asterData || hyperliquidData) {
