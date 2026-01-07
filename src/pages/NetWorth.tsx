@@ -295,16 +295,18 @@ function NetWorthCategorySection({
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc(100% / 3) !important; }
-                      .perp-table-holdings-col { width: calc(100% / 3) !important; }
-                      .perp-table-balance-col { width: calc(100% / 3) !important; }
+                      .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
+                      .perp-table-holdings-col { width: calc((100% - 55px) * 1 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
+                      .perp-table-actions-col { width: 55px !important; }
                       .perp-table-balance-cell { padding-right: 0.25rem !important; }
                     }
                     @media (min-width: 768px) {
-                      .perp-table-item-col { width: calc(100% / 4) !important; }
-                      .perp-table-holdings-col { width: calc(100% / 4) !important; }
-                      .perp-table-balance-col { width: calc(100% / 4) !important; }
-                      .perp-table-platform-col { width: calc(100% / 4) !important; }
+                      .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
+                      .perp-table-holdings-col { width: calc((100% - 85px) * 1 / 8) !important; }
+                      .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
+                      .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
+                      .perp-table-actions-col { width: 85px !important; }
                     }
                   `}</style>
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -313,6 +315,7 @@ function NetWorthCategorySection({
                       <col className="perp-table-holdings-col" />
                       <col className="perp-table-balance-col" />
                       <col className="perp-table-platform-col hidden md:table-column" />
+                      <col className="perp-table-actions-col" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-border-subtle">
@@ -327,6 +330,9 @@ function NetWorthCategorySection({
                         </th>
                         <th className="text-right pb-2 hidden md:table-cell">
                           <Heading level={4}>Platform</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Actions</Heading>
                         </th>
                       </tr>
                     </thead>
@@ -397,6 +403,9 @@ function NetWorthCategorySection({
                                 </span>
                               </div>
                             </td>
+                            <td className="py-2">
+                              {/* Actions column - empty */}
+                            </td>
                           </tr>
                         )
                       })}
@@ -411,16 +420,18 @@ function NetWorthCategorySection({
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc(100% / 3) !important; }
-                      .perp-table-margin-col { width: calc(100% / 3) !important; }
-                      .perp-table-balance-col { width: calc(100% / 3) !important; }
+                      .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
+                      .perp-table-margin-col { width: calc((100% - 55px) * 1 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
+                      .perp-table-actions-col { width: 55px !important; }
                       .perp-table-balance-cell { padding-right: 0.25rem !important; }
                     }
                     @media (min-width: 768px) {
-                      .perp-table-item-col { width: calc(100% / 4) !important; }
-                      .perp-table-margin-col { width: calc(100% / 4) !important; }
-                      .perp-table-balance-col { width: calc(100% / 4) !important; }
-                      .perp-table-platform-col { width: calc(100% / 4) !important; }
+                      .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
+                      .perp-table-margin-col { width: calc((100% - 85px) * 1 / 8) !important; }
+                      .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
+                      .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
+                      .perp-table-actions-col { width: 85px !important; }
                     }
                   `}</style>
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -429,6 +440,7 @@ function NetWorthCategorySection({
                       <col className="perp-table-margin-col" />
                       <col className="perp-table-balance-col" />
                       <col className="perp-table-platform-col hidden md:table-column" />
+                      <col className="perp-table-actions-col" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-border-subtle">
@@ -443,6 +455,9 @@ function NetWorthCategorySection({
                         </th>
                         <th className="text-right pb-2 hidden md:table-cell">
                           <Heading level={4}>Platform</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Actions</Heading>
                         </th>
                       </tr>
                     </thead>
@@ -476,6 +491,9 @@ function NetWorthCategorySection({
                                 </span>
                               </div>
                             </td>
+                            <td className="py-2">
+                              {/* Actions column - empty */}
+                            </td>
                           </tr>
                         )
                       })}
@@ -490,16 +508,18 @@ function NetWorthCategorySection({
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc(100% / 3) !important; }
-                      .perp-table-margin-col { width: calc(100% / 3) !important; }
-                      .perp-table-balance-col { width: calc(100% / 3) !important; }
+                      .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
+                      .perp-table-margin-col { width: calc((100% - 55px) * 1 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
+                      .perp-table-actions-col { width: 55px !important; }
                       .perp-table-balance-cell { padding-right: 0.25rem !important; }
                     }
                     @media (min-width: 768px) {
-                      .perp-table-item-col { width: calc(100% / 4) !important; }
-                      .perp-table-margin-col { width: calc(100% / 4) !important; }
-                      .perp-table-balance-col { width: calc(100% / 4) !important; }
-                      .perp-table-platform-col { width: calc(100% / 4) !important; }
+                      .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
+                      .perp-table-margin-col { width: calc((100% - 85px) * 1 / 8) !important; }
+                      .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
+                      .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
+                      .perp-table-actions-col { width: 85px !important; }
                     }
                   `}</style>
                   <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -508,6 +528,7 @@ function NetWorthCategorySection({
                       <col className="perp-table-margin-col" />
                       <col className="perp-table-balance-col" />
                       <col className="perp-table-platform-col hidden md:table-column" />
+                      <col className="perp-table-actions-col" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-border-subtle">
@@ -522,6 +543,9 @@ function NetWorthCategorySection({
                         </th>
                         <th className="text-right pb-2 hidden md:table-cell">
                           <Heading level={4}>Platform</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Actions</Heading>
                         </th>
                       </tr>
                     </thead>
@@ -554,6 +578,9 @@ function NetWorthCategorySection({
                                   {margin.platform}
                                 </span>
                               </div>
+                            </td>
+                            <td className="py-2">
+                              {/* Actions column - empty */}
                             </td>
                           </tr>
                         )
