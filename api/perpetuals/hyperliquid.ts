@@ -94,8 +94,12 @@ async function fetchUserState(walletAddress: string): Promise<any> {
 
     const data = await response.json()
     console.log('[Hyperliquid] User state response keys:', Object.keys(data))
-    console.log('[Hyperliquid] User state response (first 1000 chars):', JSON.stringify(data).substring(0, 1000))
+    console.log('[Hyperliquid] User state response (first 2000 chars):', JSON.stringify(data).substring(0, 2000))
     
+    // Return the clearinghouseState if it exists, otherwise return the whole response
+    if (data.clearinghouseState) {
+      return data.clearinghouseState
+    }
     return data
   } catch (error) {
     console.error('[Hyperliquid] Error fetching user state:', error)
@@ -104,9 +108,12 @@ async function fetchUserState(walletAddress: string): Promise<any> {
 }
 
 /**
- * Fetches funding rate for a symbol from Hyperliquid API
+ * Fetches funding rates for all assets from Hyperliquid API
+ * Returns a map of coin -> funding rate
+ * According to Hyperliquid docs, metaAndAssetCtxs returns [meta, assetContexts]
+ * where assetContexts is an array that corresponds to universe by index
  */
-async function fetchFundingRate(symbol: string): Promise<number | null> {
+async function fetchAllFundingRates(): Promise<Map<string, number>> {
   try {
     const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
       method: 'POST',
@@ -119,24 +126,56 @@ async function fetchFundingRate(symbol: string): Promise<number | null> {
     })
 
     if (!response.ok) {
-      console.warn(`Failed to fetch funding rate for ${symbol}: ${response.status}`)
-      return null
+      console.warn(`Failed to fetch funding rates: ${response.status}`)
+      return new Map()
     }
 
     const data = await response.json()
     
-    // Find the asset context for this symbol
-    if (data.assetContexts && Array.isArray(data.assetContexts)) {
-      const asset = data.assetContexts.find((ctx: any) => ctx.name === symbol)
-      if (asset && asset.fundingRate !== undefined) {
-        return parseFloat(asset.fundingRate)
+    // According to Hyperliquid docs, response is [meta, assetContexts]
+    // meta contains universe array with asset names
+    // assetContexts contains funding rates in same order
+    let universe: any[] = []
+    let assetContexts: any[] = []
+    
+    if (Array.isArray(data) && data.length >= 2) {
+      const meta = data[0]
+      assetContexts = data[1] || []
+      
+      if (meta && meta.universe && Array.isArray(meta.universe)) {
+        universe = meta.universe
+      }
+    } else if (data.meta && data.meta.universe) {
+      universe = data.meta.universe
+      assetContexts = data.assetContexts || []
+    }
+    
+    console.log('[Hyperliquid] Funding rates - universe length:', universe.length, 'assetContexts length:', assetContexts.length)
+    
+    const fundingRateMap = new Map<string, number>()
+    
+    // Match by index: universe[i] corresponds to assetContexts[i]
+    for (let i = 0; i < Math.min(universe.length, assetContexts.length); i++) {
+      const asset = universe[i]
+      const context = assetContexts[i]
+      
+      if (asset && context) {
+        const coin = asset.name || asset.coin || asset.symbol
+        // Funding rate is in the 'funding' field (per Hyperliquid docs)
+        const funding = context.funding || context.fundingRate
+        
+        if (coin && funding !== undefined && funding !== null) {
+          const rate = parseFloat(funding)
+          fundingRateMap.set(coin, rate)
+          console.log('[Hyperliquid] Funding rate for', coin, ':', rate)
+        }
       }
     }
-
-    return null
+    
+    return fundingRateMap
   } catch (error) {
-    console.warn(`Error fetching funding rate for ${symbol}:`, error)
-    return null
+    console.warn('Error fetching funding rates:', error)
+    return new Map()
   }
 }
 
@@ -201,16 +240,8 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
         }
       }
 
-      // Fetch funding rates for all symbols in parallel
-      const fundingRatePromises = Array.from(symbols).map(async (symbol) => {
-        const rate = await fetchFundingRate(symbol)
-        return { symbol, rate }
-      })
-      const fundingRates = await Promise.all(fundingRatePromises)
-      const fundingRateMap = new Map<string, number | null>()
-      fundingRates.forEach(({ symbol, rate }) => {
-        fundingRateMap.set(symbol, rate)
-      })
+      // Fetch all funding rates at once (more efficient than per-symbol)
+      const fundingRateMap = await fetchAllFundingRates()
 
       // Process positions
       for (const pos of assetPositions) {
@@ -224,10 +255,25 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
         const symbol = position.coin || position.symbol || position.position?.coin || position.position?.symbol || ''
         const entryPx = parseFloat(position.entryPx || position.entryPrice || position.position?.entryPx || position.position?.entryPrice || '0')
         
-        // Try to get leverage from various possible fields
-        const leverage = position.leverage || position.position?.leverage 
-          ? parseFloat(position.leverage || position.position?.leverage || '0')
-          : null
+        // Extract leverage from position.leverage.value (per Hyperliquid API docs)
+        // Structure: { "leverage": { "value": 20, "type": "isolated", "rawUsd": "-95.059824" } }
+        let leverage: number | null = null
+        
+        if (position.leverage) {
+          if (typeof position.leverage === 'object' && position.leverage.value !== undefined) {
+            leverage = parseFloat(position.leverage.value)
+          } else if (typeof position.leverage === 'string' || typeof position.leverage === 'number') {
+            leverage = parseFloat(position.leverage)
+          }
+        } else if (pos.leverage) {
+          if (typeof pos.leverage === 'object' && pos.leverage.value !== undefined) {
+            leverage = parseFloat(pos.leverage.value)
+          } else if (typeof pos.leverage === 'string' || typeof pos.leverage === 'number') {
+            leverage = parseFloat(pos.leverage)
+          }
+        }
+        
+        console.log('[Hyperliquid] Leverage for', symbol, ':', leverage, 'from position.leverage:', position.leverage)
         
         // Calculate margin and PnL - try multiple field names
         const margin = parseFloat(
