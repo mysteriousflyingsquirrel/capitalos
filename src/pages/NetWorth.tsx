@@ -342,15 +342,23 @@ function NetWorthCategorySection({
                           ? (() => {
                               const ratePercent = pos.fundingRate * 100
                               const sign = ratePercent >= 0 ? '+' : ''
-                              return ` / ${sign}${ratePercent.toFixed(5)}%`
+                              return `${sign}${ratePercent.toFixed(5)}%`
                             })()
-                          : ''
+                          : null
 
                         return (
                           <tr key={pos.id} className="border-b border-border-subtle last:border-b-0">
                             <td className="py-2 pr-2">
-                              <div className="text2 truncate">
-                                {pos.ticker}{fundingRateDisplay}
+                              <div className="text2 leading-tight">
+                                {pos.ticker}
+                                {fundingRateDisplay && (
+                                  <>
+                                    <br />
+                                    <span className="text-sm text-text-secondary">
+                                      {fundingRateDisplay}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                             </td>
                             <td className="py-2 text-right px-2">
