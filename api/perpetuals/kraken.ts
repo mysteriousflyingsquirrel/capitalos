@@ -125,6 +125,12 @@ const KRAKEN_ENDPOINTS = {
     path: '/wallets',
     isPrivate: true,
   },
+  accounts: {
+    host: 'DERIV',
+    method: 'GET',
+    path: '/accounts',
+    isPrivate: true,
+  },
   checkV3ApiKey: {
     host: 'AUTH',
     method: 'GET',
@@ -298,14 +304,29 @@ async function krakenRequest(
 
 /**
  * Fetches open positions from Kraken Futures API
+ * Also fetches account data to get accurate PnL and margin information
  */
 async function fetchOpenPositions(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsOpenPosition[]> {
   try {
-    const data = await krakenRequest('openPositions', apiKey, apiSecret)
-    console.log('[Kraken API] Open positions raw data (full):', JSON.stringify(data, null, 2))
+    // Fetch positions and accounts in parallel
+    const [positionsData, accountsData] = await Promise.all([
+      krakenRequest('openPositions', apiKey, apiSecret).catch(err => {
+        console.error('[Kraken API] Error fetching positions:', err)
+        return null
+      }),
+      krakenRequest('accounts', apiKey, apiSecret).catch(err => {
+        console.warn('[Kraken API] Error fetching accounts (will use position data only):', err)
+        return null
+      }),
+    ])
+
+    console.log('[Kraken API] Open positions raw data (full):', JSON.stringify(positionsData, null, 2))
+    console.log('[Kraken API] Accounts raw data (full):', JSON.stringify(accountsData, null, 2))
+
+    const data = positionsData
     console.log('[Kraken API] Open positions data keys:', data ? Object.keys(data) : 'null')
     console.log('[Kraken API] Open positions data.result:', data?.result)
     console.log('[Kraken API] Open positions data.result type:', typeof data?.result)
@@ -355,12 +376,10 @@ async function fetchOpenPositions(
         const symbol = pos.symbol || pos.instrument || pos.ticker || pos.contract || ''
         const averagePrice = parseFloat(pos.averagePrice || pos.entryPrice || pos.price || pos.averageEntryPrice || '0')
         const markPrice = parseFloat(pos.markPrice || pos.lastPrice || pos.currentPrice || pos.marketPrice || '0')
-        const margin = parseFloat(pos.margin || pos.collateral || pos.initialMargin || pos.marginUsed || '0')
         
-        // Calculate unrealized PnL: (markPrice - averagePrice) * size
-        // For short positions (negative size), PnL is inverted
-        // Try to get PnL from API first, otherwise calculate it
-        const unrealizedPnl = parseFloat(
+        // Try to get margin and PnL from accounts data first
+        let margin = parseFloat(pos.margin || pos.collateral || pos.initialMargin || pos.marginUsed || '0')
+        let unrealizedPnl = parseFloat(
           pos.unrealizedPnl || 
           pos.unrealizedPnL || 
           pos.pnl || 
@@ -368,6 +387,41 @@ async function fetchOpenPositions(
           pos.unrealizedProfit || 
           (size !== 0 && markPrice > 0 && averagePrice > 0 ? String((markPrice - averagePrice) * size) : '0')
         )
+
+        // If accounts data is available, try to find matching account for this position
+        if (accountsData && accountsData.result) {
+          const accounts = Array.isArray(accountsData.result) ? accountsData.result : [accountsData.result]
+          
+          // Look for account matching this position's symbol
+          const matchingAccount = accounts.find((acc: any) => {
+            const accSymbol = acc.type || acc.instrument || acc.symbol || ''
+            return accSymbol === symbol || accSymbol.toLowerCase() === symbol.toLowerCase()
+          })
+
+          if (matchingAccount) {
+            console.log('[Kraken API] Found matching account for position:', { symbol, account: matchingAccount })
+            
+            // Use account margin if available
+            if (matchingAccount.marginBalance !== undefined || matchingAccount.margin !== undefined) {
+              margin = parseFloat(matchingAccount.marginBalance || matchingAccount.margin || '0')
+              console.log('[Kraken API] Using margin from account:', margin)
+            }
+            
+            // Use account PnL if available
+            if (matchingAccount.unrealizedPnl !== undefined || matchingAccount.pnl !== undefined || matchingAccount.unrealizedPnL !== undefined) {
+              unrealizedPnl = parseFloat(matchingAccount.unrealizedPnl || matchingAccount.pnl || matchingAccount.unrealizedPnL || '0')
+              console.log('[Kraken API] Using PnL from account:', unrealizedPnl)
+            }
+          } else {
+            // If no matching account found, try to use aggregate account data
+            const aggregateAccount = accounts.find((acc: any) => !acc.type && !acc.instrument && !acc.symbol)
+            if (aggregateAccount) {
+              console.log('[Kraken API] Using aggregate account data:', aggregateAccount)
+              // For aggregate, we might need to calculate per-position values
+              // For now, use position-specific data if available
+            }
+          }
+        }
         
         // Determine position side
         const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
