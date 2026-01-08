@@ -596,46 +596,30 @@ async function fetchLockedMargin(
 
 /**
  * Fetches all Perpetuals data from Kraken Futures API
+ * Currently only fetches open positions
  */
 async function fetchKrakenPerpetualsData(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsData> {
-  console.log('[Kraken API] fetchKrakenPerpetualsData called, fetching all data in parallel...')
+  console.log('[Kraken API] fetchKrakenPerpetualsData called, fetching open positions only...')
   
   try {
-    // Fetch positions, orders, and margin in parallel
-    const [openPositions, openOrders, availableMargin, lockedMargin] = await Promise.all([
-      fetchOpenPositions(apiKey, apiSecret).catch(err => {
-        console.error('[Kraken API] Error fetching open positions:', err)
-        return []
-      }),
-      fetchOpenOrders(apiKey, apiSecret).catch(err => {
-        console.error('[Kraken API] Error fetching open orders:', err)
-        return []
-      }),
-      fetchAvailableMargin(apiKey, apiSecret).catch(err => {
-        console.error('[Kraken API] Error fetching available margin:', err)
-        return []
-      }),
-      fetchLockedMargin(apiKey, apiSecret).catch(err => {
-        console.error('[Kraken API] Error fetching locked margin:', err)
-        return []
-      }),
-    ])
+    // Only fetch open positions
+    const openPositions = await fetchOpenPositions(apiKey, apiSecret).catch(err => {
+      console.error('[Kraken API] Error fetching open positions:', err)
+      return []
+    })
 
-    console.log('[Kraken API] All data fetched:', {
+    console.log('[Kraken API] Data fetched:', {
       positionsCount: openPositions.length,
-      ordersCount: openOrders.length,
-      availableMarginCount: availableMargin.length,
-      lockedMarginCount: lockedMargin.length,
     })
 
     const result = {
       openPositions,
-      openOrders,
-      availableMargin,
-      lockedMargin,
+      openOrders: [], // Not fetching orders
+      availableMargin: [], // Not fetching available margin
+      lockedMargin: [], // Not fetching locked margin
     }
     
     console.log('[Kraken API] Returning perpetuals data')
