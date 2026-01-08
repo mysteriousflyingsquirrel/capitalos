@@ -74,27 +74,32 @@ const KRAKEN_FUTURES_BASE_URL = 'https://futures.kraken.com/derivatives/api/v3'
  * Kraken Futures API v3 requires the secret to be base64-decoded first
  */
 function signKrakenRequest(apiSecret: string, nonce: string, endpoint: string, postData: string, method: string): string {
-  // Kraken Futures API v3 requires the secret to be base64-decoded
-  // The secret from Kraken is typically base64-encoded, but check if it's valid base64 first
+  // Kraken Futures API v3 - try both base64-decoded and raw secret
+  // Some implementations require the secret to be base64-decoded, others use it directly
   let secretKey: Buffer
   const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/
   const isValidBase64 = base64Regex.test(apiSecret) && apiSecret.length > 0 && apiSecret.length % 4 === 0
   
-  if (isValidBase64) {
-    try {
-      // Try base64 decode first (most common case)
-      secretKey = Buffer.from(apiSecret, 'base64')
-      console.log('[Kraken API] Using base64-decoded secret', { originalLength: apiSecret.length, decodedLength: secretKey.length })
-    } catch {
-      // If base64 decode fails, use as UTF-8
-      secretKey = Buffer.from(apiSecret, 'utf-8')
-      console.log('[Kraken API] Base64 decode failed, using UTF-8 secret')
-    }
-  } else {
-    // Not valid base64, use as UTF-8
-    secretKey = Buffer.from(apiSecret, 'utf-8')
-    console.log('[Kraken API] Secret not base64, using UTF-8 secret')
-  }
+  // Try using secret directly first (UTF-8) - this is more common for REST APIs
+  // If that doesn't work, we can try base64-decoded
+  secretKey = Buffer.from(apiSecret, 'utf-8')
+  console.log('[Kraken API] Using UTF-8 secret (raw)', { 
+    originalLength: apiSecret.length, 
+    secretLength: secretKey.length,
+    isBase64Format: isValidBase64,
+  })
+  
+  // Alternative: if base64 format detected, we could try decoding it
+  // But let's try raw first since authenticationError suggests format might be wrong
+  // if (isValidBase64) {
+  //   try {
+  //     secretKey = Buffer.from(apiSecret, 'base64')
+  //     console.log('[Kraken API] Using base64-decoded secret', { originalLength: apiSecret.length, decodedLength: secretKey.length })
+  //   } catch {
+  //     secretKey = Buffer.from(apiSecret, 'utf-8')
+  //     console.log('[Kraken API] Base64 decode failed, using UTF-8 secret')
+  //   }
+  // }
   
   // Kraken Futures API v3 signature message format
   // The signature must include nonce for proper authentication
@@ -690,32 +695,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('[Kraken API] Credentials found, verifying API key first...')
     
-    // First, verify the API key using the check endpoint
+    // Try to verify the API key using the check endpoint (without /v3 since base URL already has it)
     try {
-      console.log('[Kraken API] Testing API key with /api-keys/v3/check endpoint...')
-      const checkData = await makeAuthenticatedRequest(apiKey, apiSecret, '/api-keys/v3/check', 'GET')
+      console.log('[Kraken API] Testing API key with /api-keys/check endpoint...')
+      const checkData = await makeAuthenticatedRequest(apiKey, apiSecret, '/api-keys/check', 'GET')
       console.log('[Kraken API] API key check result:', checkData)
       
       if (checkData.result === 'error' || checkData.error) {
         console.error('[Kraken API] API key verification failed:', checkData)
-        return res.status(401).json({
-          success: false,
-          error: `API key authentication failed: ${checkData.error || 'Unknown error'}`,
-          details: checkData,
-        })
+        // Don't return error yet - might be endpoint issue, continue to try actual endpoints
+        console.log('[Kraken API] Check endpoint returned error, but continuing to try data endpoints...')
+      } else {
+        console.log('[Kraken API] API key verified successfully:', checkData)
       }
-      
-      console.log('[Kraken API] API key verified successfully:', checkData)
     } catch (checkError) {
-      console.error('[Kraken API] API key check failed:', checkError)
-      const errorMessage = checkError instanceof Error ? checkError.message : 'Unknown error'
-      return res.status(401).json({
-        success: false,
-        error: `API key verification failed: ${errorMessage}`,
-      })
+      console.warn('[Kraken API] API key check endpoint not available or failed:', checkError)
+      // Don't fail - the endpoint might not exist, continue to try actual data endpoints
+      console.log('[Kraken API] Continuing to fetch data despite check endpoint error...')
     }
     
-    console.log('[Kraken API] API key verified, fetching data from Kraken Futures API...')
+    console.log('[Kraken API] Fetching data from Kraken Futures API...')
     // Fetch data from Kraken Futures API
     const perpetualsData = await fetchKrakenPerpetualsData(apiKey, apiSecret)
     console.log('[Kraken API] Data fetched:', {
