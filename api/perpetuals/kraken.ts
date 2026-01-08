@@ -67,44 +67,96 @@ interface PerpetualsData {
   lockedMargin: PerpetualsLockedMargin[]
 }
 
-const KRAKEN_FUTURES_BASE_URL = 'https://futures.kraken.com/derivatives/api/v3'
+// Base URLs for Kraken Futures API
+const KRAKEN_FUTURES_DERIV_BASE = 'https://futures.kraken.com/derivatives/api/v3'
+const KRAKEN_FUTURES_AUTH_BASE = 'https://futures.kraken.com/api/auth/v1'
+
+// Environment configuration
+const KRAKEN_FUTURES_ENV = process.env.KRAKEN_FUTURES_ENV ?? 'LIVE' // LIVE | DEMO
+
+// Type definitions
+type KrakenHost = 'DERIV' | 'AUTH'
+type KrakenMethod = 'GET' | 'POST'
+
+type KrakenEndpoint = {
+  host: KrakenHost
+  method: KrakenMethod
+  path: string // path AFTER the base
+  isPrivate: boolean // requires APIKey+Authent signature
+  demoOnly?: boolean // only available in DEMO environment
+}
+
+// Endpoint registry - single source of truth
+const KRAKEN_ENDPOINTS = {
+  openPositions: {
+    host: 'DERIV',
+    method: 'GET',
+    path: '/openpositions',
+    isPrivate: true,
+  },
+  openOrders: {
+    host: 'DERIV',
+    method: 'GET',
+    path: '/openorders',
+    isPrivate: true,
+  },
+  tickerAll: {
+    host: 'DERIV',
+    method: 'GET',
+    path: '/tickers',
+    isPrivate: false,
+  },
+  tickerBySymbol: {
+    host: 'DERIV',
+    method: 'GET',
+    path: '/tickers/:symbol',
+    isPrivate: false,
+  },
+  portfolioMarginParams: {
+    host: 'DERIV',
+    method: 'GET',
+    path: '/portfolio-margining/parameters',
+    isPrivate: true,
+    demoOnly: true, // DEMO-only endpoint
+  },
+  wallets: {
+    host: 'DERIV',
+    method: 'GET',
+    path: '/wallets',
+    isPrivate: true,
+  },
+  checkV3ApiKey: {
+    host: 'AUTH',
+    method: 'GET',
+    path: '/api-keys/v3/check',
+    isPrivate: true,
+  },
+} satisfies Record<string, KrakenEndpoint>
 
 /**
  * Signs a request for Kraken Futures API using the official v3 authentication format
  * Official format: HMAC-SHA512 of SHA256(postData + nonce + endpointPath)
  * Reference: https://docs.kraken.com/api/docs/guides/futures-rest/#authentication
+ * 
+ * @param apiSecret - Base64-encoded API secret
+ * @param nonce - Nonce string (timestamp)
+ * @param endpointPath - FULL endpoint path including base prefix (e.g., /derivatives/api/v3/openpositions or /api/auth/v1/api-keys/v3/check)
+ * @param postData - POST body data (empty string for GET requests)
  */
-function signKrakenRequest(apiSecret: string, nonce: string, endpoint: string, postData: string, method: string): string {
+function signKrakenRequest(apiSecret: string, nonce: string, endpointPath: string, postData: string): string {
   // Step 1: Base64-decode the API secret
   let secretKey: Buffer
   try {
     secretKey = Buffer.from(apiSecret, 'base64')
-    console.log('[Kraken API] Secret base64-decoded', { originalLength: apiSecret.length, decodedLength: secretKey.length })
   } catch {
     throw new Error('Failed to base64-decode API secret. Ensure the secret is in base64 format.')
   }
   
   // Step 2: Construct the string to hash
   // Format: postData + nonce + endpointPath
-  // endpointPath should be the full path relative to base domain, e.g., /derivatives/api/v3/openpositions
-  // Since our endpoints are like /openpositions, we need to construct the full path
-  const endpointPath = `/derivatives/api/v3${endpoint}`
-  
-  // postData for signature: According to official docs, for GET requests or when no body, use empty string
-  // For POST with JSON body, typically still use empty string (the body is sent separately, nonce is in signature)
-  // If you need to include body data in signature, it should be URL-encoded, not JSON
-  const postDataForHash = '' // Use empty string - body data doesn't go into signature for JSON POST requests
-  
+  // postData is empty string for GET requests or when no body
+  const postDataForHash = postData || ''
   const stringToHash = postDataForHash + nonce + endpointPath
-  
-  console.log('[Kraken API] Signature calculation:', {
-    method,
-    postData: postData || '(empty)',
-    nonce,
-    endpointPath,
-    stringToHashLength: stringToHash.length,
-    stringToHashPreview: stringToHash.substring(0, 200),
-  })
   
   // Step 3: SHA-256 hash of the concatenated string
   const sha256Hash = crypto.createHash('sha256').update(stringToHash).digest()
@@ -112,89 +164,108 @@ function signKrakenRequest(apiSecret: string, nonce: string, endpoint: string, p
   // Step 4: HMAC-SHA512 using the base64-decoded secret and the SHA256 hash
   const hmac = crypto.createHmac('sha512', secretKey).update(sha256Hash).digest('base64')
   
-  console.log('[Kraken API] Signature created', {
-    secretLength: secretKey.length,
-    sha256HashLength: sha256Hash.length,
-    signatureLength: hmac.length,
-  })
-  
   return hmac
 }
 
 /**
- * Makes an authenticated request to Kraken Futures API
+ * Single request builder for all Kraken Futures API endpoints
+ * Uses the endpoint registry for configuration
  */
-async function makeAuthenticatedRequest(
+async function krakenRequest(
+  key: keyof typeof KRAKEN_ENDPOINTS,
   apiKey: string,
   apiSecret: string,
-  endpoint: string,
-  method: 'GET' | 'POST' = 'GET',
-  postData: string = ''
-): Promise<any> {
-  console.log('[Kraken API] makeAuthenticatedRequest called', { endpoint, method, hasPostData: !!postData })
-  
-  // Kraken Futures API v3 uses nonce in milliseconds as a string
-  const nonce = Date.now().toString()
-  
-  // For signature, postData should be empty string for GET requests or when no body
-  // For POST with JSON, we'll use the JSON string as-is (not URL-encoded)
-  const postDataForSignature = (method === 'GET' || !postData) ? '' : postData
-  
-  // Create signature with the correct postData format
-  const signature = signKrakenRequest(apiSecret, nonce, endpoint, postDataForSignature, method)
-  console.log('[Kraken API] Request signed', { nonce, signatureLength: signature.length })
-
-  const url = `${KRAKEN_FUTURES_BASE_URL}${endpoint}`
-  console.log('[Kraken API] Full request URL:', url)
-  
-  // Kraken Futures API v3 headers - try different variations
-  const headers: Record<string, string> = {
-    'APIKey': apiKey,
-    'Nonce': nonce,
-    'Authent': signature,
+  opts?: {
+    symbol?: string
+    query?: Record<string, string | number | boolean>
+    body?: any
   }
-  
+): Promise<any> {
+  const endpoint = KRAKEN_ENDPOINTS[key]
+  if (!endpoint) {
+    throw new Error(`Unknown endpoint key: ${key}`)
+  }
+
+  // Check demo-only guardrail
+  if (endpoint.demoOnly && KRAKEN_FUTURES_ENV !== 'DEMO') {
+    throw new Error(`Endpoint ${key} is only available in Kraken Futures DEMO environment. Current environment: ${KRAKEN_FUTURES_ENV}`)
+  }
+
+  // Choose base URL based on host type
+  const baseUrl = endpoint.host === 'DERIV' ? KRAKEN_FUTURES_DERIV_BASE : KRAKEN_FUTURES_AUTH_BASE
+
+  // Build path - replace :symbol placeholder if needed
+  let path = endpoint.path
+  if (opts?.symbol && path.includes(':symbol')) {
+    path = path.replace(':symbol', opts.symbol)
+  }
+
+  // Build full endpoint path for signature (includes base prefix)
+  // For DERIV: /derivatives/api/v3 + path
+  // For AUTH: /api/auth/v1 + path
+  const endpointPath = endpoint.host === 'DERIV' 
+    ? `/derivatives/api/v3${path}`
+    : `/api/auth/v1${path}`
+
+  // Build full URL with query params for GET
+  let url = `${baseUrl}${path}`
+  if (endpoint.method === 'GET' && opts?.query) {
+    const queryString = new URLSearchParams(
+      Object.entries(opts.query).map(([k, v]) => [k, String(v)])
+    ).toString()
+    if (queryString) {
+      url += `?${queryString}`
+    }
+  }
+
+  // Prepare postData for signature and body
+  const postData = endpoint.method === 'POST' && opts?.body 
+    ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body))
+    : ''
+
+  // Generate nonce
+  const nonce = Date.now().toString()
+
+  // Build headers
+  const headers: Record<string, string> = {}
+
+  // Add authentication headers if private endpoint
+  if (endpoint.isPrivate) {
+    const signature = signKrakenRequest(apiSecret, nonce, endpointPath, postData)
+    headers['APIKey'] = apiKey
+    headers['Nonce'] = nonce
+    headers['Authent'] = signature
+  }
+
   // Add Content-Type for POST requests
-  // For GET requests, don't add Content-Type header
-  if (method === 'POST') {
+  if (endpoint.method === 'POST') {
     headers['Content-Type'] = 'application/json'
   }
-  
-  console.log('[Kraken API] Request headers:', { 
-    APIKey: apiKey ? `${apiKey.substring(0, 4)}...` : 'missing',
-    Nonce: nonce,
-    Authent: signature ? `${signature.substring(0, 10)}...` : 'missing',
-    ContentType: headers['Content-Type'] || 'not set',
-  })
+
+  // Logging - immediately reveals routing issues
+  console.log(`[Kraken] ${endpoint.method} ${url}`)
+  console.log(`[Kraken] signature endpointPath="${endpointPath}" isPrivate=${endpoint.isPrivate} host=${endpoint.host}`)
+  if (endpoint.isPrivate) {
+    console.log(`[Kraken] auth headers: APIKey=${apiKey ? `${apiKey.substring(0, 4)}...` : 'missing'}, Nonce=${nonce}, Authent=${headers['Authent'] ? `${headers['Authent'].substring(0, 10)}...` : 'missing'}`)
+  }
 
   try {
-    console.log('[Kraken API] Sending request...')
     const response = await fetch(url, {
-      method,
+      method: endpoint.method,
       headers,
-      body: method === 'POST' && postData ? postData : undefined,
-    })
-    
-    console.log('[Kraken API] Response received', { 
-      status: response.status, 
-      statusText: response.statusText,
-      ok: response.ok,
+      body: endpoint.method === 'POST' && postData ? postData : undefined,
     })
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('[Kraken API] Response error:', { status: response.status, errorText })
+      console.error(`[Kraken] ${endpoint.method} ${url} failed:`, { status: response.status, errorText })
       throw new Error(`Kraken Futures API error (${response.status}): ${errorText}`)
     }
 
     const jsonData = await response.json()
-    console.log('[Kraken API] Response JSON:', JSON.stringify(jsonData).substring(0, 500))
     return jsonData
   } catch (error) {
-    console.error('[Kraken API] Request failed:', error)
-    if (error instanceof Error) {
-      console.error('[Kraken API] Error details:', { message: error.message, stack: error.stack })
-    }
+    console.error(`[Kraken] Request failed for ${key}:`, error)
     throw error
   }
 }
@@ -206,17 +277,8 @@ async function fetchOpenPositions(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsOpenPosition[]> {
-  console.log('[Kraken API] fetchOpenPositions called')
   try {
-    // Try POST first (Kraken Futures v3 typically uses POST for authenticated endpoints)
-    let data
-    try {
-      console.log('[Kraken API] Trying POST request for /openpositions')
-      data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openpositions', 'POST', '{}')
-    } catch (postError) {
-      console.log('[Kraken API] POST failed, trying GET:', postError)
-      data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openpositions', 'GET')
-    }
+    const data = await krakenRequest('openPositions', apiKey, apiSecret)
     console.log('[Kraken API] Open positions raw data (full):', JSON.stringify(data, null, 2))
     console.log('[Kraken API] Open positions data keys:', data ? Object.keys(data) : 'null')
     console.log('[Kraken API] Open positions data.result:', data?.result)
@@ -323,17 +385,8 @@ async function fetchOpenOrders(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsOpenOrder[]> {
-  console.log('[Kraken API] fetchOpenOrders called')
   try {
-    // Try POST first (Kraken Futures v3 typically uses POST for authenticated endpoints)
-    let data
-    try {
-      console.log('[Kraken API] Trying POST request for /openorders')
-      data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openorders', 'POST', '{}')
-    } catch (postError) {
-      console.log('[Kraken API] POST failed, trying GET:', postError)
-      data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openorders', 'GET')
-    }
+    const data = await krakenRequest('openOrders', apiKey, apiSecret)
     console.log('[Kraken API] Open orders raw data (full):', JSON.stringify(data, null, 2))
     console.log('[Kraken API] Open orders data keys:', data ? Object.keys(data) : 'null')
 
@@ -405,35 +458,22 @@ async function fetchAvailableMargin(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsAvailableMargin[]> {
-  console.log('[Kraken API] fetchAvailableMargin called')
   try {
     // Try to get account information from portfolio margin parameters
-    console.log('[Kraken API] Fetching portfolio margin parameters...')
-    let portfolioData
+    // Note: This endpoint is DEMO-only, will throw error if KRAKEN_FUTURES_ENV !== 'DEMO'
+    let portfolioData: any = null
     try {
-      console.log('[Kraken API] Trying POST request for /portfolio-margining/parameters')
-      portfolioData = await makeAuthenticatedRequest(
-        apiKey,
-        apiSecret,
-        '/portfolio-margining/parameters',
-        'POST',
-        '{}'
-      )
-    } catch (postError) {
-      console.log('[Kraken API] POST failed, trying GET:', postError)
-      portfolioData = await makeAuthenticatedRequest(
-        apiKey,
-        apiSecret,
-        '/portfolio-margining/parameters',
-        'GET'
-      )
+      portfolioData = await krakenRequest('portfolioMarginParams', apiKey, apiSecret)
+      console.log('[Kraken API] Portfolio data:', JSON.stringify(portfolioData).substring(0, 1000))
+    } catch (portfolioError) {
+      console.warn('[Kraken API] Portfolio margin params failed (may be DEMO-only):', portfolioError)
+      // Fall through to try wallets endpoint
     }
-    console.log('[Kraken API] Portfolio data:', JSON.stringify(portfolioData).substring(0, 1000))
 
     const margins: PerpetualsAvailableMargin[] = []
 
     // Try to extract available balance from portfolio data
-    if (portfolioData.result) {
+    if (portfolioData && portfolioData.result) {
       console.log('[Kraken API] Processing portfolio data result')
       const accountValue = parseFloat(portfolioData.result.accountValue || portfolioData.result.equity || '0')
       const marginUsed = parseFloat(portfolioData.result.marginUsed || portfolioData.result.margin || '0')
@@ -458,14 +498,7 @@ async function fetchAvailableMargin(
     if (margins.length === 0) {
       console.log('[Kraken API] No margins from portfolio, trying wallets endpoint...')
       try {
-        let walletsData
-        try {
-          console.log('[Kraken API] Trying POST request for /wallets')
-          walletsData = await makeAuthenticatedRequest(apiKey, apiSecret, '/wallets', 'POST', '{}')
-        } catch (postError) {
-          console.log('[Kraken API] POST failed, trying GET:', postError)
-          walletsData = await makeAuthenticatedRequest(apiKey, apiSecret, '/wallets', 'GET')
-        }
+        const walletsData = await krakenRequest('wallets', apiKey, apiSecret)
         console.log('[Kraken API] Wallets data (full):', JSON.stringify(walletsData, null, 2))
         
         if (walletsData.result && Array.isArray(walletsData.result)) {
@@ -515,29 +548,17 @@ async function fetchLockedMargin(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsLockedMargin[]> {
-  console.log('[Kraken API] fetchLockedMargin called')
   try {
-    console.log('[Kraken API] Fetching portfolio margin parameters for locked margin...')
+    // Note: This endpoint is DEMO-only, will throw error if KRAKEN_FUTURES_ENV !== 'DEMO'
     let portfolioData
     try {
-      console.log('[Kraken API] Trying POST request for /portfolio-margining/parameters')
-      portfolioData = await makeAuthenticatedRequest(
-        apiKey,
-        apiSecret,
-        '/portfolio-margining/parameters',
-        'POST',
-        '{}'
-      )
-    } catch (postError) {
-      console.log('[Kraken API] POST failed, trying GET:', postError)
-      portfolioData = await makeAuthenticatedRequest(
-        apiKey,
-        apiSecret,
-        '/portfolio-margining/parameters',
-        'GET'
-      )
+      portfolioData = await krakenRequest('portfolioMarginParams', apiKey, apiSecret)
+      console.log('[Kraken API] Portfolio data for locked margin:', JSON.stringify(portfolioData).substring(0, 1000))
+    } catch (error) {
+      console.warn('[Kraken API] Portfolio margin params failed (may be DEMO-only):', error)
+      // Return empty array if endpoint not available
+      return []
     }
-    console.log('[Kraken API] Portfolio data for locked margin:', JSON.stringify(portfolioData).substring(0, 1000))
 
     const lockedMargins: PerpetualsLockedMargin[] = []
 
@@ -680,28 +701,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    console.log('[Kraken API] Credentials found, verifying API key first...')
+    console.log('[Kraken API] Credentials found, fetching data from Kraken Futures API...')
     
-    // Try to verify the API key using the check endpoint (without /v3 since base URL already has it)
+    // Optionally verify API key first (will use AUTH base URL)
     try {
-      console.log('[Kraken API] Testing API key with /api-keys/check endpoint...')
-      const checkData = await makeAuthenticatedRequest(apiKey, apiSecret, '/api-keys/check', 'GET')
-      console.log('[Kraken API] API key check result:', checkData)
-      
-      if (checkData.result === 'error' || checkData.error) {
-        console.error('[Kraken API] API key verification failed:', checkData)
-        // Don't return error yet - might be endpoint issue, continue to try actual endpoints
-        console.log('[Kraken API] Check endpoint returned error, but continuing to try data endpoints...')
-      } else {
-        console.log('[Kraken API] API key verified successfully:', checkData)
-      }
+      const checkData = await krakenRequest('checkV3ApiKey', apiKey, apiSecret)
+      console.log('[Kraken API] API key verified successfully:', checkData)
     } catch (checkError) {
-      console.warn('[Kraken API] API key check endpoint not available or failed:', checkError)
-      // Don't fail - the endpoint might not exist, continue to try actual data endpoints
-      console.log('[Kraken API] Continuing to fetch data despite check endpoint error...')
+      console.warn('[Kraken API] API key check failed (continuing anyway):', checkError)
     }
-    
-    console.log('[Kraken API] Fetching data from Kraken Futures API...')
     // Fetch data from Kraken Futures API
     const perpetualsData = await fetchKrakenPerpetualsData(apiKey, apiSecret)
     console.log('[Kraken API] Data fetched:', {
