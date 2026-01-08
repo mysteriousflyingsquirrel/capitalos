@@ -13,6 +13,7 @@ import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
+import { fetchKrakenPerpetualsData } from '../services/krakenService'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
 import type { InflowItem, OutflowItem } from '../pages/Cashflow'
@@ -168,12 +169,13 @@ export function DataProvider({ children }: DataProviderProps) {
     }
 
     try {
-      console.log('[DataContext] Fetching Aster and Hyperliquid data...')
+      console.log('[DataContext] Fetching Aster, Hyperliquid, and Kraken data...')
       
-      // Fetch both Aster and Hyperliquid data in parallel
-      const [asterData, hyperliquidData] = await Promise.all([
+      // Fetch Aster, Hyperliquid, and Kraken data in parallel
+      const [asterData, hyperliquidData, krakenData] = await Promise.all([
         fetchAsterPerpetualsData(uid),
         fetchHyperliquidPerpetualsData(uid),
+        fetchKrakenPerpetualsData(uid),
       ])
 
       console.log('[DataContext] Fetch results:', {
@@ -185,6 +187,10 @@ export function DataProvider({ children }: DataProviderProps) {
         hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
         hyperliquidLockedMargin: hyperliquidData?.lockedMargin?.length || 0,
         hyperliquidAvailableMargin: hyperliquidData?.availableMargin?.length || 0,
+        krakenData: !!krakenData,
+        krakenPositions: krakenData?.openPositions?.length || 0,
+        krakenLockedMargin: krakenData?.lockedMargin?.length || 0,
+        krakenAvailableMargin: krakenData?.availableMargin?.length || 0,
       })
 
       // Log the actual data structures
@@ -200,29 +206,35 @@ export function DataProvider({ children }: DataProviderProps) {
         lockedMargin: hyperliquidData?.lockedMargin,
       })
 
-      // Merge Aster and Hyperliquid data
+      // Merge Aster, Hyperliquid, and Kraken data
       // Create defensive copies to prevent mutation
       const asterPositions = Array.isArray(asterData?.openPositions) ? [...asterData.openPositions] : []
       const hyperliquidPositions = Array.isArray(hyperliquidData?.openPositions) ? [...hyperliquidData.openPositions] : []
+      const krakenPositions = Array.isArray(krakenData?.openPositions) ? [...krakenData.openPositions] : []
       const asterOrders = Array.isArray(asterData?.openOrders) ? [...asterData.openOrders] : []
       const hyperliquidOrders = Array.isArray(hyperliquidData?.openOrders) ? [...hyperliquidData.openOrders] : []
+      const krakenOrders = Array.isArray(krakenData?.openOrders) ? [...krakenData.openOrders] : []
       const asterAvailableMargin = Array.isArray(asterData?.availableMargin) ? [...asterData.availableMargin] : []
       const hyperliquidAvailableMargin = Array.isArray(hyperliquidData?.availableMargin) ? [...hyperliquidData.availableMargin] : []
+      const krakenAvailableMargin = Array.isArray(krakenData?.availableMargin) ? [...krakenData.availableMargin] : []
       const asterLockedMargin = Array.isArray(asterData?.lockedMargin) ? [...asterData.lockedMargin] : []
       const hyperliquidLockedMargin = Array.isArray(hyperliquidData?.lockedMargin) ? [...hyperliquidData.lockedMargin] : []
+      const krakenLockedMargin = Array.isArray(krakenData?.lockedMargin) ? [...krakenData.lockedMargin] : []
       
       console.log('[DataContext] Before merge - counts:', {
         asterPositions: asterPositions.length,
         hyperliquidPositions: hyperliquidPositions.length,
+        krakenPositions: krakenPositions.length,
         asterOrders: asterOrders.length,
         hyperliquidOrders: hyperliquidOrders.length,
+        krakenOrders: krakenOrders.length,
       })
       
       const mergedData = {
-        openPositions: [...asterPositions, ...hyperliquidPositions],
-        openOrders: [...asterOrders, ...hyperliquidOrders],
-        availableMargin: [...asterAvailableMargin, ...hyperliquidAvailableMargin],
-        lockedMargin: [...asterLockedMargin, ...hyperliquidLockedMargin],
+        openPositions: [...asterPositions, ...hyperliquidPositions, ...krakenPositions],
+        openOrders: [...asterOrders, ...hyperliquidOrders, ...krakenOrders],
+        availableMargin: [...asterAvailableMargin, ...hyperliquidAvailableMargin, ...krakenAvailableMargin],
+        lockedMargin: [...asterLockedMargin, ...hyperliquidLockedMargin, ...krakenLockedMargin],
       }
       
       console.log('[DataContext] After merge - mergedData structure:', {
@@ -242,7 +254,7 @@ export function DataProvider({ children }: DataProviderProps) {
       })
 
       // Update items with merged data
-      if (asterData || hyperliquidData) {
+      if (asterData || hyperliquidData || krakenData) {
         console.log('[DataContext] Updating items with merged Perpetuals data')
         console.log('[DataContext] Merged data being set:', {
           openPositionsCount: mergedData.openPositions.length,
@@ -290,7 +302,7 @@ export function DataProvider({ children }: DataProviderProps) {
         })
         return updatedItems
       } else {
-        console.log('[DataContext] No data from Aster or Hyperliquid, keeping existing items')
+        console.log('[DataContext] No data from Aster, Hyperliquid, or Kraken, keeping existing items')
       }
     } catch (error) {
       console.error('[DataContext] Error fetching Perpetuals data:', error)
