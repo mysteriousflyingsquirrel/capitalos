@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import admin from 'firebase-admin'
-import type { CurrencyCode } from '../../src/lib/currency'
-import { NetWorthCalculationService } from '../../src/services/netWorthCalculationService'
+import { getNetWorthSummary } from '../../src/lib/networth/netWorthServiceServer'
+import type { NetWorthSummary } from '../../src/lib/networth/types'
 
 // Export config for Vercel (increase timeout if needed)
 export const config = {
@@ -37,65 +37,7 @@ function initializeAdmin() {
   }
 }
 
-// Types matching the frontend
-interface PerpetualsOpenPosition {
-  id: string
-  ticker: string
-  margin: number
-  pnl: number
-  platform: string
-}
-
-interface PerpetualsOpenOrder {
-  id: string
-  name: string
-  margin: number
-  platform: string
-}
-
-interface PerpetualsAvailableMargin {
-  id: string
-  asset: string
-  margin: number
-  platform: string
-}
-
-interface PerpetualsLockedMargin {
-  id: string
-  asset: string
-  margin: number
-  platform: string
-}
-
-interface PerpetualsData {
-  openPositions: PerpetualsOpenPosition[]
-  openOrders: PerpetualsOpenOrder[]
-  lockedMargin: PerpetualsLockedMargin[]
-  availableMargin: PerpetualsAvailableMargin[]
-}
-
-interface NetWorthItem {
-  id: string
-  category: 'Cash' | 'Bank Accounts' | 'Retirement Funds' | 'Index Funds' | 'Stocks' | 'Commodities' | 'Crypto' | 'Perpetuals' | 'Real Estate' | 'Depreciating Assets'
-  name: string
-  platform: string
-  currency: string
-  monthlyDepreciationChf?: number
-  perpetualsData?: PerpetualsData
-}
-
-interface NetWorthTransaction {
-  id: string
-  itemId: string
-  side: 'buy' | 'sell'
-  currency: string
-  amount: number
-  pricePerItemChf: number
-  pricePerItem?: number
-  date: string
-  cryptoType?: 'BUY' | 'SELL' | 'ADJUSTMENT'
-}
-
+// Snapshot format for Firestore storage
 interface NetWorthSnapshot {
   date: string
   timestamp: number
@@ -111,71 +53,18 @@ interface NetWorthSnapshot {
 // All calculations use pricePerItemChf already stored in transactions - no external API calls needed.
 
 
-// Create snapshot function
-// Uses the same calculation logic as the frontend via NetWorthCalculationService
-// All values are calculated from stored transactions using pricePerItemChf - no external API calls
-function createSnapshot(
-  items: NetWorthItem[],
-  transactions: NetWorthTransaction[],
-  convert: (amount: number, from: CurrencyCode) => number
-): NetWorthSnapshot {
-  // Use empty price objects - this triggers transaction-based calculations
-  // which use pricePerItemChf already stored in each transaction
-  const cryptoPrices: Record<string, number> = {}
-  const stockPrices: Record<string, number> = {}
-  const usdToChfRate: number | null = null
-
-  // Debug logging
-  console.log('[Snapshot] Creating snapshot with transaction-based calculations:', {
-    itemsCount: items.length,
-    transactionsCount: transactions.length,
-    usingStoredPrices: true,
+/**
+ * Convert NetWorthSummary to NetWorthSnapshot format
+ * Uses the summary from the global service - ensures consistency
+ */
+function summaryToSnapshot(summary: NetWorthSummary): NetWorthSnapshot {
+  // Convert categories array to record format
+  const categories: Record<string, number> = {}
+  summary.categories.forEach(cat => {
+    categories[cat.categoryKey] = cat.total
   })
 
-  // Use the same service as the frontend (Dashboard, NetWorth, DataContext)
-  let result
-  try {
-    result = NetWorthCalculationService.calculateTotals(
-      items as any, // Type assertion needed due to slight type differences
-      transactions as any,
-      cryptoPrices,
-      stockPrices,
-      usdToChfRate,
-      convert
-    )
-    console.log('[Snapshot] Calculation result:', {
-      categoryTotals: result.categoryTotals,
-      totalNetWorthChf: result.totalNetWorthChf,
-    })
-  } catch (error) {
-    console.error('[Snapshot] Error calculating totals:', error)
-    throw error
-  }
-
-  // Convert the categoryTotals to the snapshot format
-  const categories: Record<string, number> = {
-    'Cash': result.categoryTotals['Cash'] || 0,
-    'Bank Accounts': result.categoryTotals['Bank Accounts'] || 0,
-    'Retirement Funds': result.categoryTotals['Retirement Funds'] || 0,
-    'Index Funds': result.categoryTotals['Index Funds'] || 0,
-    'Stocks': result.categoryTotals['Stocks'] || 0,
-    'Commodities': result.categoryTotals['Commodities'] || 0,
-    'Crypto': result.categoryTotals['Crypto'] || 0,
-    'Perpetuals': result.categoryTotals['Perpetuals'] || 0,
-    'Real Estate': result.categoryTotals['Real Estate'] || 0,
-    'Depreciating Assets': result.categoryTotals['Depreciating Assets'] || 0,
-  }
-
-  const total = result.totalNetWorthChf
-  
-  console.log('[Snapshot] Final snapshot:', {
-    date: new Date().toISOString().split('T')[0],
-    categories,
-    total,
-  })
-  
-  // Use UTC explicitly to avoid timezone issues
-  // When cron runs at 00:00 UTC, we want to create snapshot for yesterday at 23:59:59 UTC
+  // Use UTC for date calculation
   const now = new Date()
   const nowUTC = new Date(Date.UTC(
     now.getUTCFullYear(),
@@ -186,7 +75,6 @@ function createSnapshot(
     now.getUTCSeconds()
   ))
   
-  // Calculate date in UTC (YYYY-MM-DD format)
   const year = nowUTC.getUTCFullYear()
   const month = String(nowUTC.getUTCMonth() + 1).padStart(2, '0')
   const day = String(nowUTC.getUTCDate()).padStart(2, '0')
@@ -196,7 +84,7 @@ function createSnapshot(
     date,
     timestamp: nowUTC.getTime(),
     categories,
-    total,
+    total: summary.totalNetWorth,
   }
 }
 
@@ -217,57 +105,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'User ID (uid) is required. Provide it in the request body as { "uid": "your-user-id" } or as a query parameter ?uid=your-user-id' })
     }
 
-    const db = admin.firestore()
-
-    // Load user data from Firestore - only items and transactions needed
-    // All calculations use pricePerItemChf already stored in transactions
-    console.log('[Snapshot] Loading data from Firestore for user:', uid)
-    const [itemsSnapshot, transactionsSnapshot] = await Promise.all([
-      db.collection(`users/${uid}/netWorthItems`).get(),
-      db.collection(`users/${uid}/netWorthTransactions`).get(),
-    ])
-
-    const items = itemsSnapshot.docs.map(doc => doc.data() as NetWorthItem)
-    const transactions = transactionsSnapshot.docs.map(doc => doc.data() as NetWorthTransaction)
-
-    console.log('[Snapshot] Data loaded:', {
-      itemsCount: items.length,
-      transactionsCount: transactions.length,
-      itemsByCategory: items.reduce((acc, item) => {
-        acc[item.category] = (acc[item.category] || 0) + 1
-        return acc
-      }, {} as Record<string, number>),
-      hasPerpetualsItem: items.some(item => item.category === 'Perpetuals'),
-    })
-
-    // Create a simple convert function for currency conversion
-    // Uses fallback rates (1:1) - transactions already have pricePerItemChf in CHF
-    // This is only used as a fallback if transactions have pricePerItem in other currencies
-    const convert = (amount: number, from: CurrencyCode): number => {
-      if (from === 'CHF') return amount
-      // Fallback: assume 1:1 if no exchange rates available
-      // In practice, transactions should have pricePerItemChf which is already in CHF
-      return amount
-    }
-
-    // Create snapshot using transaction-based calculations (no external API calls)
-    console.log('[Snapshot] Creating snapshot with transaction-based calculations...')
-    let snapshot
+    // Use the global net worth service to get summary
+    // This ensures consistency with UI calculations
+    // The service handles fetching transactions, computing, and caching
+    console.log('[Snapshot] Getting net worth summary from global service...')
+    let summary: NetWorthSummary
     try {
-      snapshot = createSnapshot(
-        items,
-        transactions,
-        convert
-      )
-      console.log('[Snapshot] Snapshot created successfully:', {
-        date: snapshot.date,
-        total: snapshot.total,
-        categories: snapshot.categories,
+      summary = await getNetWorthSummary(uid, 'CHF')
+      console.log('[Snapshot] Summary retrieved:', {
+        totalNetWorth: summary.totalNetWorth,
+        categoriesCount: summary.categories.length,
+        asOf: summary.asOf,
       })
     } catch (error) {
-      console.error('[Snapshot] Error creating snapshot:', error)
+      console.error('[Snapshot] Error getting net worth summary:', error)
       throw error
     }
+
+    // Convert summary to snapshot format
+    let snapshot = summaryToSnapshot(summary)
+    
+    const db = admin.firestore()
 
     // If called around 00:00 UTC (cron job), create snapshot for yesterday at 23:59:59 UTC
     // This ensures the snapshot represents the end of the previous day, not the start of the new day
