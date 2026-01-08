@@ -304,147 +304,192 @@ async function krakenRequest(
 
 /**
  * Fetches open positions from Kraken Futures API
- * Also fetches account data to get accurate PnL and margin information
+ * Implements per-position PnL and margin estimation using:
+ * - /accounts for authoritative totals (flex.pnl, flex.totalUnrealized, flex.initialMarginWithOrders, etc.)
+ * - /openpositions for position structure (symbol, size, entryPrice, side)
+ * - /tickers for mark prices
+ * 
+ * Per-position values are approximations and may not sum exactly to account totals
+ * due to funding, fees, and cross-margin allocation.
  */
 async function fetchOpenPositions(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsOpenPosition[]> {
   try {
-    // Fetch positions and accounts in parallel
-    const [positionsData, accountsData] = await Promise.all([
+    // Fetch positions, accounts, and tickers in parallel
+    const [positionsData, accountsData, tickersData] = await Promise.all([
       krakenRequest('openPositions', apiKey, apiSecret).catch(err => {
         console.error('[Kraken API] Error fetching positions:', err)
         return null
       }),
       krakenRequest('accounts', apiKey, apiSecret).catch(err => {
-        console.warn('[Kraken API] Error fetching accounts (will use position data only):', err)
+        console.warn('[Kraken API] Error fetching accounts:', err)
+        return null
+      }),
+      krakenRequest('tickerAll', apiKey, apiSecret).catch(err => {
+        console.warn('[Kraken API] Error fetching tickers:', err)
         return null
       }),
     ])
 
-    console.log('[Kraken API] Open positions raw data (full):', JSON.stringify(positionsData, null, 2))
-    console.log('[Kraken API] Accounts raw data (full):', JSON.stringify(accountsData, null, 2))
+    console.log('[Kraken API] Positions data:', positionsData ? 'received' : 'missing')
+    console.log('[Kraken API] Accounts data:', accountsData ? 'received' : 'missing')
+    console.log('[Kraken API] Tickers data:', tickersData ? 'received' : 'missing')
 
-    const data = positionsData
-    console.log('[Kraken API] Open positions data keys:', data ? Object.keys(data) : 'null')
-    console.log('[Kraken API] Open positions data.result:', data?.result)
-    console.log('[Kraken API] Open positions data.result type:', typeof data?.result)
-    console.log('[Kraken API] Open positions data.result isArray:', Array.isArray(data?.result))
+    // Extract account totals (authoritative source) from flex object
+    let accountTotals: {
+      totalUnrealizedPnL: number
+      marginUsed: number
+      marginAvailable: number
+      marginEquity: number
+    } | null = null
 
-    const positions: PerpetualsOpenPosition[] = []
+    if (accountsData && accountsData.result) {
+      const flex = accountsData.result.flex || accountsData.result
+      accountTotals = {
+        totalUnrealizedPnL: parseFloat(flex.totalUnrealized || flex.pnl || '0'),
+        marginUsed: parseFloat(flex.initialMarginWithOrders || flex.initialMargin || '0'),
+        marginAvailable: parseFloat(flex.availableMargin || '0'),
+        marginEquity: parseFloat(flex.marginEquity || '0'),
+      }
+      console.log('[Kraken API] Account totals (authoritative):', accountTotals)
+    }
 
-    // Check multiple possible response structures
-    let positionsArray = null
-    if (data.result && Array.isArray(data.result)) {
-      positionsArray = data.result
-    } else if (Array.isArray(data)) {
-      positionsArray = data
-    } else if (data.positions && Array.isArray(data.positions)) {
-      positionsArray = data.positions
-    } else if (data.openPositions && Array.isArray(data.openPositions)) {
-      positionsArray = data.openPositions
-    } else {
-      console.log('[Kraken API] Could not find positions array in response. Full data structure:', {
-        hasResult: !!data.result,
-        resultType: typeof data.result,
-        resultIsArray: Array.isArray(data.result),
-        dataKeys: data ? Object.keys(data) : [],
-        fullData: data,
+    // Build ticker price map (symbol -> markPrice)
+    // Use markPrice if available, fallback to last or indexPrice
+    const tickerMap: Record<string, number> = {}
+    if (tickersData && tickersData.result) {
+      const tickers = Array.isArray(tickersData.result) ? tickersData.result : [tickersData.result]
+      for (const ticker of tickers) {
+        const symbol = ticker.symbol || ticker.instrument || ticker.ticker || ''
+        const markPrice = parseFloat(ticker.markPrice || ticker.last || ticker.indexPrice || '0')
+        if (symbol && markPrice > 0) {
+          tickerMap[symbol] = markPrice
+        }
+      }
+      console.log('[Kraken API] Ticker map size:', Object.keys(tickerMap).length)
+    }
+
+    // Extract positions array
+    let positionsArray: any[] = []
+    if (positionsData) {
+      if (positionsData.result && Array.isArray(positionsData.result)) {
+        positionsArray = positionsData.result
+      } else if (Array.isArray(positionsData)) {
+        positionsArray = positionsData
+      } else if (positionsData.positions && Array.isArray(positionsData.positions)) {
+        positionsArray = positionsData.positions
+      } else if (positionsData.openPositions && Array.isArray(positionsData.openPositions)) {
+        positionsArray = positionsData.openPositions
+      }
+    }
+
+    console.log('[Kraken API] Processing', positionsArray.length, 'positions')
+
+    // Step 1: Process positions to get structure and calculate notional values
+    interface PositionData {
+      symbol: string
+      size: number
+      entryPrice: number
+      markPrice: number
+      notional: number
+      side: 'LONG' | 'SHORT'
+    }
+
+    const positionDataList: PositionData[] = []
+
+    for (const pos of positionsArray) {
+      const size = parseFloat(pos.size || pos.qty || pos.quantity || pos.volume || pos.positionSize || '0')
+      
+      // Filter out positions with zero size
+      if (Math.abs(size) < 0.0001) {
+        continue
+      }
+
+      const symbol = pos.symbol || pos.instrument || pos.ticker || pos.contract || ''
+      const entryPrice = parseFloat(pos.averagePrice || pos.entryPrice || pos.price || pos.averageEntryPrice || '0')
+      
+      // Get markPrice from ticker map, fallback to position data
+      const markPrice = tickerMap[symbol] || parseFloat(pos.markPrice || pos.lastPrice || pos.currentPrice || pos.marketPrice || '0')
+      
+      if (!symbol || entryPrice <= 0 || markPrice <= 0) {
+        console.warn('[Kraken API] Skipping position with invalid data:', { symbol, entryPrice, markPrice })
+        continue
+      }
+
+      const side: 'LONG' | 'SHORT' = size > 0 ? 'LONG' : 'SHORT'
+      const notional = Math.abs(size) * markPrice
+
+      positionDataList.push({
+        symbol,
+        size,
+        entryPrice,
+        markPrice,
+        notional,
+        side,
       })
     }
 
-    if (positionsArray) {
-      console.log('[Kraken API] Processing', positionsArray.length, 'positions')
-      for (const pos of positionsArray) {
-        console.log('[Kraken API] Processing position (raw):', JSON.stringify(pos, null, 2))
-        console.log('[Kraken API] Position keys:', Object.keys(pos))
-        
-        const size = parseFloat(pos.size || pos.qty || pos.quantity || pos.volume || pos.positionSize || '0')
-        console.log('[Kraken API] Processing position:', { 
-          symbol: pos.symbol || pos.instrument || pos.ticker,
-          size,
-          rawSize: pos.size || pos.qty || pos.quantity || pos.volume || pos.positionSize,
-        })
-        
-        // Filter out positions with zero size
-        if (Math.abs(size) < 0.0001) {
-          console.log('[Kraken API] Skipping position with zero size')
-          continue
-        }
+    // Step 2: Calculate total notional for proportional margin attribution
+    const totalNotional = positionDataList.reduce((sum, p) => sum + p.notional, 0)
+    console.log('[Kraken API] Total notional across all positions:', totalNotional)
 
-        const symbol = pos.symbol || pos.instrument || pos.ticker || pos.contract || ''
-        const averagePrice = parseFloat(pos.averagePrice || pos.entryPrice || pos.price || pos.averageEntryPrice || '0')
-        const markPrice = parseFloat(pos.markPrice || pos.lastPrice || pos.currentPrice || pos.marketPrice || '0')
-        
-        // Try to get margin and PnL from accounts data first
-        let margin = parseFloat(pos.margin || pos.collateral || pos.initialMargin || pos.marginUsed || '0')
-        let unrealizedPnl = parseFloat(
-          pos.unrealizedPnl || 
-          pos.unrealizedPnL || 
-          pos.pnl || 
-          pos.profitLoss || 
-          pos.unrealizedProfit || 
-          (size !== 0 && markPrice > 0 && averagePrice > 0 ? String((markPrice - averagePrice) * size) : '0')
-        )
+    // Step 3: Calculate per-position estimated values
+    const positions: PerpetualsOpenPosition[] = []
+    let sumEstimatedPnL = 0
 
-        // If accounts data is available, try to find matching account for this position
-        if (accountsData && accountsData.result) {
-          const accounts = Array.isArray(accountsData.result) ? accountsData.result : [accountsData.result]
-          
-          // Look for account matching this position's symbol
-          const matchingAccount = accounts.find((acc: any) => {
-            const accSymbol = acc.type || acc.instrument || acc.symbol || ''
-            return accSymbol === symbol || accSymbol.toLowerCase() === symbol.toLowerCase()
-          })
+    for (const posData of positionDataList) {
+      // Calculate estimated unrealized PnL for linear contracts:
+      // direction * (markPrice - entryPrice) * abs(size)
+      const direction = posData.size > 0 ? 1 : -1
+      const estimatedPnL = direction * (posData.markPrice - posData.entryPrice) * Math.abs(posData.size)
+      sumEstimatedPnL += estimatedPnL
 
-          if (matchingAccount) {
-            console.log('[Kraken API] Found matching account for position:', { symbol, account: matchingAccount })
-            
-            // Use account margin if available
-            if (matchingAccount.marginBalance !== undefined || matchingAccount.margin !== undefined) {
-              margin = parseFloat(matchingAccount.marginBalance || matchingAccount.margin || '0')
-              console.log('[Kraken API] Using margin from account:', margin)
-            }
-            
-            // Use account PnL if available
-            if (matchingAccount.unrealizedPnl !== undefined || matchingAccount.pnl !== undefined || matchingAccount.unrealizedPnL !== undefined) {
-              unrealizedPnl = parseFloat(matchingAccount.unrealizedPnl || matchingAccount.pnl || matchingAccount.unrealizedPnL || '0')
-              console.log('[Kraken API] Using PnL from account:', unrealizedPnl)
-            }
-          } else {
-            // If no matching account found, try to use aggregate account data
-            const aggregateAccount = accounts.find((acc: any) => !acc.type && !acc.instrument && !acc.symbol)
-            if (aggregateAccount) {
-              console.log('[Kraken API] Using aggregate account data:', aggregateAccount)
-              // For aggregate, we might need to calculate per-position values
-              // For now, use position-specific data if available
-            }
-          }
-        }
-        
-        // Determine position side
-        const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
-
-        const position = {
-          id: `kraken-pos-${symbol}-${pos.fillId || Date.now()}`,
-          ticker: symbol,
-          margin,
-          pnl: unrealizedPnl,
-          platform: 'Kraken Futures',
-          fundingRate: null, // Will be fetched separately if needed
-          leverage: pos.leverage ? parseFloat(pos.leverage) : null,
-          positionSide,
-        }
-        console.log('[Kraken API] Created position:', position)
-        positions.push(position)
+      // Calculate estimated margin using proportional attribution:
+      // positionMarginShare = positionNotional / totalNotional
+      // estimatedInitialMargin = flex.initialMarginWithOrders * positionMarginShare
+      let estimatedMargin = 0
+      if (accountTotals && totalNotional > 0) {
+        const positionMarginShare = posData.notional / totalNotional
+        estimatedMargin = accountTotals.marginUsed * positionMarginShare
       }
-    } else {
-      console.log('[Kraken API] No positions found or invalid data structure:', { 
-        hasResult: !!data.result, 
-        isArray: Array.isArray(data.result),
-        dataKeys: data ? Object.keys(data) : 'no data',
+
+      const position: PerpetualsOpenPosition = {
+        id: `kraken-pos-${posData.symbol}-${Date.now()}`,
+        ticker: posData.symbol,
+        margin: estimatedMargin,
+        pnl: estimatedPnL,
+        platform: 'Kraken Futures',
+        fundingRate: null,
+        leverage: null,
+        positionSide: posData.side,
+      }
+
+      console.log('[Kraken API] Position calculated:', {
+        symbol: posData.symbol,
+        side: posData.side,
+        size: posData.size,
+        entryPrice: posData.entryPrice,
+        markPrice: posData.markPrice,
+        notional: posData.notional,
+        estimatedPnL,
+        estimatedMargin,
       })
+
+      positions.push(position)
+    }
+
+    // Step 4: Log reconciliation data (IMPORTANT for transparency)
+    if (accountTotals) {
+      const difference = accountTotals.totalUnrealizedPnL - sumEstimatedPnL
+      console.log('[Kraken API] === RECONCILIATION ===')
+      console.log('[Kraken API] Sum of estimated position PnL:', sumEstimatedPnL)
+      console.log('[Kraken API] Account total unrealized (truth):', accountTotals.totalUnrealizedPnL)
+      console.log('[Kraken API] Difference (funding / fees):', difference)
+      console.log('[Kraken API] Difference %:', accountTotals.totalUnrealizedPnL !== 0 
+        ? ((difference / accountTotals.totalUnrealizedPnL) * 100).toFixed(2) + '%'
+        : 'N/A')
     }
 
     console.log('[Kraken API] Returning', positions.length, 'positions')
@@ -454,7 +499,7 @@ async function fetchOpenPositions(
     if (error instanceof Error) {
       console.error('[Kraken API] Error details:', { message: error.message, stack: error.stack })
     }
-    throw error
+    return []
   }
 }
 
