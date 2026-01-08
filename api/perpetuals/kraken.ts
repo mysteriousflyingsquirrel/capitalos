@@ -70,72 +70,55 @@ interface PerpetualsData {
 const KRAKEN_FUTURES_BASE_URL = 'https://futures.kraken.com/derivatives/api/v3'
 
 /**
- * Signs a request for Kraken Futures API using HMAC SHA256
- * Kraken Futures API v3 requires the secret to be base64-decoded first
+ * Signs a request for Kraken Futures API using the official v3 authentication format
+ * Official format: HMAC-SHA512 of SHA256(postData + nonce + endpointPath)
+ * Reference: https://docs.kraken.com/api/docs/guides/futures-rest/#authentication
  */
 function signKrakenRequest(apiSecret: string, nonce: string, endpoint: string, postData: string, method: string): string {
-  // Kraken Futures API v3 - try both base64-decoded and raw secret
-  // Some implementations require the secret to be base64-decoded, others use it directly
+  // Step 1: Base64-decode the API secret
   let secretKey: Buffer
-  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/
-  const isValidBase64 = base64Regex.test(apiSecret) && apiSecret.length > 0 && apiSecret.length % 4 === 0
-  
-  // Try using secret directly first (UTF-8) - this is more common for REST APIs
-  // If that doesn't work, we can try base64-decoded
-  secretKey = Buffer.from(apiSecret, 'utf-8')
-  console.log('[Kraken API] Using UTF-8 secret (raw)', { 
-    originalLength: apiSecret.length, 
-    secretLength: secretKey.length,
-    isBase64Format: isValidBase64,
-  })
-  
-  // Alternative: if base64 format detected, we could try decoding it
-  // But let's try raw first since authenticationError suggests format might be wrong
-  // if (isValidBase64) {
-  //   try {
-  //     secretKey = Buffer.from(apiSecret, 'base64')
-  //     console.log('[Kraken API] Using base64-decoded secret', { originalLength: apiSecret.length, decodedLength: secretKey.length })
-  //   } catch {
-  //     secretKey = Buffer.from(apiSecret, 'utf-8')
-  //     console.log('[Kraken API] Base64 decode failed, using UTF-8 secret')
-  //   }
-  // }
-  
-  // Kraken Futures API v3 signature message format
-  // The signature must include nonce for proper authentication
-  // Format: nonce + endpoint + postData (standard for nonce-based REST APIs)
-  
-  let message: string
-  if (method === 'GET' || !postData) {
-    // For GET requests: nonce + endpoint
-    message = nonce + endpoint
-  } else {
-    // For POST requests: nonce + endpoint + postData
-    message = nonce + endpoint + postData
+  try {
+    secretKey = Buffer.from(apiSecret, 'base64')
+    console.log('[Kraken API] Secret base64-decoded', { originalLength: apiSecret.length, decodedLength: secretKey.length })
+  } catch {
+    throw new Error('Failed to base64-decode API secret. Ensure the secret is in base64 format.')
   }
   
-  console.log('[Kraken API] Signature message format:', {
+  // Step 2: Construct the string to hash
+  // Format: postData + nonce + endpointPath
+  // endpointPath should be the full path relative to base domain, e.g., /derivatives/api/v3/openpositions
+  // Since our endpoints are like /openpositions, we need to construct the full path
+  const endpointPath = `/derivatives/api/v3${endpoint}`
+  
+  // postData for signature: According to official docs, for GET requests or when no body, use empty string
+  // For POST with JSON body, typically still use empty string (the body is sent separately, nonce is in signature)
+  // If you need to include body data in signature, it should be URL-encoded, not JSON
+  const postDataForHash = '' // Use empty string - body data doesn't go into signature for JSON POST requests
+  
+  const stringToHash = postDataForHash + nonce + endpointPath
+  
+  console.log('[Kraken API] Signature calculation:', {
     method,
-    hasPostData: !!postData,
+    postData: postData || '(empty)',
     nonce,
-    endpoint,
-    messageLength: message.length,
-    messagePreview: message.substring(0, 200),
+    endpointPath,
+    stringToHashLength: stringToHash.length,
+    stringToHashPreview: stringToHash.substring(0, 200),
   })
   
-  const signature = crypto
-    .createHmac('sha256', secretKey)
-    .update(message)
-    .digest('base64')
+  // Step 3: SHA-256 hash of the concatenated string
+  const sha256Hash = crypto.createHash('sha256').update(stringToHash).digest()
+  
+  // Step 4: HMAC-SHA512 using the base64-decoded secret and the SHA256 hash
+  const hmac = crypto.createHmac('sha512', secretKey).update(sha256Hash).digest('base64')
   
   console.log('[Kraken API] Signature created', {
     secretLength: secretKey.length,
-    messageLength: message.length,
-    messagePreview: message.substring(0, 100),
-    signatureLength: signature.length,
+    sha256HashLength: sha256Hash.length,
+    signatureLength: hmac.length,
   })
   
-  return signature
+  return hmac
 }
 
 /**
@@ -153,8 +136,12 @@ async function makeAuthenticatedRequest(
   // Kraken Futures API v3 uses nonce in milliseconds as a string
   const nonce = Date.now().toString()
   
-  // Create signature with method parameter
-  const signature = signKrakenRequest(apiSecret, nonce, endpoint, postData, method)
+  // For signature, postData should be empty string for GET requests or when no body
+  // For POST with JSON, we'll use the JSON string as-is (not URL-encoded)
+  const postDataForSignature = (method === 'GET' || !postData) ? '' : postData
+  
+  // Create signature with the correct postData format
+  const signature = signKrakenRequest(apiSecret, nonce, endpoint, postDataForSignature, method)
   console.log('[Kraken API] Request signed', { nonce, signatureLength: signature.length })
 
   const url = `${KRAKEN_FUTURES_BASE_URL}${endpoint}`
@@ -167,9 +154,9 @@ async function makeAuthenticatedRequest(
     'Authent': signature,
   }
   
-  // Only add Content-Type for POST requests with data
-  // Some APIs reject requests with Content-Type for GET requests
-  if (method === 'POST' && postData) {
+  // Add Content-Type for POST requests
+  // For GET requests, don't add Content-Type header
+  if (method === 'POST') {
     headers['Content-Type'] = 'application/json'
   }
   
