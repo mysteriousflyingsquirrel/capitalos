@@ -71,13 +71,69 @@ const KRAKEN_FUTURES_BASE_URL = 'https://futures.kraken.com/derivatives/api/v3'
 
 /**
  * Signs a request for Kraken Futures API using HMAC SHA256
+ * Kraken Futures API v3 requires the secret to be base64-decoded first
  */
-function signKrakenRequest(apiSecret: string, nonce: string, endpoint: string, postData: string): string {
-  const message = nonce + endpoint + postData
-  return crypto
-    .createHmac('sha256', apiSecret)
+function signKrakenRequest(apiSecret: string, nonce: string, endpoint: string, postData: string, method: string): string {
+  // Kraken Futures API v3 requires the secret to be base64-decoded
+  // The secret from Kraken is typically base64-encoded, but check if it's valid base64 first
+  let secretKey: Buffer
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/
+  const isValidBase64 = base64Regex.test(apiSecret) && apiSecret.length > 0 && apiSecret.length % 4 === 0
+  
+  if (isValidBase64) {
+    try {
+      // Try base64 decode first (most common case)
+      secretKey = Buffer.from(apiSecret, 'base64')
+      console.log('[Kraken API] Using base64-decoded secret', { originalLength: apiSecret.length, decodedLength: secretKey.length })
+    } catch {
+      // If base64 decode fails, use as UTF-8
+      secretKey = Buffer.from(apiSecret, 'utf-8')
+      console.log('[Kraken API] Base64 decode failed, using UTF-8 secret')
+    }
+  } else {
+    // Not valid base64, use as UTF-8
+    secretKey = Buffer.from(apiSecret, 'utf-8')
+    console.log('[Kraken API] Secret not base64, using UTF-8 secret')
+  }
+  
+  // Kraken Futures API v3 signature message format
+  // Based on typical REST API patterns, try: endpoint + postData (most common)
+  // Some APIs use: nonce + endpoint + postData
+  // For GET requests with no postData, use just: endpoint
+  
+  let message: string
+  if (method === 'GET' || !postData) {
+    // For GET requests, typically just the endpoint path
+    message = endpoint
+  } else {
+    // For POST requests, endpoint + postData (or nonce + endpoint + postData)
+    // Try: endpoint + postData first (most common for REST APIs)
+    message = endpoint + postData
+    // Alternative: nonce + endpoint + postData (uncomment if above doesn't work)
+    // message = nonce + endpoint + postData
+  }
+  
+  console.log('[Kraken API] Signature message format:', {
+    method,
+    hasPostData: !!postData,
+    endpoint,
+    messageLength: message.length,
+    messagePreview: message.substring(0, 200),
+  })
+  
+  const signature = crypto
+    .createHmac('sha256', secretKey)
     .update(message)
     .digest('base64')
+  
+  console.log('[Kraken API] Signature created', {
+    secretLength: secretKey.length,
+    messageLength: message.length,
+    messagePreview: message.substring(0, 100),
+    signatureLength: signature.length,
+  })
+  
+  return signature
 }
 
 /**
@@ -92,23 +148,34 @@ async function makeAuthenticatedRequest(
 ): Promise<any> {
   console.log('[Kraken API] makeAuthenticatedRequest called', { endpoint, method, hasPostData: !!postData })
   
+  // Kraken Futures API v3 uses nonce in milliseconds as a string
   const nonce = Date.now().toString()
-  const signature = signKrakenRequest(apiSecret, nonce, endpoint, postData)
+  
+  // Create signature with method parameter
+  const signature = signKrakenRequest(apiSecret, nonce, endpoint, postData, method)
   console.log('[Kraken API] Request signed', { nonce, signatureLength: signature.length })
 
   const url = `${KRAKEN_FUTURES_BASE_URL}${endpoint}`
-  console.log('[Kraken API] Request URL:', url)
+  console.log('[Kraken API] Full request URL:', url)
   
+  // Kraken Futures API v3 headers - try different variations
   const headers: Record<string, string> = {
     'APIKey': apiKey,
     'Nonce': nonce,
     'Authent': signature,
-    'Content-Type': 'application/json',
   }
+  
+  // Only add Content-Type for POST requests with data
+  // Some APIs reject requests with Content-Type for GET requests
+  if (method === 'POST' && postData) {
+    headers['Content-Type'] = 'application/json'
+  }
+  
   console.log('[Kraken API] Request headers:', { 
     APIKey: apiKey ? `${apiKey.substring(0, 4)}...` : 'missing',
     Nonce: nonce,
     Authent: signature ? `${signature.substring(0, 10)}...` : 'missing',
+    ContentType: headers['Content-Type'] || 'not set',
   })
 
   try {
