@@ -152,16 +152,56 @@ async function fetchOpenPositions(
 ): Promise<PerpetualsOpenPosition[]> {
   console.log('[Kraken API] fetchOpenPositions called')
   try {
-    const data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openpositions', 'GET')
-    console.log('[Kraken API] Open positions raw data:', JSON.stringify(data).substring(0, 1000))
+    // Try POST first (Kraken Futures v3 typically uses POST for authenticated endpoints)
+    let data
+    try {
+      console.log('[Kraken API] Trying POST request for /openpositions')
+      data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openpositions', 'POST', '{}')
+    } catch (postError) {
+      console.log('[Kraken API] POST failed, trying GET:', postError)
+      data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openpositions', 'GET')
+    }
+    console.log('[Kraken API] Open positions raw data (full):', JSON.stringify(data, null, 2))
+    console.log('[Kraken API] Open positions data keys:', data ? Object.keys(data) : 'null')
+    console.log('[Kraken API] Open positions data.result:', data?.result)
+    console.log('[Kraken API] Open positions data.result type:', typeof data?.result)
+    console.log('[Kraken API] Open positions data.result isArray:', Array.isArray(data?.result))
 
     const positions: PerpetualsOpenPosition[] = []
 
+    // Check multiple possible response structures
+    let positionsArray = null
     if (data.result && Array.isArray(data.result)) {
-      console.log('[Kraken API] Processing', data.result.length, 'positions')
-      for (const pos of data.result) {
+      positionsArray = data.result
+    } else if (Array.isArray(data)) {
+      positionsArray = data
+    } else if (data.positions && Array.isArray(data.positions)) {
+      positionsArray = data.positions
+    } else if (data.openPositions && Array.isArray(data.openPositions)) {
+      positionsArray = data.openPositions
+    } else {
+      console.log('[Kraken API] Could not find positions array in response. Full data structure:', {
+        hasResult: !!data.result,
+        resultType: typeof data.result,
+        resultIsArray: Array.isArray(data.result),
+        dataKeys: data ? Object.keys(data) : [],
+        fullData: data,
+      })
+    }
+
+    if (positionsArray) {
+      console.log('[Kraken API] Processing', positionsArray.length, 'positions')
+      for (const pos of positionsArray) {
         const size = parseFloat(pos.size || '0')
-        console.log('[Kraken API] Processing position:', { symbol: pos.symbol, size })
+        console.log('[Kraken API] Processing position (raw):', JSON.stringify(pos, null, 2))
+        console.log('[Kraken API] Position keys:', Object.keys(pos))
+        
+        const size = parseFloat(pos.size || pos.qty || pos.quantity || pos.volume || pos.positionSize || '0')
+        console.log('[Kraken API] Processing position:', { 
+          symbol: pos.symbol || pos.instrument || pos.ticker,
+          size,
+          rawSize: pos.size || pos.qty || pos.quantity || pos.volume || pos.positionSize,
+        })
         
         // Filter out positions with zero size
         if (Math.abs(size) < 0.0001) {
@@ -169,16 +209,22 @@ async function fetchOpenPositions(
           continue
         }
 
-        const symbol = pos.symbol || pos.instrument || ''
-        const averagePrice = parseFloat(pos.averagePrice || pos.price || '0')
-        const markPrice = parseFloat(pos.markPrice || '0')
-        const margin = parseFloat(pos.margin || pos.collateral || '0')
+        const symbol = pos.symbol || pos.instrument || pos.ticker || pos.contract || ''
+        const averagePrice = parseFloat(pos.averagePrice || pos.entryPrice || pos.price || pos.averageEntryPrice || '0')
+        const markPrice = parseFloat(pos.markPrice || pos.lastPrice || pos.currentPrice || pos.marketPrice || '0')
+        const margin = parseFloat(pos.margin || pos.collateral || pos.initialMargin || pos.marginUsed || '0')
         
         // Calculate unrealized PnL: (markPrice - averagePrice) * size
         // For short positions (negative size), PnL is inverted
-        const unrealizedPnl = size !== 0 && markPrice > 0 && averagePrice > 0
-          ? (markPrice - averagePrice) * size
-          : parseFloat(pos.unrealizedPnl || pos.pnl || '0')
+        // Try to get PnL from API first, otherwise calculate it
+        const unrealizedPnl = parseFloat(
+          pos.unrealizedPnl || 
+          pos.unrealizedPnL || 
+          pos.pnl || 
+          pos.profitLoss || 
+          pos.unrealizedProfit || 
+          (size !== 0 && markPrice > 0 && averagePrice > 0 ? String((markPrice - averagePrice) * size) : '0')
+        )
         
         // Determine position side
         const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
@@ -224,14 +270,43 @@ async function fetchOpenOrders(
 ): Promise<PerpetualsOpenOrder[]> {
   console.log('[Kraken API] fetchOpenOrders called')
   try {
-    const data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openorders', 'GET')
-    console.log('[Kraken API] Open orders raw data:', JSON.stringify(data).substring(0, 1000))
+    // Try POST first (Kraken Futures v3 typically uses POST for authenticated endpoints)
+    let data
+    try {
+      console.log('[Kraken API] Trying POST request for /openorders')
+      data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openorders', 'POST', '{}')
+    } catch (postError) {
+      console.log('[Kraken API] POST failed, trying GET:', postError)
+      data = await makeAuthenticatedRequest(apiKey, apiSecret, '/openorders', 'GET')
+    }
+    console.log('[Kraken API] Open orders raw data (full):', JSON.stringify(data, null, 2))
+    console.log('[Kraken API] Open orders data keys:', data ? Object.keys(data) : 'null')
 
     const orders: PerpetualsOpenOrder[] = []
 
+    // Check multiple possible response structures
+    let ordersArray = null
     if (data.result && Array.isArray(data.result)) {
-      console.log('[Kraken API] Processing', data.result.length, 'orders')
-      for (const order of data.result) {
+      ordersArray = data.result
+    } else if (Array.isArray(data)) {
+      ordersArray = data
+    } else if (data.orders && Array.isArray(data.orders)) {
+      ordersArray = data.orders
+    } else if (data.openOrders && Array.isArray(data.openOrders)) {
+      ordersArray = data.openOrders
+    } else {
+      console.log('[Kraken API] Could not find orders array in response. Full data structure:', {
+        hasResult: !!data.result,
+        resultType: typeof data.result,
+        resultIsArray: Array.isArray(data.result),
+        dataKeys: data ? Object.keys(data) : [],
+        fullData: data,
+      })
+    }
+
+    if (ordersArray) {
+      console.log('[Kraken API] Processing', ordersArray.length, 'orders')
+      for (const order of ordersArray) {
         const symbol = order.symbol || order.instrument || ''
         const side = order.side || 'UNKNOWN'
         const type = order.type || order.orderType || 'UNKNOWN'
@@ -279,12 +354,25 @@ async function fetchAvailableMargin(
   try {
     // Try to get account information from portfolio margin parameters
     console.log('[Kraken API] Fetching portfolio margin parameters...')
-    const portfolioData = await makeAuthenticatedRequest(
-      apiKey,
-      apiSecret,
-      '/portfolio-margining/parameters',
-      'GET'
-    )
+    let portfolioData
+    try {
+      console.log('[Kraken API] Trying POST request for /portfolio-margining/parameters')
+      portfolioData = await makeAuthenticatedRequest(
+        apiKey,
+        apiSecret,
+        '/portfolio-margining/parameters',
+        'POST',
+        '{}'
+      )
+    } catch (postError) {
+      console.log('[Kraken API] POST failed, trying GET:', postError)
+      portfolioData = await makeAuthenticatedRequest(
+        apiKey,
+        apiSecret,
+        '/portfolio-margining/parameters',
+        'GET'
+      )
+    }
     console.log('[Kraken API] Portfolio data:', JSON.stringify(portfolioData).substring(0, 1000))
 
     const margins: PerpetualsAvailableMargin[] = []
@@ -315,8 +403,15 @@ async function fetchAvailableMargin(
     if (margins.length === 0) {
       console.log('[Kraken API] No margins from portfolio, trying wallets endpoint...')
       try {
-        const walletsData = await makeAuthenticatedRequest(apiKey, apiSecret, '/wallets', 'GET')
-        console.log('[Kraken API] Wallets data:', JSON.stringify(walletsData).substring(0, 1000))
+        let walletsData
+        try {
+          console.log('[Kraken API] Trying POST request for /wallets')
+          walletsData = await makeAuthenticatedRequest(apiKey, apiSecret, '/wallets', 'POST', '{}')
+        } catch (postError) {
+          console.log('[Kraken API] POST failed, trying GET:', postError)
+          walletsData = await makeAuthenticatedRequest(apiKey, apiSecret, '/wallets', 'GET')
+        }
+        console.log('[Kraken API] Wallets data (full):', JSON.stringify(walletsData, null, 2))
         
         if (walletsData.result && Array.isArray(walletsData.result)) {
           console.log('[Kraken API] Processing', walletsData.result.length, 'wallets')
@@ -368,12 +463,25 @@ async function fetchLockedMargin(
   console.log('[Kraken API] fetchLockedMargin called')
   try {
     console.log('[Kraken API] Fetching portfolio margin parameters for locked margin...')
-    const portfolioData = await makeAuthenticatedRequest(
-      apiKey,
-      apiSecret,
-      '/portfolio-margining/parameters',
-      'GET'
-    )
+    let portfolioData
+    try {
+      console.log('[Kraken API] Trying POST request for /portfolio-margining/parameters')
+      portfolioData = await makeAuthenticatedRequest(
+        apiKey,
+        apiSecret,
+        '/portfolio-margining/parameters',
+        'POST',
+        '{}'
+      )
+    } catch (postError) {
+      console.log('[Kraken API] POST failed, trying GET:', postError)
+      portfolioData = await makeAuthenticatedRequest(
+        apiKey,
+        apiSecret,
+        '/portfolio-margining/parameters',
+        'GET'
+      )
+    }
     console.log('[Kraken API] Portfolio data for locked margin:', JSON.stringify(portfolioData).substring(0, 1000))
 
     const lockedMargins: PerpetualsLockedMargin[] = []
