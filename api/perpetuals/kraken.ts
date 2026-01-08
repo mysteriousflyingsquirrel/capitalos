@@ -327,15 +327,21 @@ async function fetchOpenPositions(
     // Extract flex object (authoritative source)
     const flex = accountsData.result.flex || accountsData.result
 
-    // Extract margin and PnL from flex object
-    const margin = parseFloat(flex.initialMarginWithOrders || flex.initialMargin || '0')
-    const pnl = parseFloat(flex.totalUnrealized || flex.pnl || '0')
+    // Extract holdings and PnL from flex object
+    // Use portfolioValue as holdings/margin value
+    // Use pnl as PnL value
+    const margin = parseFloat(flex.portfolioValue || '0')
+    const pnl = parseFloat(flex.pnl || '0')
 
-    console.log('[Kraken API] Extracted values:', {
+    console.log('[Kraken API] Extracted values from flex:', {
+      portfolioValue: flex.portfolioValue,
+      pnl: flex.pnl,
       margin,
       pnl,
       marginAvailable: flex.availableMargin,
       marginEquity: flex.marginEquity,
+      balanceValue: flex.balanceValue,
+      collateralValue: flex.collateralValue,
     })
 
     // Create a single aggregated "Kraken Futures" position
