@@ -192,7 +192,6 @@ async function fetchOpenPositions(
     if (positionsArray) {
       console.log('[Kraken API] Processing', positionsArray.length, 'positions')
       for (const pos of positionsArray) {
-        const size = parseFloat(pos.size || '0')
         console.log('[Kraken API] Processing position (raw):', JSON.stringify(pos, null, 2))
         console.log('[Kraken API] Position keys:', Object.keys(pos))
         
