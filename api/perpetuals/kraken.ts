@@ -97,25 +97,22 @@ function signKrakenRequest(apiSecret: string, nonce: string, endpoint: string, p
   }
   
   // Kraken Futures API v3 signature message format
-  // Based on typical REST API patterns, try: endpoint + postData (most common)
-  // Some APIs use: nonce + endpoint + postData
-  // For GET requests with no postData, use just: endpoint
+  // The signature must include nonce for proper authentication
+  // Format: nonce + endpoint + postData (standard for nonce-based REST APIs)
   
   let message: string
   if (method === 'GET' || !postData) {
-    // For GET requests, typically just the endpoint path
-    message = endpoint
+    // For GET requests: nonce + endpoint
+    message = nonce + endpoint
   } else {
-    // For POST requests, endpoint + postData (or nonce + endpoint + postData)
-    // Try: endpoint + postData first (most common for REST APIs)
-    message = endpoint + postData
-    // Alternative: nonce + endpoint + postData (uncomment if above doesn't work)
-    // message = nonce + endpoint + postData
+    // For POST requests: nonce + endpoint + postData
+    message = nonce + endpoint + postData
   }
   
   console.log('[Kraken API] Signature message format:', {
     method,
     hasPostData: !!postData,
+    nonce,
     endpoint,
     messageLength: message.length,
     messagePreview: message.substring(0, 200),
@@ -691,7 +688,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    console.log('[Kraken API] Credentials found, fetching data from Kraken Futures API...')
+    console.log('[Kraken API] Credentials found, verifying API key first...')
+    
+    // First, verify the API key using the check endpoint
+    try {
+      console.log('[Kraken API] Testing API key with /api-keys/v3/check endpoint...')
+      const checkData = await makeAuthenticatedRequest(apiKey, apiSecret, '/api-keys/v3/check', 'GET')
+      console.log('[Kraken API] API key check result:', checkData)
+      
+      if (checkData.result === 'error' || checkData.error) {
+        console.error('[Kraken API] API key verification failed:', checkData)
+        return res.status(401).json({
+          success: false,
+          error: `API key authentication failed: ${checkData.error || 'Unknown error'}`,
+          details: checkData,
+        })
+      }
+      
+      console.log('[Kraken API] API key verified successfully:', checkData)
+    } catch (checkError) {
+      console.error('[Kraken API] API key check failed:', checkError)
+      const errorMessage = checkError instanceof Error ? checkError.message : 'Unknown error'
+      return res.status(401).json({
+        success: false,
+        error: `API key verification failed: ${errorMessage}`,
+      })
+    }
+    
+    console.log('[Kraken API] API key verified, fetching data from Kraken Futures API...')
     // Fetch data from Kraken Futures API
     const perpetualsData = await fetchKrakenPerpetualsData(apiKey, apiSecret)
     console.log('[Kraken API] Data fetched:', {
