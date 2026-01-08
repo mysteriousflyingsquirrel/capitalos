@@ -404,31 +404,62 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Refresh prices only
   const refreshPrices = async () => {
-    if (!uid || data.netWorthItems.length === 0) return
+    if (!uid) return
+
+    // Get current state using functional update to ensure we have latest data
+    let currentItems: NetWorthItem[] = []
+    let currentTransactions: NetWorthTransaction[] = []
+    let currentCryptoPrices: Record<string, number> = {}
+    let currentStockPrices: Record<string, number> = {}
+    let currentUsdToChfRate: number | null = null
+
+    setData((prev) => {
+      // Capture current state
+      currentItems = prev.netWorthItems
+      currentTransactions = prev.transactions
+      currentCryptoPrices = prev.cryptoPrices
+      currentStockPrices = prev.stockPrices
+      currentUsdToChfRate = prev.usdToChfRate
+      return prev // No state change, just reading
+    })
+
+    // Check if we have items before proceeding
+    if (currentItems.length === 0) {
+      return
+    }
 
     try {
       const [cryptoData, stockPricesData] = await Promise.all([
-        fetchCryptoPrices(data.netWorthItems),
-        fetchStockPricesData(data.netWorthItems),
+        fetchCryptoPrices(currentItems),
+        fetchStockPricesData(currentItems),
       ])
 
-      const calculationResult = calculateTotals(
-        data.netWorthItems,
-        data.transactions,
-        cryptoData.cryptoPrices,
-        stockPricesData,
-        cryptoData.usdToChfRate
-      )
+      // Use functional update to ensure we're working with latest state
+      setData((prev) => {
+        // Double-check items still exist before updating
+        if (prev.netWorthItems.length === 0) {
+          return prev
+        }
 
-      setData((prev) => ({
-        ...prev,
-        cryptoPrices: cryptoData.cryptoPrices,
-        stockPrices: stockPricesData,
-        usdToChfRate: cryptoData.usdToChfRate,
-        calculationResult,
-      }))
+        const calculationResult = calculateTotals(
+          prev.netWorthItems,
+          prev.transactions,
+          cryptoData.cryptoPrices,
+          stockPricesData,
+          cryptoData.usdToChfRate
+        )
+
+        return {
+          ...prev,
+          cryptoPrices: cryptoData.cryptoPrices,
+          stockPrices: stockPricesData,
+          usdToChfRate: cryptoData.usdToChfRate,
+          calculationResult,
+        }
+      })
     } catch (err) {
       console.error('Error refreshing prices:', err)
+      // Don't update state on error - keep existing data
     }
   }
 
@@ -436,23 +467,55 @@ export function DataProvider({ children }: DataProviderProps) {
   const refreshPerpetuals = async () => {
     if (!uid) return
 
-    try {
-      const itemsWithPerpetuals = await fetchPerpetualsData(data.netWorthItems)
-      const calculationResult = calculateTotals(
-        itemsWithPerpetuals,
-        data.transactions,
-        data.cryptoPrices,
-        data.stockPrices,
-        data.usdToChfRate
-      )
+    // Get current state using functional update to ensure we have latest data
+    let currentItems: NetWorthItem[] = []
+    let currentTransactions: NetWorthTransaction[] = []
+    let currentCryptoPrices: Record<string, number> = {}
+    let currentStockPrices: Record<string, number> = {}
+    let currentUsdToChfRate: number | null = null
 
-      setData((prev) => ({
-        ...prev,
-        netWorthItems: itemsWithPerpetuals,
-        calculationResult,
-      }))
+    setData((prev) => {
+      // Capture current state
+      currentItems = prev.netWorthItems
+      currentTransactions = prev.transactions
+      currentCryptoPrices = prev.cryptoPrices
+      currentStockPrices = prev.stockPrices
+      currentUsdToChfRate = prev.usdToChfRate
+      return prev // No state change, just reading
+    })
+
+    // Check if we have items before proceeding
+    if (currentItems.length === 0) {
+      return
+    }
+
+    try {
+      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems)
+
+      // Use functional update to ensure we're working with latest state
+      setData((prev) => {
+        // Double-check items still exist before updating
+        if (prev.netWorthItems.length === 0) {
+          return prev
+        }
+
+        const calculationResult = calculateTotals(
+          itemsWithPerpetuals,
+          prev.transactions,
+          prev.cryptoPrices,
+          prev.stockPrices,
+          prev.usdToChfRate
+        )
+
+        return {
+          ...prev,
+          netWorthItems: itemsWithPerpetuals,
+          calculationResult,
+        }
+      })
     } catch (err) {
       console.error('Error refreshing Perpetuals data:', err)
+      // Don't update state on error - keep existing data
     }
   }
 
