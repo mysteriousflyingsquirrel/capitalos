@@ -143,7 +143,7 @@ const KRAKEN_ENDPOINTS = {
  * @param endpointPath - FULL endpoint path including base prefix (e.g., /derivatives/api/v3/openpositions or /api/auth/v1/api-keys/v3/check)
  * @param postData - POST body data (empty string for GET requests)
  */
-function signKrakenRequest(apiSecret: string, nonce: string, endpointPath: string, postData: string): string {
+function signKrakenRequest(apiSecret: string, nonce: string, endpointPath: string, data: string): string {
   // Step 1: Base64-decode the API secret
   let secretKey: Buffer
   try {
@@ -152,17 +152,19 @@ function signKrakenRequest(apiSecret: string, nonce: string, endpointPath: strin
     throw new Error('Failed to base64-decode API secret. Ensure the secret is in base64 format.')
   }
   
-  // Step 2: Construct the string to hash
-  // Format: postData + nonce + endpointPath
-  // postData is empty string for GET requests or when no body
-  const postDataForHash = postData || ''
-  const stringToHash = postDataForHash + nonce + endpointPath
+  // Step 2: Remove /derivatives from path for signature (official example does this)
+  const pathForSignature = endpointPath.replace('/derivatives', '')
   
-  // Step 3: SHA-256 hash of the concatenated string
-  const sha256Hash = crypto.createHash('sha256').update(stringToHash).digest()
+  // Step 3: Construct the string to hash
+  // Format: data + nonce + path (with /derivatives removed)
+  // data = queryString + (bodyString ?? "")
+  const stringToHash = data + nonce + pathForSignature
   
-  // Step 4: HMAC-SHA512 using the base64-decoded secret and the SHA256 hash
-  const hmac = crypto.createHmac('sha512', secretKey).update(sha256Hash).digest('base64')
+  // Step 4: SHA-256 hash of the concatenated string (in binary format)
+  const sha256Hash = crypto.createHash('sha256').update(stringToHash).digest('binary')
+  
+  // Step 5: HMAC-SHA512 using the base64-decoded secret and the SHA256 hash (binary)
+  const hmac = crypto.createHmac('sha512', secretKey).update(sha256Hash, 'binary').digest('base64')
   
   return hmac
 }
@@ -207,21 +209,45 @@ async function krakenRequest(
     ? `/derivatives/api/v3${path}`
     : `/api/auth/v1${path}`
 
-  // Build full URL with query params for GET
-  let url = `${baseUrl}${path}`
-  if (endpoint.method === 'GET' && opts?.query) {
-    const queryString = new URLSearchParams(
-      Object.entries(opts.query).map(([k, v]) => [k, String(v)])
+  // Build query string (for GET requests)
+  let queryString = ''
+  if (opts?.query && Object.keys(opts.query).length > 0) {
+    queryString = new URLSearchParams(
+      Object.entries(opts.query).map(([k, v]) => {
+        if (typeof v === 'object') {
+          v = JSON.stringify(v)
+        }
+        return [k, String(v)]
+      })
     ).toString()
-    if (queryString) {
-      url += `?${queryString}`
+  }
+
+  // Build full URL with query params
+  let url = `${baseUrl}${path}`
+  if (queryString) {
+    url += `?${queryString}`
+  }
+
+  // Build body string (URL-encoded for POST requests, matching official example)
+  let bodyString: string | null = null
+  if (endpoint.method === 'POST' && opts?.body) {
+    if (typeof opts.body === 'string') {
+      bodyString = opts.body
+    } else {
+      // URL-encode body params (matching official example format)
+      bodyString = new URLSearchParams(
+        Object.entries(opts.body).map(([k, v]) => {
+          if (typeof v === 'object') {
+            v = JSON.stringify(v)
+          }
+          return [k, String(v)]
+        })
+      ).toString()
     }
   }
 
-  // Prepare postData for signature and body
-  const postData = endpoint.method === 'POST' && opts?.body 
-    ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body))
-    : ''
+  // Data for signature: queryString + (bodyString ?? "")
+  const dataForSignature = queryString + (bodyString ?? '')
 
   // Generate nonce
   const nonce = Date.now().toString()
@@ -231,15 +257,15 @@ async function krakenRequest(
 
   // Add authentication headers if private endpoint
   if (endpoint.isPrivate) {
-    const signature = signKrakenRequest(apiSecret, nonce, endpointPath, postData)
+    const signature = signKrakenRequest(apiSecret, nonce, endpointPath, dataForSignature)
     headers['APIKey'] = apiKey
     headers['Nonce'] = nonce
     headers['Authent'] = signature
   }
 
   // Add Content-Type for POST requests
-  if (endpoint.method === 'POST') {
-    headers['Content-Type'] = 'application/json'
+  if (endpoint.method === 'POST' && bodyString) {
+    headers['Content-Type'] = 'application/x-www-form-urlencoded'
   }
 
   // Logging - immediately reveals routing issues
@@ -253,7 +279,7 @@ async function krakenRequest(
     const response = await fetch(url, {
       method: endpoint.method,
       headers,
-      body: endpoint.method === 'POST' && postData ? postData : undefined,
+      body: endpoint.method === 'POST' && bodyString ? bodyString : undefined,
     })
 
     if (!response.ok) {
