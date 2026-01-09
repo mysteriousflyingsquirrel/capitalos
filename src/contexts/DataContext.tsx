@@ -13,7 +13,8 @@ import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
-import { getKrakenFuturesWsClient } from '../services/krakenFuturesWs'
+import { KrakenFuturesWs, type KrakenWsState } from '../services/krakenFuturesWs'
+import type { PerpetualsData } from '../pages/NetWorth'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
 import type { InflowItem, OutflowItem } from '../pages/Cashflow'
@@ -72,6 +73,7 @@ export function DataProvider({ children }: DataProviderProps) {
   
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [krakenWsState, setKrakenWsState] = useState<KrakenWsState | null>(null)
 
   // Load all Firebase data
   const loadFirebaseData = async (): Promise<{
@@ -148,6 +150,52 @@ export function DataProvider({ children }: DataProviderProps) {
     }
   }
 
+  // Convert Kraken WebSocket state to PerpetualsData format
+  const convertKrakenWsStateToPerpetualsData = (wsState: KrakenWsState): PerpetualsData => {
+    const positions: import('../pages/NetWorth').PerpetualsOpenPosition[] = (wsState.positions || []).map((pos, index) => ({
+      id: `kraken-${pos.instrument}-${index}`,
+      ticker: pos.instrument,
+      margin: pos.initialMargin || 0,
+      pnl: pos.pnl || 0,
+      platform: 'Kraken',
+    }))
+
+    // Map balances to available/locked margin
+    const availableMargin: import('../pages/NetWorth').PerpetualsAvailableMargin[] = []
+    const lockedMargin: import('../pages/NetWorth').PerpetualsLockedMargin[] = []
+
+    if (wsState.balances) {
+      const balances = wsState.balances
+      const unit = balances.currency || 'USD'
+      
+      // Available margin
+      if (balances.availableMargin !== undefined && balances.availableMargin !== null) {
+        availableMargin.push({
+          id: 'kraken-available',
+          asset: unit,
+          margin: balances.availableMargin,
+          platform: 'Kraken',
+        })
+      }
+
+      // Locked margin (initial margin)
+      if (balances.initialMargin !== undefined && balances.initialMargin !== null) {
+        lockedMargin.push({
+          id: 'kraken-locked',
+          asset: unit,
+          margin: balances.initialMargin,
+          platform: 'Kraken',
+        })
+      }
+    }
+
+    return {
+      openPositions: positions,
+      availableMargin,
+      lockedMargin,
+    }
+  }
+
   // Fetch Aster Perpetuals data
   const fetchPerpetualsData = async (items: NetWorthItem[]): Promise<NetWorthItem[]> => {
     console.log('[DataContext] fetchPerpetualsData called:', {
@@ -178,10 +226,9 @@ export function DataProvider({ children }: DataProviderProps) {
       ])
       
       // Get Kraken data from WebSocket (only source)
-      const wsClient = getKrakenFuturesWsClient()
-      const wsState = wsClient.getState()
-      const finalKrakenData = wsState.connectionStatus === 'subscribed' 
-        ? wsClient.toPerpetualsData() 
+      // Convert current WebSocket state to PerpetualsData format
+      const finalKrakenData = krakenWsState && krakenWsState.status === 'subscribed'
+        ? convertKrakenWsStateToPerpetualsData(krakenWsState)
         : null
 
       console.log('[DataContext] Fetch results:', {
@@ -194,7 +241,7 @@ export function DataProvider({ children }: DataProviderProps) {
         hyperliquidLockedMargin: hyperliquidData?.lockedMargin?.length || 0,
         hyperliquidAvailableMargin: hyperliquidData?.availableMargin?.length || 0,
         krakenData: !!finalKrakenData,
-        krakenWsStatus: wsState.connectionStatus,
+        krakenWsStatus: krakenWsState?.status || 'disconnected',
         krakenDataType: finalKrakenData ? typeof finalKrakenData : 'null',
         krakenPositions: finalKrakenData?.openPositions?.length || 0,
         krakenOrders: finalKrakenData?.openOrders?.length || 0,
@@ -567,101 +614,89 @@ export function DataProvider({ children }: DataProviderProps) {
   useEffect(() => {
     if (!uid || !krakenApiKey || !krakenApiSecretKey) {
       // Disconnect if credentials are not available
-      const wsClient = getKrakenFuturesWsClient()
-      wsClient.disconnect()
+      setKrakenWsState({ status: 'disconnected' })
       return
     }
 
-    const wsClient = getKrakenFuturesWsClient()
-    
-    // Connect to WebSocket
-    wsClient.connect(krakenApiKey, krakenApiSecretKey).catch((error) => {
-      console.error('[DataContext] Failed to connect Kraken WS:', error)
-    })
+    // Create WebSocket instance with onState callback
+    const ws = new KrakenFuturesWs({
+      apiKey: krakenApiKey,
+      apiSecret: krakenApiSecretKey,
+      onState: (state) => {
+        // Store WebSocket state
+        setKrakenWsState(state)
 
-    // Subscribe to WebSocket updates
-    const unsubscribe = wsClient.onUpdate((wsState) => {
-      // Update when subscribed (even if positions are empty - user may have closed all positions)
-      if (wsState.connectionStatus === 'subscribed') {
-        // Convert WS state to PerpetualsData and merge with existing data
-        const wsPerpetualsData = wsClient.toPerpetualsData()
-        
-        // Subscribe to ticker for open positions (optional)
-        if (wsState.positions.length > 0) {
-          // Extract product IDs from instruments (e.g., "PI_XBTUSD" from "PI_XBTUSD")
-          const productIds = wsState.positions
-            .map((pos) => pos.instrument)
-            .filter((id, index, arr) => arr.indexOf(id) === index) // unique
-          if (productIds.length > 0) {
-            wsClient.subscribeToTicker(productIds)
-          }
-        }
-        
-        // Update state with WebSocket data
-        setData((prev) => {
-          const perpetualsItem = prev.netWorthItems.find((item) => item.category === 'Perpetuals')
-          if (!perpetualsItem) {
-            return prev
-          }
-
-          // Merge WebSocket data with existing perpetuals data
-          const existingData = perpetualsItem.perpetualsData || {
-            openPositions: [],
-            availableMargin: [],
-            lockedMargin: [],
-          }
-
-          // Filter out old Kraken positions and add new ones from WS
-          const nonKrakenPositions = existingData.openPositions.filter(
-            (pos) => pos.platform !== 'Kraken'
-          )
-          const nonKrakenAvailableMargin = existingData.availableMargin.filter(
-            (m) => m.platform !== 'Kraken'
-          )
-          const nonKrakenLockedMargin = existingData.lockedMargin.filter(
-            (m) => m.platform !== 'Kraken'
-          )
-
-          const mergedPerpetualsData = {
-            openPositions: [...nonKrakenPositions, ...wsPerpetualsData.openPositions],
-            availableMargin: [...nonKrakenAvailableMargin, ...wsPerpetualsData.availableMargin],
-            lockedMargin: [...nonKrakenLockedMargin, ...wsPerpetualsData.lockedMargin],
-            openOrders: existingData.openOrders || [], // Keep existing orders
-          }
-
-          const updatedItems = prev.netWorthItems.map((item) => {
-            if (item.category === 'Perpetuals') {
-              return {
-                ...item,
-                perpetualsData: mergedPerpetualsData,
-              }
+        // Update app state when subscribed and we have data
+        if (state.status === 'subscribed' && (state.positions || state.balances)) {
+          const wsPerpetualsData = convertKrakenWsStateToPerpetualsData(state)
+          
+          // Update state with WebSocket data
+          setData((prev) => {
+            const perpetualsItem = prev.netWorthItems.find((item) => item.category === 'Perpetuals')
+            if (!perpetualsItem) {
+              return prev
             }
-            return item
+
+            // Merge WebSocket data with existing perpetuals data
+            const existingData = perpetualsItem.perpetualsData || {
+              openPositions: [],
+              availableMargin: [],
+              lockedMargin: [],
+            }
+
+            // Filter out old Kraken positions and add new ones from WS
+            const nonKrakenPositions = existingData.openPositions.filter(
+              (pos) => pos.platform !== 'Kraken'
+            )
+            const nonKrakenAvailableMargin = existingData.availableMargin.filter(
+              (m) => m.platform !== 'Kraken'
+            )
+            const nonKrakenLockedMargin = existingData.lockedMargin.filter(
+              (m) => m.platform !== 'Kraken'
+            )
+
+            const mergedPerpetualsData = {
+              openPositions: [...nonKrakenPositions, ...wsPerpetualsData.openPositions],
+              availableMargin: [...nonKrakenAvailableMargin, ...wsPerpetualsData.availableMargin],
+              lockedMargin: [...nonKrakenLockedMargin, ...wsPerpetualsData.lockedMargin],
+              openOrders: existingData.openOrders || [], // Keep existing orders
+            }
+
+            const updatedItems = prev.netWorthItems.map((item) => {
+              if (item.category === 'Perpetuals') {
+                return {
+                  ...item,
+                  perpetualsData: mergedPerpetualsData,
+                }
+              }
+              return item
+            })
+
+            // Recalculate totals with updated data
+            const calculationResult = calculateTotals(
+              updatedItems,
+              prev.transactions,
+              prev.cryptoPrices,
+              prev.stockPrices,
+              prev.usdToChfRate
+            )
+
+            return {
+              ...prev,
+              netWorthItems: updatedItems,
+              calculationResult,
+            }
           })
-
-          // Recalculate totals with updated data
-          const calculationResult = calculateTotals(
-            updatedItems,
-            prev.transactions,
-            prev.cryptoPrices,
-            prev.stockPrices,
-            prev.usdToChfRate
-          )
-
-          return {
-            ...prev,
-            netWorthItems: updatedItems,
-            calculationResult,
-          }
-        })
-      }
+        }
+      },
     })
+
+    // Connect to WebSocket
+    ws.connect()
 
     // Cleanup on unmount or when credentials change
     return () => {
-      unsubscribe()
-      // Don't disconnect on cleanup - let it stay connected while app is running
-      // wsClient.disconnect()
+      ws.disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, krakenApiKey, krakenApiSecretKey])

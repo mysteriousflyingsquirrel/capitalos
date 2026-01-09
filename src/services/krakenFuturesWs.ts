@@ -1,22 +1,14 @@
 /**
- * Kraken Futures WebSocket Client
+ * Kraken Futures WebSocket Service
  * 
- * Implements WebSocket connection to wss://futures.kraken.com/ws/v1
- * with authentication flow and subscriptions for:
- * - open_positions (private)
- * - balances (private)
- * - ticker (public, optional)
+ * Client-side WebSocket service for streaming positions, margin, and PnL.
+ * Runs in the browser (React app), not in Vercel serverless.
+ * 
+ * WebSocket endpoint: wss://futures.kraken.com/ws/v1
  */
 
-// WebSocket state types
-export type KrakenWsConnectionStatus = 
-  | 'disconnected' 
-  | 'connecting' 
-  | 'authenticated' 
-  | 'subscribed' 
-  | 'error'
-
-export interface KrakenWsPosition {
+// Normalized types for positions and balances
+export type KrakenOpenPosition = {
   instrument: string
   balance: number
   entryPrice?: number
@@ -27,21 +19,25 @@ export interface KrakenWsPosition {
   initialMarginWithOrders?: number
 }
 
-export interface KrakenWsBalances {
+export type KrakenBalances = {
+  currency?: string
+  balance?: number
   portfolioValue?: number
+  collateralValue?: number
+  availableMargin?: number
   initialMargin?: number
   maintenanceMargin?: number
-  available?: number
   pnl?: number
   unrealizedFunding?: number
-  unit?: string
+  totalUnrealized?: number
+  marginEquity?: number
 }
 
-export interface KrakenWsState {
-  balances: KrakenWsBalances | null
-  positions: KrakenWsPosition[]
-  lastUpdateTs: number
-  connectionStatus: KrakenWsConnectionStatus
+export type KrakenWsState = {
+  status: 'disconnected' | 'connecting' | 'challenged' | 'subscribed' | 'error'
+  lastUpdateTs?: number
+  balances?: KrakenBalances
+  positions?: KrakenOpenPosition[]
   error?: string
 }
 
@@ -80,21 +76,18 @@ interface OpenPositionsMessage extends WsMessage {
 interface BalancesMessage extends WsMessage {
   feed: 'balances'
   data?: {
+    currency?: string
+    balance?: number
     portfolio_value?: number
+    collateral_value?: number
+    available?: number
     initial_margin?: number
     maintenance_margin?: number
-    available?: number
     pnl?: number
     unrealized_funding?: number
-    unit?: string
+    total_unrealized?: number
+    margin_equity?: number
   }
-}
-
-interface TickerMessage extends WsMessage {
-  feed: 'ticker'
-  product_id?: string
-  price?: number
-  [key: string]: any
 }
 
 /**
@@ -102,7 +95,7 @@ interface TickerMessage extends WsMessage {
  * Algorithm: sha256(challenge) → bytes, base64-decode api_secret → bytes,
  * hmac_sha512(secretBytes, sha256Bytes) → bytes, base64-encode output → string
  */
-export async function signWsChallenge(challenge: string, apiSecretBase64: string): Promise<string> {
+async function signWsChallenge(challenge: string, apiSecretBase64: string): Promise<string> {
   // Step 1: SHA256 of challenge
   const challengeBytes = new TextEncoder().encode(challenge)
   const sha256HashBuffer = await crypto.subtle.digest('SHA-256', challengeBytes)
@@ -129,19 +122,21 @@ export async function signWsChallenge(challenge: string, apiSecretBase64: string
 }
 
 /**
- * Kraken Futures WebSocket Client
+ * Kraken Futures WebSocket Service
+ * 
+ * Owns WebSocket lifecycle:
+ * - connect → challenge → sign challenge → subscribe → parse → update store
+ * - reconnect with backoff
+ * - Produces live stream of positions and balances
  */
-export class KrakenFuturesWsClient {
+export class KrakenFuturesWs {
   private ws: WebSocket | null = null
-  private apiKey: string = ''
-  private apiSecret: string = ''
+  private apiKey: string
+  private apiSecret: string // base64
+  private onState: (state: KrakenWsState) => void
   private state: KrakenWsState = {
-    balances: null,
-    positions: [],
-    lastUpdateTs: 0,
-    connectionStatus: 'disconnected',
+    status: 'disconnected',
   }
-  private listeners: Set<(state: KrakenWsState) => void> = new Set()
   private reconnectAttempts = 0
   private maxReconnectAttempts = 10
   private reconnectDelay = 1000 // Start with 1 second
@@ -151,45 +146,47 @@ export class KrakenFuturesWsClient {
   private subscribedFeeds: Set<string> = new Set()
   private isIntentionallyDisconnected = false
 
-  constructor() {
-    // Constructor is intentionally minimal
+  constructor(args: {
+    apiKey: string
+    apiSecret: string // base64
+    onState: (s: KrakenWsState) => void
+  }) {
+    this.apiKey = args.apiKey
+    this.apiSecret = args.apiSecret
+    this.onState = args.onState
   }
 
   /**
-   * Connect to Kraken Futures WebSocket
+   * Connect to WebSocket
    */
-  async connect(apiKey: string, apiSecret: string): Promise<void> {
+  connect(): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[KrakenWS] Already connected')
+      console.log('[KrakenFuturesWs] Already connected')
       return
     }
 
-    this.apiKey = apiKey
-    this.apiSecret = apiSecret
     this.isIntentionallyDisconnected = false
-    this.updateState({ connectionStatus: 'connecting' })
+    this.updateState({ status: 'connecting' })
 
-    try {
-      await this.connectInternal()
-    } catch (error) {
-      console.error('[KrakenWS] Connection failed:', error)
+    this.connectInternal().catch((error) => {
+      console.error('[KrakenFuturesWs] Connection failed:', error)
       this.updateState({
-        connectionStatus: 'error',
+        status: 'error',
         error: error instanceof Error ? error.message : 'Connection failed',
       })
       this.scheduleReconnect()
-    }
+    })
   }
 
   private async connectInternal(): Promise<void> {
     return new Promise((resolve, reject) => {
       const wsUrl = 'wss://futures.kraken.com/ws/v1'
-      console.log('[KrakenWS] Connecting to', wsUrl)
+      console.log('[KrakenFuturesWs] Connecting to', wsUrl)
 
       this.ws = new WebSocket(wsUrl)
 
       this.ws.onopen = async () => {
-        console.log('[KrakenWS] WebSocket opened')
+        console.log('[KrakenFuturesWs] WebSocket opened')
         this.reconnectAttempts = 0
         this.reconnectDelay = 1000
 
@@ -207,30 +204,30 @@ export class KrakenFuturesWsClient {
           const message: WsMessage = JSON.parse(event.data)
           this.handleMessage(message)
         } catch (error) {
-          console.error('[KrakenWS] Failed to parse message:', error, event.data)
+          console.error('[KrakenFuturesWs] Failed to parse message:', error, event.data)
         }
       }
 
       this.ws.onerror = (error) => {
-        console.error('[KrakenWS] WebSocket error:', error)
+        console.error('[KrakenFuturesWs] WebSocket error:', error)
         this.updateState({
-          connectionStatus: 'error',
+          status: 'error',
           error: 'WebSocket error occurred',
         })
         reject(error)
       }
 
       this.ws.onclose = (event) => {
-        console.log('[KrakenWS] WebSocket closed', { code: event.code, reason: event.reason })
+        console.log('[KrakenFuturesWs] WebSocket closed', { code: event.code, reason: event.reason })
         this.ws = null
         this.challenge = null
         this.subscribedFeeds.clear()
 
         if (!this.isIntentionallyDisconnected) {
-          this.updateState({ connectionStatus: 'disconnected' })
+          this.updateState({ status: 'disconnected' })
           this.scheduleReconnect()
         } else {
-          this.updateState({ connectionStatus: 'disconnected' })
+          this.updateState({ status: 'disconnected' })
         }
       }
     })
@@ -246,31 +243,32 @@ export class KrakenFuturesWsClient {
       api_key: this.apiKey,
     }
 
-    console.log('[KrakenWS] Requesting challenge...')
+    console.log('[KrakenFuturesWs] Requesting challenge...')
     this.ws.send(JSON.stringify(challengeRequest))
   }
 
   private async handleMessage(message: WsMessage): Promise<void> {
-    console.log('[KrakenWS] Received message:', message)
+    console.log('[KrakenFuturesWs] Received message:', message)
 
     // Handle challenge response
     if (message.event === 'challenge' && message.message) {
       const challengeResponse = message as ChallengeResponse
       this.challenge = challengeResponse.message
-      console.log('[KrakenWS] Challenge received:', this.challenge)
+      console.log('[KrakenFuturesWs] Challenge received:', this.challenge)
+
+      this.updateState({ status: 'challenged' })
 
       try {
         // Step B: Sign challenge
         const signedChallenge = await signWsChallenge(this.challenge, this.apiSecret)
-        console.log('[KrakenWS] Challenge signed')
+        console.log('[KrakenFuturesWs] Challenge signed')
 
         // Step C: Subscribe to feeds
-        this.updateState({ connectionStatus: 'authenticated' })
         await this.subscribeToFeeds(signedChallenge)
       } catch (error) {
-        console.error('[KrakenWS] Failed to sign challenge or subscribe:', error)
+        console.error('[KrakenFuturesWs] Failed to sign challenge or subscribe:', error)
         this.updateState({
-          connectionStatus: 'error',
+          status: 'error',
           error: error instanceof Error ? error.message : 'Authentication failed',
         })
       }
@@ -280,12 +278,12 @@ export class KrakenFuturesWsClient {
     // Handle subscription confirmation
     if (message.event === 'subscribed') {
       const subscribeResponse = message as SubscribeResponse
-      console.log('[KrakenWS] Subscribed to feed:', subscribeResponse.feed)
+      console.log('[KrakenFuturesWs] Subscribed to feed:', subscribeResponse.feed)
       this.subscribedFeeds.add(subscribeResponse.feed)
       
       if (this.subscribedFeeds.size >= 2) {
         // Both open_positions and balances are subscribed
-        this.updateState({ connectionStatus: 'subscribed' })
+        this.updateState({ status: 'subscribed' })
         this.startKeepAlive()
       }
       return
@@ -295,7 +293,7 @@ export class KrakenFuturesWsClient {
     if (message.feed === 'open_positions') {
       const positionsMessage = message as OpenPositionsMessage
       if (positionsMessage.data) {
-        const positions: KrakenWsPosition[] = positionsMessage.data.map((pos) => ({
+        const positions: KrakenOpenPosition[] = positionsMessage.data.map((pos) => ({
           instrument: pos.instrument,
           balance: pos.balance,
           entryPrice: pos.entry_price,
@@ -317,14 +315,18 @@ export class KrakenFuturesWsClient {
     if (message.feed === 'balances') {
       const balancesMessage = message as BalancesMessage
       if (balancesMessage.data) {
-        const balances: KrakenWsBalances = {
+        const balances: KrakenBalances = {
+          currency: balancesMessage.data.currency,
+          balance: balancesMessage.data.balance,
           portfolioValue: balancesMessage.data.portfolio_value,
+          collateralValue: balancesMessage.data.collateral_value,
+          availableMargin: balancesMessage.data.available, // WS sends 'available' field
           initialMargin: balancesMessage.data.initial_margin,
           maintenanceMargin: balancesMessage.data.maintenance_margin,
-          available: balancesMessage.data.available,
           pnl: balancesMessage.data.pnl,
           unrealizedFunding: balancesMessage.data.unrealized_funding,
-          unit: balancesMessage.data.unit,
+          totalUnrealized: balancesMessage.data.total_unrealized,
+          marginEquity: balancesMessage.data.margin_equity,
         }
         this.updateState({
           balances,
@@ -334,19 +336,11 @@ export class KrakenFuturesWsClient {
       return
     }
 
-    // Handle ticker feed (optional)
-    if (message.feed === 'ticker') {
-      // Ticker updates can be used for real-time price updates
-      // For now, we'll just log them
-      console.log('[KrakenWS] Ticker update:', message)
-      return
-    }
-
     // Handle error messages
     if (message.event === 'error' || message.error) {
-      console.error('[KrakenWS] Error message:', message)
+      console.error('[KrakenFuturesWs] Error message:', message)
       this.updateState({
-        connectionStatus: 'error',
+        status: 'error',
         error: message.error || message.message || 'Unknown error',
       })
       return
@@ -366,7 +360,7 @@ export class KrakenFuturesWsClient {
       original_challenge: this.challenge,
       signed_challenge: signedChallenge,
     }
-    console.log('[KrakenWS] Subscribing to open_positions...')
+    console.log('[KrakenFuturesWs] Subscribing to open_positions...')
     this.ws.send(JSON.stringify(openPositionsSubscribe))
 
     // Subscribe to balances
@@ -377,29 +371,8 @@ export class KrakenFuturesWsClient {
       original_challenge: this.challenge,
       signed_challenge: signedChallenge,
     }
-    console.log('[KrakenWS] Subscribing to balances...')
+    console.log('[KrakenFuturesWs] Subscribing to balances...')
     this.ws.send(JSON.stringify(balancesSubscribe))
-
-    // Optionally subscribe to ticker for open positions
-    // We'll do this after we receive positions
-  }
-
-  /**
-   * Subscribe to ticker feed for specific product IDs (public, no auth needed)
-   */
-  subscribeToTicker(productIds: string[]): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[KrakenWS] Cannot subscribe to ticker: WebSocket not open')
-      return
-    }
-
-    const tickerSubscribe = {
-      event: 'subscribe',
-      feed: 'ticker',
-      product_ids: productIds,
-    }
-    console.log('[KrakenWS] Subscribing to ticker for:', productIds)
-    this.ws.send(JSON.stringify(tickerSubscribe))
   }
 
   private startKeepAlive(): void {
@@ -414,7 +387,7 @@ export class KrakenFuturesWsClient {
         // WebSocket ping frame (if supported by browser)
         // Some browsers don't expose ping, so we'll rely on the connection staying alive
         // and reconnect on close
-        console.log('[KrakenWS] Keep-alive check')
+        console.log('[KrakenFuturesWs] Keep-alive check')
       }
     }, 50000)
   }
@@ -425,9 +398,9 @@ export class KrakenFuturesWsClient {
     }
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('[KrakenWS] Max reconnect attempts reached')
+      console.error('[KrakenFuturesWs] Max reconnect attempts reached')
       this.updateState({
-        connectionStatus: 'error',
+        status: 'error',
         error: 'Max reconnect attempts reached',
       })
       return
@@ -435,13 +408,13 @@ export class KrakenFuturesWsClient {
 
     this.reconnectAttempts++
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 60000) // Max 60s
-    console.log(`[KrakenWS] Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`)
+    console.log(`[KrakenFuturesWs] Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`)
 
     this.reconnectTimer = setTimeout(() => {
       if (!this.isIntentionallyDisconnected) {
-        console.log(`[KrakenWS] Reconnecting (attempt ${this.reconnectAttempts})...`)
+        console.log(`[KrakenFuturesWs] Reconnecting (attempt ${this.reconnectAttempts})...`)
         this.connectInternal().catch((error) => {
-          console.error('[KrakenWS] Reconnect failed:', error)
+          console.error('[KrakenFuturesWs] Reconnect failed:', error)
           this.scheduleReconnect()
         })
       }
@@ -471,102 +444,24 @@ export class KrakenFuturesWsClient {
 
     this.challenge = null
     this.subscribedFeeds.clear()
-    this.updateState({ connectionStatus: 'disconnected' })
-  }
-
-  /**
-   * Get current state
-   */
-  getState(): KrakenWsState {
-    return { ...this.state }
-  }
-
-  /**
-   * Subscribe to state updates
-   */
-  onUpdate(callback: (state: KrakenWsState) => void): () => void {
-    this.listeners.add(callback)
-    // Immediately call with current state
-    callback(this.getState())
-    
-    // Return unsubscribe function
-    return () => {
-      this.listeners.delete(callback)
-    }
+    this.updateState({ status: 'disconnected' })
   }
 
   private updateState(updates: Partial<KrakenWsState>): void {
     this.state = { ...this.state, ...updates }
     
-    // Notify all listeners
-    const state = this.getState()
-    this.listeners.forEach((callback) => {
-      try {
-        callback(state)
-      } catch (error) {
-        console.error('[KrakenWS] Error in state update callback:', error)
-      }
-    })
+    // Notify callback
+    try {
+      this.onState({ ...this.state })
+    } catch (error) {
+      console.error('[KrakenFuturesWs] Error in state update callback:', error)
+    }
   }
 
   /**
-   * Convert WebSocket state to PerpetualsData format
+   * Get current state (for external access)
    */
-  toPerpetualsData(): import('../pages/NetWorth').PerpetualsData {
-    const positions: import('../pages/NetWorth').PerpetualsOpenPosition[] = this.state.positions.map((pos, index) => ({
-      id: `kraken-${pos.instrument}-${index}`,
-      ticker: pos.instrument,
-      margin: pos.initialMargin || 0,
-      pnl: pos.pnl || 0,
-      platform: 'Kraken',
-    }))
-
-    // Map balances to available/locked margin
-    const availableMargin: import('../pages/NetWorth').PerpetualsAvailableMargin[] = []
-    const lockedMargin: import('../pages/NetWorth').PerpetualsLockedMargin[] = []
-
-    if (this.state.balances) {
-      const balances = this.state.balances
-      const unit = balances.unit || 'USD'
-      
-      // Available margin
-      if (balances.available !== undefined && balances.available !== null) {
-        availableMargin.push({
-          id: 'kraken-available',
-          asset: unit,
-          margin: balances.available,
-          platform: 'Kraken',
-        })
-      }
-
-      // Locked margin (initial margin)
-      if (balances.initialMargin !== undefined && balances.initialMargin !== null) {
-        lockedMargin.push({
-          id: 'kraken-locked',
-          asset: unit,
-          margin: balances.initialMargin,
-          platform: 'Kraken',
-        })
-      }
-    }
-
-    return {
-      openPositions: positions,
-      availableMargin,
-      lockedMargin,
-    }
+  getState(): KrakenWsState {
+    return { ...this.state }
   }
-}
-
-// Singleton instance
-let wsClientInstance: KrakenFuturesWsClient | null = null
-
-/**
- * Get or create the singleton WebSocket client instance
- */
-export function getKrakenFuturesWsClient(): KrakenFuturesWsClient {
-  if (!wsClientInstance) {
-    wsClientInstance = new KrakenFuturesWsClient()
-  }
-  return wsClientInstance
 }
