@@ -600,13 +600,29 @@ export function DataProvider({ children }: DataProviderProps) {
   // Note: convert function dependency is handled within calculateTotals
   // We recalculate when data changes, not when convert changes, since convert is stable
 
+  // Unified refresh function: fetch exchange prices -> fetch crypto prices -> fetch perpetuals data -> update frontend
+  const refreshAllData = async () => {
+    if (!uid) return
+
+    try {
+      // Step 1: Fetch exchange prices (USD→CHF rate) and crypto prices
+      await refreshPrices()
+      
+      // Step 2: Fetch perpetuals data (reads from WebSocket state for Kraken)
+      await refreshPerpetuals()
+      
+      // Frontend is updated automatically by the refresh functions above
+    } catch (err) {
+      console.error('Error in periodic refresh:', err)
+    }
+  }
+
   // Set up periodic refresh (every 5 minutes)
   useEffect(() => {
     if (!uid || loading) return
 
     const interval = setInterval(() => {
-      refreshPrices()
-      refreshPerpetuals()
+      refreshAllData()
     }, 5 * 60 * 1000) // 5 minutes
 
     return () => clearInterval(interval)
@@ -621,75 +637,14 @@ export function DataProvider({ children }: DataProviderProps) {
     }
 
     // Create WebSocket instance with onState callback
+    // WebSocket only stores state - UI updates happen every 5 minutes via refreshAllData
     const ws = new KrakenFuturesWs({
       apiKey: krakenApiKey,
       apiSecret: krakenApiSecretKey,
       onState: (state) => {
-        // Store WebSocket state
+        // Only store WebSocket state - do NOT trigger UI updates
+        // UI will be updated every 5 minutes via the periodic refresh cycle
         setKrakenWsState(state)
-
-        // Update app state when subscribed and we have data
-        if (state.status === 'subscribed' && (state.positions || state.balances)) {
-          const wsPerpetualsData = convertKrakenWsStateToPerpetualsData(state)
-          
-          // Update state with WebSocket data
-          setData((prev) => {
-            const perpetualsItem = prev.netWorthItems.find((item) => item.category === 'Perpetuals')
-            if (!perpetualsItem) {
-              return prev
-            }
-
-            // Merge WebSocket data with existing perpetuals data
-            const existingData = perpetualsItem.perpetualsData || {
-              openPositions: [],
-              availableMargin: [],
-              lockedMargin: [],
-            }
-
-            // Filter out old Kraken positions and add new ones from WS
-            const nonKrakenPositions = existingData.openPositions.filter(
-              (pos) => pos.platform !== 'Kraken'
-            )
-            const nonKrakenAvailableMargin = existingData.availableMargin.filter(
-              (m) => m.platform !== 'Kraken'
-            )
-            const nonKrakenLockedMargin = existingData.lockedMargin.filter(
-              (m) => m.platform !== 'Kraken'
-            )
-
-            const mergedPerpetualsData = {
-              openPositions: [...nonKrakenPositions, ...wsPerpetualsData.openPositions],
-              availableMargin: [...nonKrakenAvailableMargin, ...wsPerpetualsData.availableMargin],
-              lockedMargin: [...nonKrakenLockedMargin, ...wsPerpetualsData.lockedMargin],
-              openOrders: existingData.openOrders || [], // Keep existing orders
-            }
-
-            const updatedItems = prev.netWorthItems.map((item) => {
-              if (item.category === 'Perpetuals') {
-                return {
-                  ...item,
-                  perpetualsData: mergedPerpetualsData,
-                }
-              }
-              return item
-            })
-
-            // Recalculate totals with updated data
-            const calculationResult = calculateTotals(
-              updatedItems,
-              prev.transactions,
-              prev.cryptoPrices,
-              prev.stockPrices,
-              prev.usdToChfRate
-            )
-
-            return {
-              ...prev,
-              netWorthItems: updatedItems,
-              calculationResult,
-            }
-          })
-        }
       },
     })
 
