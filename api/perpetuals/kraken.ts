@@ -619,6 +619,19 @@ async function fetchKrakenPerpetualsData(
   }
 }
 
+/**
+ * Kraken Futures REST API Handler
+ * 
+ * @deprecated This REST endpoint is deprecated in favor of WebSocket client (krakenFuturesWs.ts).
+ * The WebSocket client provides real-time updates and is the preferred method.
+ * This endpoint is kept for fallback/debugging purposes only.
+ * 
+ * The WebSocket client should be used instead:
+ * - Real-time position and balance updates
+ * - Lower latency
+ * - More efficient (no polling needed)
+ * - Better user experience
+ */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('[Kraken API] Handler called', { method: req.method, query: req.query })
   

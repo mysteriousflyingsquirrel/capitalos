@@ -1,7 +1,12 @@
 import type { PerpetualsData } from '../pages/NetWorth'
 
 /**
- * Fetches Perpetuals data from Kraken Futures API
+ * Fetches Perpetuals data from Kraken Futures API via REST
+ * 
+ * @deprecated This REST endpoint is deprecated in favor of WebSocket client (krakenFuturesWs.ts).
+ * This function is kept for fallback/debugging purposes only.
+ * The WebSocket client provides real-time updates and is the preferred method.
+ * 
  * @param uid - User ID
  * @returns Perpetuals data or null if error/not configured
  */

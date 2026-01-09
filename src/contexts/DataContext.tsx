@@ -14,6 +14,7 @@ import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
 import { fetchKrakenPerpetualsData } from '../services/krakenService'
+import { getKrakenFuturesWsClient } from '../services/krakenFuturesWs'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
 import type { InflowItem, OutflowItem } from '../pages/Cashflow'
@@ -56,7 +57,7 @@ interface DataProviderProps {
 export function DataProvider({ children }: DataProviderProps) {
   const { uid } = useAuth()
   const { convert } = useCurrency()
-  const { rapidApiKey } = useApiKeys()
+  const { rapidApiKey, krakenApiKey, krakenApiSecretKey } = useApiKeys()
   
   const [data, setData] = useState<AppData>({
     netWorthItems: [],
@@ -171,12 +172,23 @@ export function DataProvider({ children }: DataProviderProps) {
     try {
       console.log('[DataContext] Fetching Aster, Hyperliquid, and Kraken data...')
       
-      // Fetch Aster, Hyperliquid, and Kraken data in parallel
+      // Fetch Aster and Hyperliquid data (Kraken now uses WebSocket)
+      // Only fetch Kraken via REST if WebSocket is not connected
+      const wsClient = getKrakenFuturesWsClient()
+      const wsState = wsClient.getState()
+      const useKrakenRest = wsState.connectionStatus !== 'subscribed'
+      
       const [asterData, hyperliquidData, krakenData] = await Promise.all([
         fetchAsterPerpetualsData(uid),
         fetchHyperliquidPerpetualsData(uid),
-        fetchKrakenPerpetualsData(uid),
+        useKrakenRest ? fetchKrakenPerpetualsData(uid) : Promise.resolve(null),
       ])
+      
+      // If WebSocket is connected, use WS data instead of REST
+      let finalKrakenData = krakenData
+      if (!useKrakenRest && wsState.connectionStatus === 'subscribed') {
+        finalKrakenData = wsClient.toPerpetualsData()
+      }
 
       console.log('[DataContext] Fetch results:', {
         asterData: !!asterData,
@@ -221,16 +233,16 @@ export function DataProvider({ children }: DataProviderProps) {
       // Create defensive copies to prevent mutation
       const asterPositions = Array.isArray(asterData?.openPositions) ? [...asterData.openPositions] : []
       const hyperliquidPositions = Array.isArray(hyperliquidData?.openPositions) ? [...hyperliquidData.openPositions] : []
-      const krakenPositions = Array.isArray(krakenData?.openPositions) ? [...krakenData.openPositions] : []
+      const krakenPositions = Array.isArray(finalKrakenData?.openPositions) ? [...finalKrakenData.openPositions] : []
       const asterOrders = Array.isArray(asterData?.openOrders) ? [...asterData.openOrders] : []
       const hyperliquidOrders = Array.isArray(hyperliquidData?.openOrders) ? [...hyperliquidData.openOrders] : []
-      const krakenOrders = Array.isArray(krakenData?.openOrders) ? [...krakenData.openOrders] : []
+      const krakenOrders = Array.isArray(finalKrakenData?.openOrders) ? [...finalKrakenData.openOrders] : []
       const asterAvailableMargin = Array.isArray(asterData?.availableMargin) ? [...asterData.availableMargin] : []
       const hyperliquidAvailableMargin = Array.isArray(hyperliquidData?.availableMargin) ? [...hyperliquidData.availableMargin] : []
-      const krakenAvailableMargin = Array.isArray(krakenData?.availableMargin) ? [...krakenData.availableMargin] : []
+      const krakenAvailableMargin = Array.isArray(finalKrakenData?.availableMargin) ? [...finalKrakenData.availableMargin] : []
       const asterLockedMargin = Array.isArray(asterData?.lockedMargin) ? [...asterData.lockedMargin] : []
       const hyperliquidLockedMargin = Array.isArray(hyperliquidData?.lockedMargin) ? [...hyperliquidData.lockedMargin] : []
-      const krakenLockedMargin = Array.isArray(krakenData?.lockedMargin) ? [...krakenData.lockedMargin] : []
+      const krakenLockedMargin = Array.isArray(finalKrakenData?.lockedMargin) ? [...finalKrakenData.lockedMargin] : []
       
       console.log('[DataContext] Before merge - counts:', {
         asterPositions: asterPositions.length,
@@ -265,7 +277,7 @@ export function DataProvider({ children }: DataProviderProps) {
       })
 
       // Update items with merged data
-      if (asterData || hyperliquidData || krakenData) {
+      if (asterData || hyperliquidData || finalKrakenData) {
         console.log('[DataContext] Updating items with merged Perpetuals data')
         console.log('[DataContext] Merged data being set:', {
           openPositionsCount: mergedData.openPositions.length,
@@ -555,6 +567,109 @@ export function DataProvider({ children }: DataProviderProps) {
 
     return () => clearInterval(interval)
   }, [uid, loading])
+
+  // Set up Kraken Futures WebSocket connection
+  useEffect(() => {
+    if (!uid || !krakenApiKey || !krakenApiSecretKey) {
+      // Disconnect if credentials are not available
+      const wsClient = getKrakenFuturesWsClient()
+      wsClient.disconnect()
+      return
+    }
+
+    const wsClient = getKrakenFuturesWsClient()
+    
+    // Connect to WebSocket
+    wsClient.connect(krakenApiKey, krakenApiSecretKey).catch((error) => {
+      console.error('[DataContext] Failed to connect Kraken WS:', error)
+    })
+
+    // Subscribe to WebSocket updates
+    const unsubscribe = wsClient.onUpdate((wsState) => {
+      // Update when subscribed (even if positions are empty - user may have closed all positions)
+      if (wsState.connectionStatus === 'subscribed') {
+        // Convert WS state to PerpetualsData and merge with existing data
+        const wsPerpetualsData = wsClient.toPerpetualsData()
+        
+        // Subscribe to ticker for open positions (optional)
+        if (wsState.positions.length > 0) {
+          // Extract product IDs from instruments (e.g., "PI_XBTUSD" from "PI_XBTUSD")
+          const productIds = wsState.positions
+            .map((pos) => pos.instrument)
+            .filter((id, index, arr) => arr.indexOf(id) === index) // unique
+          if (productIds.length > 0) {
+            wsClient.subscribeToTicker(productIds)
+          }
+        }
+        
+        // Update state with WebSocket data
+        setData((prev) => {
+          const perpetualsItem = prev.netWorthItems.find((item) => item.category === 'Perpetuals')
+          if (!perpetualsItem) {
+            return prev
+          }
+
+          // Merge WebSocket data with existing perpetuals data
+          const existingData = perpetualsItem.perpetualsData || {
+            openPositions: [],
+            availableMargin: [],
+            lockedMargin: [],
+          }
+
+          // Filter out old Kraken positions and add new ones from WS
+          const nonKrakenPositions = existingData.openPositions.filter(
+            (pos) => pos.platform !== 'Kraken'
+          )
+          const nonKrakenAvailableMargin = existingData.availableMargin.filter(
+            (m) => m.platform !== 'Kraken'
+          )
+          const nonKrakenLockedMargin = existingData.lockedMargin.filter(
+            (m) => m.platform !== 'Kraken'
+          )
+
+          const mergedPerpetualsData = {
+            openPositions: [...nonKrakenPositions, ...wsPerpetualsData.openPositions],
+            availableMargin: [...nonKrakenAvailableMargin, ...wsPerpetualsData.availableMargin],
+            lockedMargin: [...nonKrakenLockedMargin, ...wsPerpetualsData.lockedMargin],
+            openOrders: existingData.openOrders || [], // Keep existing orders
+          }
+
+          const updatedItems = prev.netWorthItems.map((item) => {
+            if (item.category === 'Perpetuals') {
+              return {
+                ...item,
+                perpetualsData: mergedPerpetualsData,
+              }
+            }
+            return item
+          })
+
+          // Recalculate totals with updated data
+          const calculationResult = calculateTotals(
+            updatedItems,
+            prev.transactions,
+            prev.cryptoPrices,
+            prev.stockPrices,
+            prev.usdToChfRate
+          )
+
+          return {
+            ...prev,
+            netWorthItems: updatedItems,
+            calculationResult,
+          }
+        })
+      }
+    })
+
+    // Cleanup on unmount or when credentials change
+    return () => {
+      unsubscribe()
+      // Don't disconnect on cleanup - let it stay connected while app is running
+      // wsClient.disconnect()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, krakenApiKey, krakenApiSecretKey])
 
   return (
     <DataContext.Provider
