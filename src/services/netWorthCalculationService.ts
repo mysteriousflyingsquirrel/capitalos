@@ -64,47 +64,77 @@ export class NetWorthCalculationService {
         }
       } else if (item.category === 'Perpetuals') {
         // For Perpetuals: calculate from subcategories
-        if (!item.perpetualsData) {
+        // Server-side: perpetualsData is not available (stripped from Firestore)
+        // Client-side: perpetualsData is fetched dynamically
+        // Both cases should be handled gracefully
+        try {
+          if (!item.perpetualsData) {
+            balance = 0
+          } else {
+            const { openPositions, lockedMargin, availableMargin } = item.perpetualsData || {}
+            
+            // Ensure arrays exist and are actually arrays (defensive programming)
+            const safeOpenPositions = Array.isArray(openPositions) ? openPositions : []
+            const safeLockedMargin = Array.isArray(lockedMargin) ? lockedMargin : []
+            const safeAvailableMargin = Array.isArray(availableMargin) ? availableMargin : []
+            
+            // Sum all CHF balances directly
+            let totalChf = 0
+            
+            // Open Positions: convert each balance to CHF and sum
+            safeOpenPositions.forEach(pos => {
+              if (pos && typeof pos === 'object') {
+                const margin = typeof pos.margin === 'number' && isFinite(pos.margin) ? pos.margin : 0
+                const pnl = typeof pos.pnl === 'number' && isFinite(pos.pnl) ? pos.pnl : 0
+                const balanceUsd = margin + pnl
+                if (isFinite(balanceUsd)) {
+                  const balanceChf = usdToChfRate && usdToChfRate > 0 
+                    ? balanceUsd * usdToChfRate 
+                    : convert(balanceUsd, 'USD')
+                  if (isFinite(balanceChf)) {
+                    totalChf += balanceChf
+                  }
+                }
+              }
+            })
+            
+            // Locked Margin: convert each balance to CHF and sum
+            safeLockedMargin.forEach(margin => {
+              if (margin && typeof margin === 'object') {
+                const marginValue = typeof margin.margin === 'number' && isFinite(margin.margin) ? margin.margin : 0
+                if (isFinite(marginValue)) {
+                  const balanceChf = usdToChfRate && usdToChfRate > 0 
+                    ? marginValue * usdToChfRate 
+                    : convert(marginValue, 'USD')
+                  if (isFinite(balanceChf)) {
+                    totalChf += balanceChf
+                  }
+                }
+              }
+            })
+            
+            // Available Margin: convert each balance to CHF and sum
+            safeAvailableMargin.forEach(margin => {
+              if (margin && typeof margin === 'object') {
+                const marginValue = typeof margin.margin === 'number' && isFinite(margin.margin) ? margin.margin : 0
+                if (isFinite(marginValue)) {
+                  const balanceChf = usdToChfRate && usdToChfRate > 0 
+                    ? marginValue * usdToChfRate 
+                    : convert(marginValue, 'USD')
+                  if (isFinite(balanceChf)) {
+                    totalChf += balanceChf
+                  }
+                }
+              }
+            })
+            
+            balance = totalChf
+          }
+        } catch (error) {
+          // If any error occurs calculating perpetuals, default to 0
+          // This ensures snapshots can be created even if perpetuals data is malformed
+          console.warn(`[NetWorthCalculation] Error calculating Perpetuals balance for item ${item.id}:`, error)
           balance = 0
-        } else {
-          const { openPositions, lockedMargin, availableMargin } = item.perpetualsData
-          
-          // Ensure arrays exist and are actually arrays
-          const safeOpenPositions = Array.isArray(openPositions) ? openPositions : []
-          const safeLockedMargin = Array.isArray(lockedMargin) ? lockedMargin : []
-          const safeAvailableMargin = Array.isArray(availableMargin) ? availableMargin : []
-          
-          // Sum all CHF balances directly
-          let totalChf = 0
-          
-          // Open Positions: convert each balance to CHF and sum
-          safeOpenPositions.forEach(pos => {
-            const balanceUsd = pos.margin + pos.pnl
-            const balanceChf = usdToChfRate && usdToChfRate > 0 
-              ? balanceUsd * usdToChfRate 
-              : convert(balanceUsd, 'USD')
-            totalChf += balanceChf
-          })
-          
-          // Locked Margin: convert each balance to CHF and sum
-          safeLockedMargin.forEach(margin => {
-            const balanceUsd = margin.margin
-            const balanceChf = usdToChfRate && usdToChfRate > 0 
-              ? balanceUsd * usdToChfRate 
-              : convert(balanceUsd, 'USD')
-            totalChf += balanceChf
-          })
-          
-          // Available Margin: convert each balance to CHF and sum
-          safeAvailableMargin.forEach(margin => {
-            const balanceUsd = margin.margin
-            const balanceChf = usdToChfRate && usdToChfRate > 0 
-              ? balanceUsd * usdToChfRate 
-              : convert(balanceUsd, 'USD')
-            totalChf += balanceChf
-          })
-          
-          balance = totalChf
         }
       } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
         // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance

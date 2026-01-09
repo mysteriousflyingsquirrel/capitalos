@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import admin from 'firebase-admin'
-import { getNetWorthSummary } from '../../src/lib/networth/netWorthServiceServer'
 import type { NetWorthSummary } from '../../src/lib/networth/types'
 
 // Export config for Vercel (increase timeout if needed)
@@ -105,27 +104,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'User ID (uid) is required. Provide it in the request body as { "uid": "your-user-id" } or as a query parameter ?uid=your-user-id' })
     }
 
-    // Use the global net worth service to get summary
-    // This ensures consistency with UI calculations
-    // The service handles fetching transactions, computing, and caching
-    console.log('[Snapshot] Getting net worth summary from global service...')
-    let summary: NetWorthSummary
-    try {
-      summary = await getNetWorthSummary(uid, 'CHF')
-      console.log('[Snapshot] Summary retrieved:', {
-        totalNetWorth: summary.totalNetWorth,
-        categoriesCount: summary.categories.length,
-        asOf: summary.asOf,
+    // Read pre-computed summary from Firestore (computed by client on every data change)
+    // No fetching, no computing, no transaction computing - just read and save as snapshot
+    console.log('[Snapshot] Reading pre-computed net worth summary from Firestore...')
+    const db = admin.firestore()
+    const summaryRef = db.collection(`users/${uid}/netWorthSummary`).doc('current')
+    const summaryDoc = await summaryRef.get()
+    
+    if (!summaryDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        error: 'Net worth summary not found. Please ensure the application has computed and saved a summary.',
       })
-    } catch (error) {
-      console.error('[Snapshot] Error getting net worth summary:', error)
-      throw error
     }
+    
+    const summary = summaryDoc.data() as NetWorthSummary
+    console.log('[Snapshot] Summary retrieved from Firestore:', {
+      totalNetWorth: summary.totalNetWorth,
+      categoriesCount: summary.categories?.length || 0,
+      asOf: summary.asOf,
+    })
 
     // Convert summary to snapshot format
     let snapshot = summaryToSnapshot(summary)
-    
-    const db = admin.firestore()
 
     // If called around 00:00 UTC (cron job), create snapshot for yesterday at 23:59:59 UTC
     // This ensures the snapshot represents the end of the previous day, not the start of the new day
