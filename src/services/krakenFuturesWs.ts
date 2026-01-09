@@ -17,6 +17,7 @@ export type KrakenOpenPosition = {
   initialMargin?: number
   maintenanceMargin?: number
   initialMarginWithOrders?: number
+  effectiveLeverage?: number
 }
 
 export type KrakenBalances = {
@@ -61,7 +62,7 @@ interface SubscribeResponse extends WsMessage {
 
 interface OpenPositionsMessage extends WsMessage {
   feed: 'open_positions'
-  data?: Array<{
+  positions?: Array<{
     instrument: string
     balance: number
     entry_price?: number
@@ -70,6 +71,7 @@ interface OpenPositionsMessage extends WsMessage {
     initial_margin?: number
     maintenance_margin?: number
     initial_margin_with_orders?: number
+    effective_leverage?: number
   }>
 }
 
@@ -292,8 +294,8 @@ export class KrakenFuturesWs {
     // Handle open_positions feed
     if (message.feed === 'open_positions') {
       const positionsMessage = message as OpenPositionsMessage
-      if (positionsMessage.data) {
-        const positions: KrakenOpenPosition[] = positionsMessage.data.map((pos) => ({
+      if (positionsMessage.positions) {
+        const positions: KrakenOpenPosition[] = positionsMessage.positions.map((pos) => ({
           instrument: pos.instrument,
           balance: pos.balance,
           entryPrice: pos.entry_price,
@@ -302,6 +304,7 @@ export class KrakenFuturesWs {
           initialMargin: pos.initial_margin,
           maintenanceMargin: pos.maintenance_margin,
           initialMarginWithOrders: pos.initial_margin_with_orders,
+          effectiveLeverage: pos.effective_leverage,
         }))
         this.updateState({
           positions,
