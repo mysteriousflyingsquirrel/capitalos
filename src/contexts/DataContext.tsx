@@ -13,7 +13,6 @@ import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchAsterPerpetualsData } from '../services/asterService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
-import { fetchKrakenPerpetualsData } from '../services/krakenService'
 import { getKrakenFuturesWsClient } from '../services/krakenFuturesWs'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
@@ -172,23 +171,18 @@ export function DataProvider({ children }: DataProviderProps) {
     try {
       console.log('[DataContext] Fetching Aster, Hyperliquid, and Kraken data...')
       
-      // Fetch Aster and Hyperliquid data (Kraken now uses WebSocket)
-      // Only fetch Kraken via REST if WebSocket is not connected
-      const wsClient = getKrakenFuturesWsClient()
-      const wsState = wsClient.getState()
-      const useKrakenRest = wsState.connectionStatus !== 'subscribed'
-      
-      const [asterData, hyperliquidData, krakenData] = await Promise.all([
+      // Fetch Aster and Hyperliquid data (Kraken uses WebSocket only)
+      const [asterData, hyperliquidData] = await Promise.all([
         fetchAsterPerpetualsData(uid),
         fetchHyperliquidPerpetualsData(uid),
-        useKrakenRest ? fetchKrakenPerpetualsData(uid) : Promise.resolve(null),
       ])
       
-      // If WebSocket is connected, use WS data instead of REST
-      let finalKrakenData = krakenData
-      if (!useKrakenRest && wsState.connectionStatus === 'subscribed') {
-        finalKrakenData = wsClient.toPerpetualsData()
-      }
+      // Get Kraken data from WebSocket (only source)
+      const wsClient = getKrakenFuturesWsClient()
+      const wsState = wsClient.getState()
+      const finalKrakenData = wsState.connectionStatus === 'subscribed' 
+        ? wsClient.toPerpetualsData() 
+        : null
 
       console.log('[DataContext] Fetch results:', {
         asterData: !!asterData,
@@ -199,21 +193,22 @@ export function DataProvider({ children }: DataProviderProps) {
         hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
         hyperliquidLockedMargin: hyperliquidData?.lockedMargin?.length || 0,
         hyperliquidAvailableMargin: hyperliquidData?.availableMargin?.length || 0,
-        krakenData: !!krakenData,
-        krakenDataType: krakenData ? typeof krakenData : 'null',
-        krakenPositions: krakenData?.openPositions?.length || 0,
-        krakenOrders: krakenData?.openOrders?.length || 0,
-        krakenLockedMargin: krakenData?.lockedMargin?.length || 0,
-        krakenAvailableMargin: krakenData?.availableMargin?.length || 0,
-        krakenDataKeys: krakenData ? Object.keys(krakenData) : [],
+        krakenData: !!finalKrakenData,
+        krakenWsStatus: wsState.connectionStatus,
+        krakenDataType: finalKrakenData ? typeof finalKrakenData : 'null',
+        krakenPositions: finalKrakenData?.openPositions?.length || 0,
+        krakenOrders: finalKrakenData?.openOrders?.length || 0,
+        krakenLockedMargin: finalKrakenData?.lockedMargin?.length || 0,
+        krakenAvailableMargin: finalKrakenData?.availableMargin?.length || 0,
+        krakenDataKeys: finalKrakenData ? Object.keys(finalKrakenData) : [],
       })
       
       console.log('[DataContext] Kraken data details:', {
-        data: krakenData,
-        positions: krakenData?.openPositions,
-        orders: krakenData?.openOrders,
-        availableMargin: krakenData?.availableMargin,
-        lockedMargin: krakenData?.lockedMargin,
+        data: finalKrakenData,
+        positions: finalKrakenData?.openPositions,
+        orders: finalKrakenData?.openOrders,
+        availableMargin: finalKrakenData?.availableMargin,
+        lockedMargin: finalKrakenData?.lockedMargin,
       })
 
       // Log the actual data structures
