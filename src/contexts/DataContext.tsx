@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { useAuth } from './AuthContext'
 import { useCurrency } from './CurrencyContext'
 import { useApiKeys } from './ApiKeysContext'
@@ -73,7 +73,8 @@ export function DataProvider({ children }: DataProviderProps) {
   
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [krakenWsState, setKrakenWsState] = useState<KrakenWsState | null>(null)
+  // Use ref for WebSocket state to prevent re-renders on every update
+  const krakenWsStateRef = useRef<KrakenWsState | null>(null)
 
   // Load all Firebase data
   const loadFirebaseData = async (): Promise<{
@@ -229,8 +230,8 @@ export function DataProvider({ children }: DataProviderProps) {
       
       // Get Kraken data from WebSocket (only source)
       // Convert current WebSocket state to PerpetualsData format
-      const finalKrakenData = krakenWsState && krakenWsState.status === 'subscribed'
-        ? convertKrakenWsStateToPerpetualsData(krakenWsState)
+      const finalKrakenData = krakenWsStateRef.current && krakenWsStateRef.current.status === 'subscribed'
+        ? convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
         : null
 
       console.log('[DataContext] Fetch results:', {
@@ -243,7 +244,7 @@ export function DataProvider({ children }: DataProviderProps) {
         hyperliquidLockedMargin: hyperliquidData?.lockedMargin?.length || 0,
         hyperliquidAvailableMargin: hyperliquidData?.availableMargin?.length || 0,
         krakenData: !!finalKrakenData,
-        krakenWsStatus: krakenWsState?.status || 'disconnected',
+        krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
         krakenDataType: finalKrakenData ? typeof finalKrakenData : 'null',
         krakenPositions: finalKrakenData?.openPositions?.length || 0,
         krakenOrders: finalKrakenData?.openOrders?.length || 0,
@@ -396,7 +397,7 @@ export function DataProvider({ children }: DataProviderProps) {
     )
   }
 
-  // Load all data
+  // Load all data - exact flow: fetch exchange prices -> fetch crypto prices -> fetch perpetuals data -> update frontend
   const loadAllData = async () => {
     if (!uid) {
       setLoading(false)
@@ -409,14 +410,14 @@ export function DataProvider({ children }: DataProviderProps) {
       // Step 1: Load Firebase data
       const firebaseData = await loadFirebaseData()
       
-      // Step 2: Fetch Perpetuals data (needs items)
-      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items)
-      
-      // Step 3: Fetch prices in parallel
+      // Step 2: Fetch exchange prices (USD→CHF rate) and crypto/stock prices
       const [cryptoData, stockPricesData] = await Promise.all([
-        fetchCryptoPrices(itemsWithPerpetuals),
-        fetchStockPricesData(itemsWithPerpetuals),
+        fetchCryptoPrices(firebaseData.items),
+        fetchStockPricesData(firebaseData.items),
       ])
+      
+      // Step 3: Fetch Perpetuals data (reads from WebSocket state for Kraken)
+      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items)
       
       // Step 4: Calculate totals
       const calculationResult = calculateTotals(
@@ -427,17 +428,7 @@ export function DataProvider({ children }: DataProviderProps) {
         cryptoData.usdToChfRate
       )
       
-      // Step 5: Update state
-      const perpetualsItem = itemsWithPerpetuals.find(item => item.category === 'Perpetuals')
-      console.log('[DataContext] Before setData - Perpetuals item:', {
-        hasItem: !!perpetualsItem,
-        hasPerpetualsData: !!perpetualsItem?.perpetualsData,
-        openPositionsCount: perpetualsItem?.perpetualsData?.openPositions?.length || 0,
-        openOrdersCount: perpetualsItem?.perpetualsData?.openOrders?.length || 0,
-        openPositions: perpetualsItem?.perpetualsData?.openPositions,
-        openOrders: perpetualsItem?.perpetualsData?.openOrders,
-      })
-      
+      // Step 5: Update frontend (single state update)
       setData({
         netWorthItems: itemsWithPerpetuals,
         transactions: firebaseData.transactions,
@@ -450,17 +441,6 @@ export function DataProvider({ children }: DataProviderProps) {
         calculationResult,
       })
       
-      // Log after state update (in next tick)
-      setTimeout(() => {
-        const currentPerpetualsItem = itemsWithPerpetuals.find(item => item.category === 'Perpetuals')
-        console.log('[DataContext] After setData - Perpetuals item:', {
-          hasItem: !!currentPerpetualsItem,
-          hasPerpetualsData: !!currentPerpetualsItem?.perpetualsData,
-          openPositionsCount: currentPerpetualsItem?.perpetualsData?.openPositions?.length || 0,
-          openOrdersCount: currentPerpetualsItem?.perpetualsData?.openOrders?.length || 0,
-        })
-      }, 0)
-      
       setLoading(false)
     } catch (err) {
       console.error('Error loading data:', err)
@@ -469,28 +449,16 @@ export function DataProvider({ children }: DataProviderProps) {
     }
   }
 
-  // Refresh prices only
+  // Refresh prices only (for manual refresh)
   const refreshPrices = async () => {
     if (!uid) return
 
-    // Get current state using functional update to ensure we have latest data
     let currentItems: NetWorthItem[] = []
-    let currentTransactions: NetWorthTransaction[] = []
-    let currentCryptoPrices: Record<string, number> = {}
-    let currentStockPrices: Record<string, number> = {}
-    let currentUsdToChfRate: number | null = null
-
     setData((prev) => {
-      // Capture current state
       currentItems = prev.netWorthItems
-      currentTransactions = prev.transactions
-      currentCryptoPrices = prev.cryptoPrices
-      currentStockPrices = prev.stockPrices
-      currentUsdToChfRate = prev.usdToChfRate
-      return prev // No state change, just reading
+      return prev
     })
 
-    // Check if we have items before proceeding
     if (currentItems.length === 0) {
       return
     }
@@ -501,9 +469,7 @@ export function DataProvider({ children }: DataProviderProps) {
         fetchStockPricesData(currentItems),
       ])
 
-      // Use functional update to ensure we're working with latest state
       setData((prev) => {
-        // Double-check items still exist before updating
         if (prev.netWorthItems.length === 0) {
           return prev
         }
@@ -526,32 +492,19 @@ export function DataProvider({ children }: DataProviderProps) {
       })
     } catch (err) {
       console.error('Error refreshing prices:', err)
-      // Don't update state on error - keep existing data
     }
   }
 
-  // Refresh Perpetuals data only
+  // Refresh Perpetuals data only (for manual refresh)
   const refreshPerpetuals = async () => {
     if (!uid) return
 
-    // Get current state using functional update to ensure we have latest data
     let currentItems: NetWorthItem[] = []
-    let currentTransactions: NetWorthTransaction[] = []
-    let currentCryptoPrices: Record<string, number> = {}
-    let currentStockPrices: Record<string, number> = {}
-    let currentUsdToChfRate: number | null = null
-
     setData((prev) => {
-      // Capture current state
       currentItems = prev.netWorthItems
-      currentTransactions = prev.transactions
-      currentCryptoPrices = prev.cryptoPrices
-      currentStockPrices = prev.stockPrices
-      currentUsdToChfRate = prev.usdToChfRate
-      return prev // No state change, just reading
+      return prev
     })
 
-    // Check if we have items before proceeding
     if (currentItems.length === 0) {
       return
     }
@@ -559,9 +512,7 @@ export function DataProvider({ children }: DataProviderProps) {
     try {
       const itemsWithPerpetuals = await fetchPerpetualsData(currentItems)
 
-      // Use functional update to ensure we're working with latest state
       setData((prev) => {
-        // Double-check items still exist before updating
         if (prev.netWorthItems.length === 0) {
           return prev
         }
@@ -582,7 +533,6 @@ export function DataProvider({ children }: DataProviderProps) {
       })
     } catch (err) {
       console.error('Error refreshing Perpetuals data:', err)
-      // Don't update state on error - keep existing data
     }
   }
 
@@ -604,14 +554,59 @@ export function DataProvider({ children }: DataProviderProps) {
   const refreshAllData = async () => {
     if (!uid) return
 
+    // Get current state
+    let currentItems: NetWorthItem[] = []
+    let currentTransactions: NetWorthTransaction[] = []
+    let currentCryptoPrices: Record<string, number> = {}
+    let currentStockPrices: Record<string, number> = {}
+    let currentUsdToChfRate: number | null = null
+
+    setData((prev) => {
+      currentItems = prev.netWorthItems
+      currentTransactions = prev.transactions
+      currentCryptoPrices = prev.cryptoPrices
+      currentStockPrices = prev.stockPrices
+      currentUsdToChfRate = prev.usdToChfRate
+      return prev // No state change, just reading
+    })
+
+    if (currentItems.length === 0) {
+      return
+    }
+
     try {
-      // Step 1: Fetch exchange prices (USD→CHF rate) and crypto prices
-      await refreshPrices()
+      // Step 1: Fetch exchange prices (USD→CHF rate) and crypto/stock prices
+      const [cryptoData, stockPricesData] = await Promise.all([
+        fetchCryptoPrices(currentItems),
+        fetchStockPricesData(currentItems),
+      ])
       
       // Step 2: Fetch perpetuals data (reads from WebSocket state for Kraken)
-      await refreshPerpetuals()
+      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems)
       
-      // Frontend is updated automatically by the refresh functions above
+      // Step 3: Calculate totals
+      const calculationResult = calculateTotals(
+        itemsWithPerpetuals,
+        currentTransactions,
+        cryptoData.cryptoPrices,
+        stockPricesData,
+        cryptoData.usdToChfRate
+      )
+
+      // Step 4: Update frontend (single state update)
+      setData((prev) => {
+        if (prev.netWorthItems.length === 0) {
+          return prev
+        }
+        return {
+          ...prev,
+          netWorthItems: itemsWithPerpetuals,
+          cryptoPrices: cryptoData.cryptoPrices,
+          stockPrices: stockPricesData,
+          usdToChfRate: cryptoData.usdToChfRate,
+          calculationResult,
+        }
+      })
     } catch (err) {
       console.error('Error in periodic refresh:', err)
     }
@@ -632,19 +627,19 @@ export function DataProvider({ children }: DataProviderProps) {
   useEffect(() => {
     if (!uid || !krakenApiKey || !krakenApiSecretKey) {
       // Disconnect if credentials are not available
-      setKrakenWsState({ status: 'disconnected' })
+      krakenWsStateRef.current = { status: 'disconnected' }
       return
     }
 
     // Create WebSocket instance with onState callback
-    // WebSocket only stores state - UI updates happen every 5 minutes via refreshAllData
+    // WebSocket only stores state in ref - UI updates happen every 5 minutes via refreshAllData
     const ws = new KrakenFuturesWs({
       apiKey: krakenApiKey,
       apiSecret: krakenApiSecretKey,
       onState: (state) => {
-        // Only store WebSocket state - do NOT trigger UI updates
+        // Only store WebSocket state in ref - does NOT trigger re-renders
         // UI will be updated every 5 minutes via the periodic refresh cycle
-        setKrakenWsState(state)
+        krakenWsStateRef.current = state
       },
     })
 
