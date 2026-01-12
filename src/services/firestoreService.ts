@@ -208,6 +208,8 @@ export interface Platform {
   id: string
   name: string
   order: number
+  /** Whether this platform is the default for Analytics page */
+  isDefault?: boolean
 }
 
 export async function savePlatforms(uid: string, platforms: Platform[]): Promise<void> {
@@ -226,6 +228,7 @@ export interface UserSettings {
     asterApiSecretKey?: string
     hyperliquidWalletAddress?: string
   }
+  analyticsSafetyBuffer?: number
 }
 
 export async function saveUserSettings(

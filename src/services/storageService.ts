@@ -206,6 +206,8 @@ export interface Platform {
   name: string
   /** Higher values indicate more frequently used platforms */
   order: number
+  /** Whether this platform is the default for Analytics page */
+  isDefault?: boolean
 }
 
 export async function savePlatforms(

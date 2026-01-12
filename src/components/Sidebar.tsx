@@ -20,7 +20,7 @@ const navigation: NavigationItem[] = [
   { name: 'Dashboard', path: '/', icon: dashboardIcon },
   { name: 'Net Worth', path: '/net-worth', icon: netWorthIcon },
   { name: 'Cashflow', path: '/cashflow', icon: cashflowIcon },
-  { name: 'Investing', path: '/investing', icon: investingIcon },
+  { name: 'Analytics', path: '/analytics', icon: investingIcon },
   { name: 'Settings', path: '/settings', icon: settingsIcon },
 ]
 

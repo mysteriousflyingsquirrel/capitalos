@@ -7,7 +7,7 @@ A unified wealth management platform designed to track total net worth, inflows,
 - **Dashboard**: Total net worth, asset breakdown, inflow/outflow charts
 - **Cashflow**: Categorized lists, filters, monthly flow visualization
 - **Net Worth**: Long-term value graph, composition pie, and trend insights
-- **Investing**: Holdings by platform and asset, profit/loss summary
+- **Analytics**: Holdings by platform and asset, profit/loss summary
 - **Settings**: Account management, data sync, tax reports
 
 ## Tech Stack

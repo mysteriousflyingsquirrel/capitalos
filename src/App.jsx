@@ -3,7 +3,7 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Cashflow from './pages/Cashflow'
 import NetWorth from './pages/NetWorth'
-import Investing from './pages/Investing'
+import Analytics from './pages/Analytics'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
 import LoadingScreen from './components/LoadingScreen'
@@ -49,7 +49,7 @@ function ProtectedRoutes() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/cashflow" element={<Cashflow />} />
         <Route path="/net-worth" element={<NetWorth />} />
-        <Route path="/investing" element={<Investing />} />
+        <Route path="/analytics" element={<Analytics />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </Layout>

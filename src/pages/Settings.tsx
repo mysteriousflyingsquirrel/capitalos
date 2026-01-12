@@ -327,6 +327,16 @@ function Settings() {
     }
   }
 
+  const handleSetDefaultPlatform = async (platform: Platform) => {
+    // Unset all other platforms as default, set this one as default
+    const updated = platforms.map(p => ({
+      ...p,
+      isDefault: p.id === platform.id ? !p.isDefault : false
+    }))
+    setPlatforms(updated)
+    await savePlatforms(updated, uid)
+  }
+
   const handleSaveAllApiKeys = async (e: FormEvent) => {
     e.preventDefault()
     setApiKeyError(null)
@@ -887,9 +897,15 @@ function Settings() {
         <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">Platforms</Heading>
           
-          <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
+          <p className="text-text-secondary text-[0.567rem] md:text-xs mb-4">
             Manage platforms that appear in dropdowns throughout the application. Platforms with highest inflow are listed first.
           </p>
+
+          <div className="bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 mb-6">
+            <p className="text-text-secondary text-[0.567rem] md:text-xs">
+              <strong className="text-text-primary">Default Platform:</strong> Set a default platform to automatically select it when opening the Analytics page. This saves time if you frequently analyze the same platform. You can mark one platform as default, or leave none selected.
+            </p>
+          </div>
 
           {platformError && (
             <div className="mb-4 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
@@ -995,8 +1011,26 @@ function Settings() {
                         </form>
                       ) : (
                         <>
-                          <span className="text-text-primary text-xs md:text-sm font-medium">{platform.name}</span>
+                          <div className="flex items-center gap-3 flex-1">
+                            <span className="text-text-primary text-xs md:text-sm font-medium">{platform.name}</span>
+                            {platform.isDefault && (
+                              <span className="px-2 py-0.5 bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full">
+                                Default
+                              </span>
+                            )}
+                          </div>
                           <div className="flex gap-2">
+                            <button
+                              onClick={() => handleSetDefaultPlatform(platform)}
+                              className={`px-3 py-1.5 border text-[0.567rem] md:text-xs rounded-full transition-colors ${
+                                platform.isDefault
+                                  ? 'bg-gradient-to-r from-[#DAA520] to-[#B87333] text-[#050A1A] border-transparent'
+                                  : 'bg-bg-surface-3 border-border-subtle text-text-primary hover:bg-bg-surface-1'
+                              }`}
+                              title={platform.isDefault ? 'Unset as default' : 'Set as default for Analytics'}
+                            >
+                              {platform.isDefault ? 'Default' : 'Set Default'}
+                            </button>
                             <button
                               onClick={() => setEditingPlatform(platform)}
                               className="px-3 py-1.5 bg-bg-surface-3 border border-border-subtle text-text-primary text-[0.567rem] md:text-xs rounded-full hover:bg-bg-surface-1 transition-colors"

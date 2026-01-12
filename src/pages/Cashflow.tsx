@@ -21,7 +21,7 @@ import { getInflowGroupSum, getOutflowGroupSum, computeMappingAmount } from '../
 
 type InflowGroupName = 'Time' | 'Service' | 'Worker Bees'
 
-interface InflowItem {
+export interface InflowItem {
   id: string
   item: string
   amountChf: number // Kept for backward compatibility, but will be calculated from amount and currency
@@ -33,7 +33,7 @@ interface InflowItem {
 
 type OutflowGroupName = 'Fix' | 'Variable' | 'Shared Variable' | 'Investments'
 
-interface OutflowItem {
+export interface OutflowItem {
   id: string
   item: string
   amountChf: number // Kept for backward compatibility, but will be calculated from amount and currency
