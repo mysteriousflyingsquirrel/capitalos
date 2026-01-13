@@ -412,9 +412,29 @@ function NetWorthCategorySection({
                         
                         // Add funding rate if available
                         if (pos.fundingRate !== null && pos.fundingRate !== undefined) {
-                          const ratePercent = pos.fundingRate * 100
-                          const sign = ratePercent >= 0 ? '+' : ''
-                          secondLineParts.push(`${sign}${ratePercent.toFixed(5)}%`)
+                          // Format funding rate as raw decimal value with sufficient precision
+                          // Convert scientific notation to decimal string
+                          let fundingRateStr: string
+                          const absRate = Math.abs(pos.fundingRate)
+                          
+                          if (absRate < 1e-10) {
+                            // For very small values, use toFixed with many decimal places
+                            // Remove trailing zeros but keep the decimal point if needed
+                            fundingRateStr = pos.fundingRate.toFixed(20).replace(/\.?0+$/, '')
+                            // Ensure we have at least one digit after decimal point for very small values
+                            if (!fundingRateStr.includes('.')) {
+                              fundingRateStr = pos.fundingRate.toFixed(20)
+                            }
+                          } else if (absRate < 1) {
+                            // For values between 1e-10 and 1, use toFixed with appropriate precision
+                            fundingRateStr = pos.fundingRate.toFixed(10).replace(/\.?0+$/, '')
+                          } else {
+                            // For values >= 1, use standard formatting
+                            fundingRateStr = pos.fundingRate.toFixed(6).replace(/\.?0+$/, '')
+                          }
+                          
+                          const sign = pos.fundingRate >= 0 ? '+' : ''
+                          secondLineParts.push(`${sign}${fundingRateStr}`)
                         }
                         
                         const secondLineDisplay = secondLineParts.length > 0
