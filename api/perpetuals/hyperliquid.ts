@@ -66,7 +66,47 @@ interface PerpetualsData {
 
 const HYPERLIQUID_BASE_URL = 'https://api.hyperliquid.xyz'
 
-async function fetchUserState(walletAddress: string): Promise<any> {
+// Fetch all perpetual dexs to support builder-deployed dexs (HIP-3)
+async function fetchAllPerpDexs(): Promise<string[]> {
+  try {
+    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type: 'perpDexs',
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('[Hyperliquid] Failed to fetch perp dexs')
+      return [''] // Return default dex if we can't fetch the list
+    }
+
+    const data = await response.json()
+    
+    // Handle array response format [null, dexs]
+    const dexs = Array.isArray(data) && data.length > 1 ? data[1] : data
+    
+    if (Array.isArray(dexs)) {
+      // Extract dex names, including empty string for default dex
+      const dexNames = dexs
+        .filter((dex: any) => dex !== null && dex?.name !== undefined)
+        .map((dex: any) => dex.name)
+      
+      // Always include default dex (empty string) first
+      return ['', ...dexNames]
+    }
+    
+    return ['']
+  } catch (error) {
+    console.error('[Hyperliquid] Error fetching perp dexs:', error)
+    return [''] // Fallback to default dex
+  }
+}
+
+async function fetchUserState(walletAddress: string, dex: string = ''): Promise<any> {
   try {
     const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
       method: 'POST',
@@ -76,6 +116,7 @@ async function fetchUserState(walletAddress: string): Promise<any> {
       body: JSON.stringify({
         type: 'clearinghouseState',
         user: walletAddress,
+        ...(dex && { dex }), // Only include dex if it's not empty
       }),
     })
 
@@ -109,68 +150,80 @@ async function fetchUserState(walletAddress: string): Promise<any> {
 
 async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpenPosition[]> {
   try {
-    const userState = await fetchUserState(walletAddress)
+    // Fetch all perpetual dexs to get positions from all dexs (including builder-deployed)
+    const dexs = await fetchAllPerpDexs()
+    console.log('[Hyperliquid] Fetching positions from dexs:', dexs)
     
-    const positions: PerpetualsOpenPosition[] = []
+    const allPositions: PerpetualsOpenPosition[] = []
     
-    // According to Hyperliquid API docs, assetPositions is at the top level of the response
-    const assetPositions = userState?.assetPositions
-    
-    if (!assetPositions || !Array.isArray(assetPositions)) {
-      console.log('[Hyperliquid] No assetPositions found or not an array. User state keys:', Object.keys(userState || {}))
-      return positions
+    // Fetch positions from each dex
+    for (const dex of dexs) {
+      try {
+        const userState = await fetchUserState(walletAddress, dex)
+        
+        // According to Hyperliquid API docs, assetPositions is at the top level of the response
+        const assetPositions = userState?.assetPositions
+        
+        if (!assetPositions || !Array.isArray(assetPositions)) {
+          console.log(`[Hyperliquid] No assetPositions found for dex "${dex || 'default'}"`)
+          continue
+        }
+        
+        console.log(`[Hyperliquid] Found ${assetPositions.length} asset positions in dex "${dex || 'default'}"`)
+        
+        for (const pos of assetPositions) {
+          // According to docs, position data is in pos.position
+          const position = pos.position || pos
+          
+          // Size is in position.szi (as shown in docs example)
+          const size = parseFloat(position.szi || '0')
+          
+          // Skip positions with zero size
+          if (Math.abs(size) < 0.0001) {
+            continue
+          }
+
+          // Coin symbol is in position.coin (as shown in docs)
+          const symbol = position.coin || ''
+          
+          if (!symbol) {
+            console.warn('[Hyperliquid] Position missing coin symbol:', position)
+            continue
+          }
+          
+          // Leverage is in position.leverage.value (as shown in docs)
+          let leverage: number | null = null
+          if (position.leverage && typeof position.leverage === 'object' && position.leverage.value !== undefined) {
+            leverage = parseFloat(position.leverage.value)
+          }
+          
+          // Margin used is in position.marginUsed (as shown in docs)
+          const margin = parseFloat(position.marginUsed || '0')
+          
+          // Unrealized PnL is in position.unrealizedPnl (as shown in docs)
+          const unrealizedPnl = parseFloat(position.unrealizedPnl || '0')
+          
+          // Determine position side from size
+          const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
+
+          allPositions.push({
+            id: `hyperliquid-pos-${symbol}-${dex || 'default'}-${Date.now()}`,
+            ticker: symbol,
+            margin,
+            pnl: unrealizedPnl,
+            platform: 'Hyperliquid',
+            leverage,
+            positionSide,
+          })
+        }
+      } catch (error) {
+        console.error(`[Hyperliquid] Error fetching positions from dex "${dex || 'default'}":`, error)
+        // Continue with other dexs even if one fails
+      }
     }
     
-    console.log('[Hyperliquid] Found', assetPositions.length, 'asset positions')
-    
-    for (const pos of assetPositions) {
-      // According to docs, position data is in pos.position
-      const position = pos.position || pos
-      
-      // Size is in position.szi (as shown in docs example)
-      const size = parseFloat(position.szi || '0')
-      
-      // Skip positions with zero size
-      if (Math.abs(size) < 0.0001) {
-        continue
-      }
-
-      // Coin symbol is in position.coin (as shown in docs)
-      const symbol = position.coin || ''
-      
-      if (!symbol) {
-        console.warn('[Hyperliquid] Position missing coin symbol:', position)
-        continue
-      }
-      
-      // Leverage is in position.leverage.value (as shown in docs)
-      let leverage: number | null = null
-      if (position.leverage && typeof position.leverage === 'object' && position.leverage.value !== undefined) {
-        leverage = parseFloat(position.leverage.value)
-      }
-      
-      // Margin used is in position.marginUsed (as shown in docs)
-      const margin = parseFloat(position.marginUsed || '0')
-      
-      // Unrealized PnL is in position.unrealizedPnl (as shown in docs)
-      const unrealizedPnl = parseFloat(position.unrealizedPnl || '0')
-      
-      // Determine position side from size
-      const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
-
-      positions.push({
-        id: `hyperliquid-pos-${symbol}-${Date.now()}`,
-        ticker: symbol,
-        margin,
-        pnl: unrealizedPnl,
-        platform: 'Hyperliquid',
-        leverage,
-        positionSide,
-      })
-    }
-    
-    console.log('[Hyperliquid] Processed', positions.length, 'positions')
-    return positions
+    console.log('[Hyperliquid] Processed', allPositions.length, 'total positions across all dexs')
+    return allPositions
   } catch (error) {
     console.error('Error fetching Hyperliquid open positions:', error)
     throw error
@@ -179,61 +232,70 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
 
 async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAvailableMargin[]> {
   try {
-    const userState = await fetchUserState(walletAddress)
+    const dexs = await fetchAllPerpDexs()
+    const allMargins: PerpetualsAvailableMargin[] = []
     
-    const margins: PerpetualsAvailableMargin[] = []
-    let availableBalance = 0
-    
-    if (userState.clearinghouseState?.userState?.marginSummary) {
-      const summary = userState.clearinghouseState.userState.marginSummary
-      availableBalance = parseFloat(summary.accountValue || summary.availableBalance || summary.accountEquity || '0')
-    } else if (userState.clearinghouseState?.marginSummary) {
-      const summary = userState.clearinghouseState.marginSummary
-      availableBalance = parseFloat(summary.accountValue || summary.availableBalance || summary.accountEquity || '0')
-    } else if (userState.marginSummary) {
-      availableBalance = parseFloat(userState.marginSummary.accountValue || userState.marginSummary.availableBalance || userState.marginSummary.accountEquity || '0')
-    } else if (userState.balances && Array.isArray(userState.balances)) {
-      for (const balance of userState.balances) {
-        const balanceAsset = balance.coin || balance.asset || 'USDC'
-        const available = parseFloat(balance.available || balance.availableBalance || '0')
+    for (const dex of dexs) {
+      try {
+        const userState = await fetchUserState(walletAddress, dex)
         
-        if (available > 0) {
-          margins.push({
-            id: `hyperliquid-margin-${balanceAsset}`,
-            asset: balanceAsset,
-            margin: available,
+        let availableBalance = 0
+        
+        if (userState.clearinghouseState?.userState?.marginSummary) {
+          const summary = userState.clearinghouseState.userState.marginSummary
+          availableBalance = parseFloat(summary.accountValue || summary.availableBalance || summary.accountEquity || '0')
+        } else if (userState.clearinghouseState?.marginSummary) {
+          const summary = userState.clearinghouseState.marginSummary
+          availableBalance = parseFloat(summary.accountValue || summary.availableBalance || summary.accountEquity || '0')
+        } else if (userState.marginSummary) {
+          availableBalance = parseFloat(userState.marginSummary.accountValue || userState.marginSummary.availableBalance || userState.marginSummary.accountEquity || '0')
+        } else if (userState.balances && Array.isArray(userState.balances)) {
+          for (const balance of userState.balances) {
+            const balanceAsset = balance.coin || balance.asset || 'USDC'
+            const available = parseFloat(balance.available || balance.availableBalance || '0')
+            
+            if (available > 0) {
+              allMargins.push({
+                id: `hyperliquid-margin-${balanceAsset}-${dex || 'default'}`,
+                asset: balanceAsset,
+                margin: available,
+                platform: 'Hyperliquid',
+              })
+            }
+          }
+          continue // Skip the rest for this dex
+        } else if (userState.userState?.balances && Array.isArray(userState.userState.balances)) {
+          for (const balance of userState.userState.balances) {
+            const balanceAsset = balance.coin || balance.asset || 'USDC'
+            const available = parseFloat(balance.available || balance.availableBalance || '0')
+            
+            if (available > 0) {
+              allMargins.push({
+                id: `hyperliquid-margin-${balanceAsset}-${dex || 'default'}`,
+                asset: balanceAsset,
+                margin: available,
+                platform: 'Hyperliquid',
+              })
+            }
+          }
+          continue // Skip the rest for this dex
+        }
+        
+        if (availableBalance > 0) {
+          allMargins.push({
+            id: `hyperliquid-margin-USDC-${dex || 'default'}`,
+            asset: 'USDC',
+            margin: availableBalance,
             platform: 'Hyperliquid',
           })
         }
+      } catch (error) {
+        console.error(`[Hyperliquid] Error fetching margin from dex "${dex || 'default'}":`, error)
+        // Continue with other dexs even if one fails
       }
-      return margins
-    } else if (userState.userState?.balances && Array.isArray(userState.userState.balances)) {
-      for (const balance of userState.userState.balances) {
-        const balanceAsset = balance.coin || balance.asset || 'USDC'
-        const available = parseFloat(balance.available || balance.availableBalance || '0')
-        
-        if (available > 0) {
-          margins.push({
-            id: `hyperliquid-margin-${balanceAsset}`,
-            asset: balanceAsset,
-            margin: available,
-            platform: 'Hyperliquid',
-          })
-        }
-      }
-      return margins
     }
     
-    if (availableBalance > 0) {
-      margins.push({
-        id: 'hyperliquid-margin-USDC',
-        asset: 'USDC',
-        margin: availableBalance,
-        platform: 'Hyperliquid',
-      })
-    }
-    
-    return margins
+    return allMargins
   } catch (error) {
     console.error('[Hyperliquid] Error fetching available margin:', error)
     return []
@@ -242,31 +304,40 @@ async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAv
 
 async function fetchLockedMargin(walletAddress: string): Promise<PerpetualsLockedMargin[]> {
   try {
-    const userState = await fetchUserState(walletAddress)
+    const dexs = await fetchAllPerpDexs()
+    const allLockedMargins: PerpetualsLockedMargin[] = []
     
-    const lockedMargins: PerpetualsLockedMargin[] = []
-    let marginUsed = 0
-    
-    if (userState.clearinghouseState?.userState?.marginSummary) {
-      const summary = userState.clearinghouseState.userState.marginSummary
-      marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || '0')
-    } else if (userState.clearinghouseState?.marginSummary) {
-      const summary = userState.clearinghouseState.marginSummary
-      marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || '0')
-    } else if (userState.marginSummary) {
-      marginUsed = parseFloat(userState.marginSummary.marginUsed || userState.marginSummary.totalMarginUsed || '0')
+    for (const dex of dexs) {
+      try {
+        const userState = await fetchUserState(walletAddress, dex)
+        
+        let marginUsed = 0
+        
+        if (userState.clearinghouseState?.userState?.marginSummary) {
+          const summary = userState.clearinghouseState.userState.marginSummary
+          marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || '0')
+        } else if (userState.clearinghouseState?.marginSummary) {
+          const summary = userState.clearinghouseState.marginSummary
+          marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || '0')
+        } else if (userState.marginSummary) {
+          marginUsed = parseFloat(userState.marginSummary.marginUsed || userState.marginSummary.totalMarginUsed || '0')
+        }
+        
+        if (marginUsed > 0) {
+          allLockedMargins.push({
+            id: `hyperliquid-locked-margin-USDC-${dex || 'default'}`,
+            asset: 'USDC',
+            margin: marginUsed,
+            platform: 'Hyperliquid',
+          })
+        }
+      } catch (error) {
+        console.error(`[Hyperliquid] Error fetching locked margin from dex "${dex || 'default'}":`, error)
+        // Continue with other dexs even if one fails
+      }
     }
     
-    if (marginUsed > 0) {
-      lockedMargins.push({
-        id: 'hyperliquid-locked-margin-USDC',
-        asset: 'USDC',
-        margin: marginUsed,
-        platform: 'Hyperliquid',
-      })
-    }
-    
-    return lockedMargins
+    return allLockedMargins
   } catch (error) {
     console.error('[Hyperliquid] Error fetching locked margin:', error)
     return []
