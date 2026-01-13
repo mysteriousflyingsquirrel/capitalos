@@ -379,6 +379,24 @@ export class KrakenFuturesWs {
     this.ws.send(JSON.stringify(balancesSubscribe))
   }
 
+  /**
+   * Subscribe to ticker feed for a specific product_id (public feed, no auth required)
+   */
+  private subscribeToTicker(productId: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[KrakenFuturesWs] Cannot subscribe to ticker: WebSocket not open')
+      return
+    }
+
+    const tickerSubscribe = {
+      event: 'subscribe',
+      feed: 'ticker',
+      product_ids: [productId],
+    }
+    console.log(`[KrakenFuturesWs] Subscribing to ticker for ${productId}...`)
+    this.ws.send(JSON.stringify(tickerSubscribe))
+  }
+
   private startKeepAlive(): void {
     // Clear any existing keep-alive timer
     if (this.keepAliveTimer) {
