@@ -42,7 +42,6 @@ export interface PerpetualsOpenPosition {
   margin: number // in quote currency (USD/USDT)
   pnl: number // in quote currency (USD/USDT)
   platform: string
-  fundingRate?: number | null // funding rate as decimal (e.g., 0.00002 for 0.002%)
   leverage?: number | null // leverage (e.g., 1 for 1x)
   positionSide?: 'LONG' | 'SHORT' | null // position direction
 }

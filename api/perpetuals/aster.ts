@@ -34,7 +34,6 @@ interface PerpetualsOpenPosition {
   margin: number // in USD/USDT
   pnl: number // in USD/USDT
   platform: string
-  fundingRate?: number | null // funding rate as decimal (e.g., 0.00002 for 0.002%)
   leverage?: number | null // leverage (e.g., 1 for 1x)
   positionSide?: 'LONG' | 'SHORT' | null // position direction
 }
@@ -108,39 +107,6 @@ function buildSignedQueryString(
   return `${queryString}&signature=${signature}`
 }
 
-/**
- * Fetches funding rate for a symbol from Aster API
- * Endpoint: /fapi/v1/premiumIndex (no authentication required)
- */
-async function fetchFundingRate(symbol: string): Promise<number | null> {
-  try {
-    const url = `${ASTER_BASE_URL}/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbol)}`
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-
-    if (!response.ok) {
-      console.warn(`Failed to fetch funding rate for ${symbol}: ${response.status}`)
-      return null
-    }
-
-    const data = await response.json()
-    
-    // The response should have lastFundingRate field
-    if (data.lastFundingRate !== undefined && data.lastFundingRate !== null) {
-      return parseFloat(data.lastFundingRate)
-    }
-
-    return null
-  } catch (error) {
-    console.warn(`Error fetching funding rate for ${symbol}:`, error)
-    return null
-  }
-}
 
 /**
  * Fetches open positions from Aster API
@@ -183,18 +149,7 @@ async function fetchOpenPositions(
       }
     }
 
-    // Fetch funding rates for all symbols in parallel
-    const fundingRatePromises = Array.from(symbols).map(async (symbol) => {
-      const rate = await fetchFundingRate(symbol)
-      return { symbol, rate }
-    })
-    const fundingRates = await Promise.all(fundingRatePromises)
-    const fundingRateMap = new Map<string, number | null>()
-    fundingRates.forEach(({ symbol, rate }) => {
-      fundingRateMap.set(symbol, rate)
-    })
-
-    // Now process positions and add funding rates
+    // Now process positions
     for (const pos of data) {
       // Filter out positions where positionAmt is 0 or very close to 0
       const positionAmt = parseFloat(pos.positionAmt || '0')
@@ -206,7 +161,6 @@ async function fetchOpenPositions(
       // Use isolatedMargin if available, otherwise use initialMargin
       const margin = parseFloat(pos.isolatedMargin || pos.initialMargin || '0')
       const unrealizedPnl = parseFloat(pos.unRealizedProfit || '0')
-      const fundingRate = fundingRateMap.get(symbol) ?? null
       
       // Extract leverage
       const leverage = pos.leverage !== undefined && pos.leverage !== null
@@ -234,7 +188,6 @@ async function fetchOpenPositions(
         margin,
         pnl: unrealizedPnl,
         platform: 'Aster',
-        fundingRate,
         leverage,
         positionSide,
       })

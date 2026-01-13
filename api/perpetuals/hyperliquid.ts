@@ -32,7 +32,6 @@ interface PerpetualsOpenPosition {
   margin: number // in USD/USDT
   pnl: number // in USD/USDT
   platform: string
-  fundingRate?: number | null // funding rate as decimal (e.g., 0.00002 for 0.002%)
   leverage?: number | null // leverage (e.g., 1 for 1x)
   positionSide?: 'LONG' | 'SHORT' | null // position direction
 }
@@ -98,63 +97,6 @@ async function fetchUserState(walletAddress: string): Promise<any> {
   }
 }
 
-async function fetchAllFundingRates(): Promise<Map<string, number>> {
-  try {
-    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        type: 'metaAndAssetCtxs',
-      }),
-    })
-
-    if (!response.ok) {
-      console.warn(`Failed to fetch funding rates: ${response.status}`)
-      return new Map()
-    }
-
-    const data = await response.json()
-    
-    let universe: any[] = []
-    let assetContexts: any[] = []
-    
-    if (Array.isArray(data) && data.length >= 2) {
-      const meta = data[0]
-      assetContexts = data[1] || []
-      
-      if (meta && meta.universe && Array.isArray(meta.universe)) {
-        universe = meta.universe
-      }
-    } else if (data.meta && data.meta.universe) {
-      universe = data.meta.universe
-      assetContexts = data.assetContexts || []
-    }
-    
-    const fundingRateMap = new Map<string, number>()
-    
-    for (let i = 0; i < Math.min(universe.length, assetContexts.length); i++) {
-      const asset = universe[i]
-      const context = assetContexts[i]
-      
-      if (asset && context) {
-        const coin = asset.name || asset.coin || asset.symbol
-        const funding = context.funding || context.fundingRate
-        
-        if (coin && funding !== undefined && funding !== null) {
-          const rate = parseFloat(funding)
-          fundingRateMap.set(coin, rate)
-        }
-      }
-    }
-    
-    return fundingRateMap
-  } catch (error) {
-    console.warn('Error fetching funding rates:', error)
-    return new Map()
-  }
-}
 
 async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpenPosition[]> {
   try {
@@ -189,8 +131,6 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           symbols.add(symbol)
         }
       }
-
-      const fundingRateMap = await fetchAllFundingRates()
 
       for (const pos of assetPositions) {
         const position = pos.position || pos
@@ -237,7 +177,6 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
         )
         
         const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
-        const fundingRate = fundingRateMap.get(symbol) ?? null
 
         positions.push({
           id: `hyperliquid-pos-${symbol}-${Date.now()}`,
@@ -245,7 +184,6 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           margin,
           pnl: unrealizedPnl,
           platform: 'Hyperliquid',
-          fundingRate,
           leverage,
           positionSide,
         })
