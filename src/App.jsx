@@ -15,7 +15,7 @@ import { DataProvider, useData } from './contexts/DataContext'
 
 function ProtectedRoutes() {
   const { user, loading: authLoading } = useAuth()
-  const { loading: dataLoading, error: dataError } = useData()
+  const { loading: dataLoading, loadingMessage, error: dataError, isDataReady, data } = useData()
 
   if (authLoading) {
     return <LoadingScreen />
@@ -25,8 +25,10 @@ function ProtectedRoutes() {
     return <Login />
   }
 
-  if (dataLoading) {
-    return <LoadingScreen />
+  // Show loading screen if data is still loading OR data is not ready
+  // Only check isDataReady flag - it's set to true only when all data is validated and loaded
+  if (dataLoading || !isDataReady) {
+    return <LoadingScreen message={loadingMessage || undefined} />
   }
 
   if (dataError) {
