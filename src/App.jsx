@@ -6,7 +6,6 @@ import NetWorth from './pages/NetWorth'
 import Analytics from './pages/Analytics'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
-import LoadingScreen from './components/LoadingScreen'
 import { CurrencyProvider } from './contexts/CurrencyContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { IncognitoProvider } from './contexts/IncognitoContext'
@@ -18,7 +17,7 @@ function ProtectedRoutes() {
   const { loading: dataLoading, error: dataError } = useData()
 
   if (authLoading) {
-    return <LoadingScreen />
+    return null
   }
 
   if (!user) {
@@ -26,16 +25,13 @@ function ProtectedRoutes() {
   }
 
   if (dataLoading) {
-    return <LoadingScreen />
+    return null
   }
 
   if (dataError) {
     return (
-      <div className="min-h-screen flex items-center justify-center relative">
-        <div className="fixed inset-0 z-0">
-          <LoadingScreen />
-        </div>
-        <div className="relative z-10 text-center">
+      <div className="min-h-screen flex items-center justify-center bg-bg-page">
+        <div className="text-center">
           <div className="text-red-400 mb-4">Error loading data</div>
           <div className="text-text-secondary">{dataError}</div>
         </div>

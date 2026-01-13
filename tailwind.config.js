@@ -13,7 +13,7 @@ module.exports = {
 
       colors: {
         // Backgrounds
-        "bg-page": "#0E121A",
+        "bg-page": "#111827",
         "bg-surface-1": "#161B22",
         "bg-surface-2": "#11151C",
         "bg-surface-3": "#1C2129",
