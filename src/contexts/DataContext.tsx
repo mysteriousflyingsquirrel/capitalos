@@ -165,6 +165,7 @@ export function DataProvider({ children }: DataProviderProps) {
       platform: 'Kraken',
       positionSide: pos.balance > 0 ? 'LONG' : pos.balance < 0 ? 'SHORT' : null,
       leverage: pos.effectiveLeverage !== undefined && pos.effectiveLeverage !== null ? pos.effectiveLeverage : null,
+      fundingRate: pos.fundingRate !== undefined && pos.fundingRate !== null ? pos.fundingRate : null,
     }))
 
     // Map balances to available/locked margin

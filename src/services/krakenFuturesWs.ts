@@ -18,6 +18,7 @@ export type KrakenOpenPosition = {
   maintenanceMargin?: number
   initialMarginWithOrders?: number
   effectiveLeverage?: number
+  fundingRate?: number
 }
 
 export type KrakenBalances = {
@@ -73,6 +74,12 @@ interface OpenPositionsMessage extends WsMessage {
     initial_margin_with_orders?: number
     effective_leverage?: number
   }>
+}
+
+interface TickerMessage extends WsMessage {
+  feed: 'ticker'
+  product_id?: string
+  funding_rate?: number
 }
 
 interface BalancesMessage extends WsMessage {
@@ -147,6 +154,8 @@ export class KrakenFuturesWs {
   private challenge: string | null = null
   private subscribedFeeds: Set<string> = new Set()
   private isIntentionallyDisconnected = false
+  private fundingRates: Map<string, number> = new Map() // instrument -> funding_rate
+  private subscribedTickers: Set<string> = new Set() // product_ids we've subscribed to
 
   constructor(args: {
     apiKey: string
@@ -281,7 +290,15 @@ export class KrakenFuturesWs {
     if (message.event === 'subscribed') {
       const subscribeResponse = message as SubscribeResponse
       console.log('[KrakenFuturesWs] Subscribed to feed:', subscribeResponse.feed)
-      this.subscribedFeeds.add(subscribeResponse.feed)
+      
+      if (subscribeResponse.feed === 'ticker' && Array.isArray(subscribeResponse.product_ids)) {
+        // Track subscribed tickers
+        subscribeResponse.product_ids.forEach((id: string) => {
+          this.subscribedTickers.add(id)
+        })
+      } else {
+        this.subscribedFeeds.add(subscribeResponse.feed)
+      }
       
       if (this.subscribedFeeds.size >= 2) {
         // Both open_positions and balances are subscribed
@@ -295,6 +312,22 @@ export class KrakenFuturesWs {
     if (message.feed === 'open_positions') {
       const positionsMessage = message as OpenPositionsMessage
       if (positionsMessage.positions) {
+        // Extract unique instruments and subscribe to ticker feeds
+        const instruments = new Set<string>()
+        positionsMessage.positions.forEach((pos) => {
+          if (pos.instrument) {
+            instruments.add(pos.instrument)
+          }
+        })
+        
+        // Subscribe to ticker feeds for instruments we haven't subscribed to yet
+        instruments.forEach((instrument) => {
+          if (!this.subscribedTickers.has(instrument)) {
+            this.subscribeToTicker(instrument)
+          }
+        })
+        
+        // Map positions and merge funding rates
         const positions: KrakenOpenPosition[] = positionsMessage.positions.map((pos) => ({
           instrument: pos.instrument,
           balance: pos.balance,
@@ -305,11 +338,38 @@ export class KrakenFuturesWs {
           maintenanceMargin: pos.maintenance_margin,
           initialMarginWithOrders: pos.initial_margin_with_orders,
           effectiveLeverage: pos.effective_leverage,
+          fundingRate: this.fundingRates.get(pos.instrument),
         }))
         this.updateState({
           positions,
           lastUpdateTs: Date.now(),
         })
+      }
+      return
+    }
+
+    // Handle ticker feed
+    if (message.feed === 'ticker') {
+      const tickerMessage = message as TickerMessage
+      if (tickerMessage.product_id && tickerMessage.funding_rate !== undefined && tickerMessage.funding_rate !== null) {
+        const productId = tickerMessage.product_id
+        const fundingRate = tickerMessage.funding_rate
+        this.fundingRates.set(productId, fundingRate)
+        console.log(`[KrakenFuturesWs] Updated funding rate for ${productId}:`, fundingRate)
+        
+        // Update positions with new funding rate if we have positions
+        if (this.state.positions) {
+          const updatedPositions = this.state.positions.map((pos) => {
+            if (pos.instrument === productId) {
+              return { ...pos, fundingRate }
+            }
+            return pos
+          })
+          this.updateState({
+            positions: updatedPositions,
+            lastUpdateTs: Date.now(),
+          })
+        }
       }
       return
     }
@@ -376,6 +436,24 @@ export class KrakenFuturesWs {
     }
     console.log('[KrakenFuturesWs] Subscribing to balances...')
     this.ws.send(JSON.stringify(balancesSubscribe))
+  }
+
+  /**
+   * Subscribe to ticker feed for a specific product_id (public feed, no auth required)
+   */
+  private subscribeToTicker(productId: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[KrakenFuturesWs] Cannot subscribe to ticker: WebSocket not open')
+      return
+    }
+
+    const tickerSubscribe = {
+      event: 'subscribe',
+      feed: 'ticker',
+      product_ids: [productId],
+    }
+    console.log(`[KrakenFuturesWs] Subscribing to ticker for ${productId}...`)
+    this.ws.send(JSON.stringify(tickerSubscribe))
   }
 
   private startKeepAlive(): void {
@@ -447,6 +525,8 @@ export class KrakenFuturesWs {
 
     this.challenge = null
     this.subscribedFeeds.clear()
+    this.subscribedTickers.clear()
+    this.fundingRates.clear()
     this.updateState({ status: 'disconnected' })
   }
 
