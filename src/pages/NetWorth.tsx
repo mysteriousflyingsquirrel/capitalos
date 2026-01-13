@@ -388,8 +388,8 @@ function NetWorthCategorySection({
                         const pnlSign = pos.pnl >= 0 ? '+' : '-'
                         const pnlFormatted = formatNumber(Math.abs(pos.pnl), 'ch', { incognito: isIncognito })
                         
-                        // Format second line: direction arrow, leverage, and funding rate
-                        // Format: "▼ 1x / +0.00250%"
+                        // Format second line: direction arrow and leverage
+                        // Format: "▼ 1x"
                         const secondLineParts: string[] = []
                         
                         // Add direction arrow and leverage if available
@@ -408,33 +408,6 @@ function NetWorthCategorySection({
                           // Show just leverage if no direction
                           const roundedLeverage = Math.round(pos.leverage)
                           secondLineParts.push(`${roundedLeverage}x`)
-                        }
-                        
-                        // Add funding rate if available
-                        if (pos.fundingRate !== null && pos.fundingRate !== undefined) {
-                          // Format funding rate as raw decimal value with sufficient precision
-                          // Convert scientific notation to decimal string
-                          let fundingRateStr: string
-                          const absRate = Math.abs(pos.fundingRate)
-                          
-                          if (absRate < 1e-10) {
-                            // For very small values, use toFixed with many decimal places
-                            // Remove trailing zeros but keep the decimal point if needed
-                            fundingRateStr = pos.fundingRate.toFixed(20).replace(/\.?0+$/, '')
-                            // Ensure we have at least one digit after decimal point for very small values
-                            if (!fundingRateStr.includes('.')) {
-                              fundingRateStr = pos.fundingRate.toFixed(20)
-                            }
-                          } else if (absRate < 1) {
-                            // For values between 1e-10 and 1, use toFixed with appropriate precision
-                            fundingRateStr = pos.fundingRate.toFixed(10).replace(/\.?0+$/, '')
-                          } else {
-                            // For values >= 1, use standard formatting
-                            fundingRateStr = pos.fundingRate.toFixed(6).replace(/\.?0+$/, '')
-                          }
-                          
-                          const sign = pos.fundingRate >= 0 ? '+' : ''
-                          secondLineParts.push(`${sign}${fundingRateStr}`)
                         }
                         
                         const secondLineDisplay = secondLineParts.length > 0
