@@ -210,12 +210,13 @@ export function DataProvider({ children }: DataProviderProps) {
   }
 
   // Fetch Aster Perpetuals data
-  const fetchPerpetualsData = async (items: NetWorthItem[]): Promise<NetWorthItem[]> => {
+  const fetchPerpetualsData = async (items: NetWorthItem[], isInitialLoad: boolean = false): Promise<NetWorthItem[]> => {
     console.log('[DataContext] fetchPerpetualsData called:', {
       hasUid: !!uid,
       uid: uid,
       itemsCount: items.length,
       hasPerpetualsItem: !!items.find((item) => item.category === 'Perpetuals'),
+      isInitialLoad,
     })
     
     if (!uid) {
@@ -240,12 +241,56 @@ export function DataProvider({ children }: DataProviderProps) {
         fetchHyperliquidPerpetualsData(uid),
       ])
       
-      // Get Kraken data from WebSocket state (if configured)
+      // Wait for Kraken WebSocket to be ready (if configured)
       setLoadingMessage('Waiting for Kraken connection...')
       let finalKrakenData: PerpetualsData | null = null
       
-      if (krakenApiKey && krakenApiSecretKey && krakenWsStateRef.current) {
-        finalKrakenData = convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
+      if (krakenApiKey && krakenApiSecretKey) {
+        if (isInitialLoad) {
+          // Wait up to 15 seconds for WebSocket to be ready and have received initial data
+          const maxWaitTime = 15000 // 15 seconds
+          const startTime = Date.now()
+          let lastDataTimestamp = 0
+          
+          while (Date.now() - startTime < maxWaitTime) {
+            const wsState = krakenWsStateRef.current
+            
+            // Check if WebSocket is subscribed AND has received data
+            if (wsState && wsState.status === 'subscribed') {
+              // Check if we have recent data (within last 2 seconds) or any data at all
+              const hasRecentData = wsState.lastUpdateTs && (Date.now() - wsState.lastUpdateTs < 2000)
+              const hasAnyData = (wsState.positions && wsState.positions.length > 0) || 
+                                (wsState.balances && wsState.balances.availableMargin !== undefined)
+              
+              if (hasRecentData || hasAnyData) {
+                finalKrakenData = convertKrakenWsStateToPerpetualsData(wsState)
+                
+                // If we got data, wait a bit more to ensure it's stable (no more updates)
+                if (wsState.lastUpdateTs && wsState.lastUpdateTs !== lastDataTimestamp) {
+                  lastDataTimestamp = wsState.lastUpdateTs
+                  // Wait 500ms to see if more data comes in
+                  await new Promise(resolve => setTimeout(resolve, 500))
+                  // Check again if we got more recent data
+                  if (krakenWsStateRef.current && krakenWsStateRef.current.lastUpdateTs && 
+                      krakenWsStateRef.current.lastUpdateTs > lastDataTimestamp) {
+                    // More data came in, update and continue waiting
+                    finalKrakenData = convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
+                    lastDataTimestamp = krakenWsStateRef.current.lastUpdateTs
+                    continue
+                  }
+                }
+                break
+              }
+            }
+            // Wait 200ms before checking again
+            await new Promise(resolve => setTimeout(resolve, 200))
+          }
+        }
+        
+        // For background refreshes or if initial wait didn't get data, use current state
+        if (!finalKrakenData && krakenWsStateRef.current) {
+          finalKrakenData = convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
+        }
       }
 
       console.log('[DataContext] Fetch results:', {
@@ -435,7 +480,7 @@ export function DataProvider({ children }: DataProviderProps) {
       ])
       
       // Step 3: Fetch Perpetuals data (reads from WebSocket state for Kraken)
-      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items)
+      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items, true)
       
       // Step 4: Calculate totals
       setLoadingMessage('Calculating totals...')
@@ -648,8 +693,8 @@ export function DataProvider({ children }: DataProviderProps) {
     }
 
     try {
-      // For manual refresh, use current WebSocket state
-      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems)
+      // For manual refresh, don't wait as long for WebSocket (use isInitialLoad: false)
+      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems, false)
 
       setData((prev) => {
         if (prev.netWorthItems.length === 0) {
