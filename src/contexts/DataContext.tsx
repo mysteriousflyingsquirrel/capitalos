@@ -210,12 +210,13 @@ export function DataProvider({ children }: DataProviderProps) {
   }
 
   // Fetch Aster Perpetuals data
-  const fetchPerpetualsData = async (items: NetWorthItem[]): Promise<NetWorthItem[]> => {
+  const fetchPerpetualsData = async (items: NetWorthItem[], isInitialLoad: boolean = false): Promise<NetWorthItem[]> => {
     console.log('[DataContext] fetchPerpetualsData called:', {
       hasUid: !!uid,
       uid: uid,
       itemsCount: items.length,
       hasPerpetualsItem: !!items.find((item) => item.category === 'Perpetuals'),
+      isInitialLoad,
     })
     
     if (!uid) {
