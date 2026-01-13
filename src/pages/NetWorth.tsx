@@ -397,7 +397,8 @@ function NetWorthCategorySection({
                         if (pos.positionSide) {
                           const directionArrow = pos.positionSide === 'LONG' ? '▲' : '▼'
                           if (pos.leverage !== null && pos.leverage !== undefined) {
-                            const leverageStr = `${pos.leverage}x`
+                            const roundedLeverage = Math.round(pos.leverage)
+                            const leverageStr = `${roundedLeverage}x`
                             secondLineParts.push(`${directionArrow} ${leverageStr}`)
                           } else {
                             // Show just direction if no leverage
@@ -405,7 +406,8 @@ function NetWorthCategorySection({
                           }
                         } else if (pos.leverage !== null && pos.leverage !== undefined) {
                           // Show just leverage if no direction
-                          secondLineParts.push(`${pos.leverage}x`)
+                          const roundedLeverage = Math.round(pos.leverage)
+                          secondLineParts.push(`${roundedLeverage}x`)
                         }
                         
                         // Add funding rate if available
