@@ -87,9 +87,18 @@ async function fetchUserState(walletAddress: string): Promise<any> {
 
     const data = await response.json()
     
-    if (data.clearinghouseState) {
-      return data.clearinghouseState
+    // Handle array response format [null, state] if present (as shown in some Hyperliquid endpoints)
+    if (Array.isArray(data) && data.length > 1 && data[1] !== null) {
+      console.log('[Hyperliquid] Using array index [1] for state')
+      return data[1]
     }
+    
+    // Handle direct object response (as shown in clearinghouseState docs)
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      return data
+    }
+    
+    // Fallback
     return data
   } catch (error) {
     console.error('[Hyperliquid] Error fetching user state:', error)
@@ -103,93 +112,64 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
     const userState = await fetchUserState(walletAddress)
     
     const positions: PerpetualsOpenPosition[] = []
-    let assetPositions: any[] = []
     
-    if (userState.assetPositions && Array.isArray(userState.assetPositions)) {
-      assetPositions = userState.assetPositions
-    } else if (userState.positions && Array.isArray(userState.positions)) {
-      assetPositions = userState.positions
-    } else if (userState.clearinghouseState?.assetPositions && Array.isArray(userState.clearinghouseState.assetPositions)) {
-      assetPositions = userState.clearinghouseState.assetPositions
-    } else if (userState.clearinghouseState?.userState?.assetPositions && Array.isArray(userState.clearinghouseState.userState.assetPositions)) {
-      assetPositions = userState.clearinghouseState.userState.assetPositions
+    // According to Hyperliquid API docs, assetPositions is at the top level of the response
+    const assetPositions = userState?.assetPositions
+    
+    if (!assetPositions || !Array.isArray(assetPositions)) {
+      console.log('[Hyperliquid] No assetPositions found or not an array. User state keys:', Object.keys(userState || {}))
+      return positions
     }
     
-    if (assetPositions.length > 0) {
-      const symbols = new Set<string>()
+    console.log('[Hyperliquid] Found', assetPositions.length, 'asset positions')
+    
+    for (const pos of assetPositions) {
+      // According to docs, position data is in pos.position
+      const position = pos.position || pos
       
-      for (const pos of assetPositions) {
-        const position = pos.position || pos
-        const size = parseFloat(position.szi || position.size || position.position?.szi || position.position?.size || '0')
-        
-        if (Math.abs(size) < 0.0001) {
-          continue
-        }
-
-        const symbol = position.coin || position.symbol || position.position?.coin || position.position?.symbol || ''
-        if (symbol) {
-          symbols.add(symbol)
-        }
+      // Size is in position.szi (as shown in docs example)
+      const size = parseFloat(position.szi || '0')
+      
+      // Skip positions with zero size
+      if (Math.abs(size) < 0.0001) {
+        continue
       }
 
-      for (const pos of assetPositions) {
-        const position = pos.position || pos
-        const size = parseFloat(position.szi || position.size || position.position?.szi || position.position?.size || '0')
-        
-        if (Math.abs(size) < 0.0001) {
-          continue
-        }
-
-        const symbol = position.coin || position.symbol || position.position?.coin || position.position?.symbol || ''
-        
-        let leverage: number | null = null
-        
-        if (position.leverage) {
-          if (typeof position.leverage === 'object' && position.leverage.value !== undefined) {
-            leverage = parseFloat(position.leverage.value)
-          } else if (typeof position.leverage === 'string' || typeof position.leverage === 'number') {
-            leverage = parseFloat(position.leverage)
-          }
-        } else if (pos.leverage) {
-          if (typeof pos.leverage === 'object' && pos.leverage.value !== undefined) {
-            leverage = parseFloat(pos.leverage.value)
-          } else if (typeof pos.leverage === 'string' || typeof pos.leverage === 'number') {
-            leverage = parseFloat(pos.leverage)
-          }
-        }
-        
-        const margin = parseFloat(
-          position.marginUsed || 
-          position.margin || 
-          position.position?.marginUsed || 
-          position.position?.margin ||
-          position.collateral || 
-          position.position?.collateral ||
-          '0'
-        )
-        
-        const unrealizedPnl = parseFloat(
-          position.unrealizedPnl || 
-          position.position?.unrealizedPnl ||
-          position.pnl ||
-          position.position?.pnl ||
-          '0'
-        )
-        
-        const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
-
-        positions.push({
-          id: `hyperliquid-pos-${symbol}-${Date.now()}`,
-          ticker: symbol,
-          margin,
-          pnl: unrealizedPnl,
-          platform: 'Hyperliquid',
-          leverage,
-          positionSide,
-        })
+      // Coin symbol is in position.coin (as shown in docs)
+      const symbol = position.coin || ''
+      
+      if (!symbol) {
+        console.warn('[Hyperliquid] Position missing coin symbol:', position)
+        continue
       }
+      
+      // Leverage is in position.leverage.value (as shown in docs)
+      let leverage: number | null = null
+      if (position.leverage && typeof position.leverage === 'object' && position.leverage.value !== undefined) {
+        leverage = parseFloat(position.leverage.value)
+      }
+      
+      // Margin used is in position.marginUsed (as shown in docs)
+      const margin = parseFloat(position.marginUsed || '0')
+      
+      // Unrealized PnL is in position.unrealizedPnl (as shown in docs)
+      const unrealizedPnl = parseFloat(position.unrealizedPnl || '0')
+      
+      // Determine position side from size
+      const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
+
+      positions.push({
+        id: `hyperliquid-pos-${symbol}-${Date.now()}`,
+        ticker: symbol,
+        margin,
+        pnl: unrealizedPnl,
+        platform: 'Hyperliquid',
+        leverage,
+        positionSide,
+      })
     }
-
+    
+    console.log('[Hyperliquid] Processed', positions.length, 'positions')
     return positions
   } catch (error) {
     console.error('Error fetching Hyperliquid open positions:', error)
