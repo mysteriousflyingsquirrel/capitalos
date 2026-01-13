@@ -36,9 +36,7 @@ export interface AppData {
 interface DataContextType {
   data: AppData
   loading: boolean
-  loadingMessage: string | null
   error: string | null
-  isDataReady: boolean // True when all data is loaded and calculations are complete
   refreshData: () => Promise<void>
   refreshPrices: () => Promise<void>
   refreshPerpetuals: () => Promise<void>
@@ -76,15 +74,11 @@ export function DataProvider({ children }: DataProviderProps) {
   })
   
   const [loading, setLoading] = useState(true)
-  const [loadingMessage, setLoadingMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isDataReady, setIsDataReady] = useState(false)
   // Use ref for WebSocket state to prevent re-renders on every update
   const krakenWsStateRef = useRef<KrakenWsState | null>(null)
   // Track if we're currently saving summary to avoid infinite loops
   const isSavingSummaryRef = useRef(false)
-  // Track if initial load is complete (prevents showing loading screen during background updates)
-  const initialLoadCompleteRef = useRef(false)
 
   // Load all Firebase data
   const loadFirebaseData = async (): Promise<{
@@ -230,67 +224,19 @@ export function DataProvider({ children }: DataProviderProps) {
     }
 
     try {
-      setLoadingMessage('Fetching perpetuals data...')
       console.log('[DataContext] Fetching Aster, Hyperliquid, and Kraken data...')
       
       // Fetch Aster and Hyperliquid data (Kraken uses WebSocket only)
-      setLoadingMessage('Connecting to exchanges...')
       const [asterData, hyperliquidData] = await Promise.all([
         fetchAsterPerpetualsData(uid),
         fetchHyperliquidPerpetualsData(uid),
       ])
       
-      // Wait for Kraken WebSocket to be ready (if configured)
-      setLoadingMessage('Waiting for Kraken connection...')
-      let finalKrakenData: PerpetualsData | null = null
-      
-      if (krakenApiKey && krakenApiSecretKey) {
-        if (isInitialLoad) {
-          // Wait up to 15 seconds for WebSocket to be ready and have received initial data
-          const maxWaitTime = 15000 // 15 seconds
-          const startTime = Date.now()
-          let lastDataTimestamp = 0
-          
-          while (Date.now() - startTime < maxWaitTime) {
-            const wsState = krakenWsStateRef.current
-            
-            // Check if WebSocket is subscribed AND has received data
-            if (wsState && wsState.status === 'subscribed') {
-              // Check if we have recent data (within last 2 seconds) or any data at all
-              const hasRecentData = wsState.lastUpdateTs && (Date.now() - wsState.lastUpdateTs < 2000)
-              const hasAnyData = (wsState.positions && wsState.positions.length > 0) || 
-                                (wsState.balances && wsState.balances.availableMargin !== undefined)
-              
-              if (hasRecentData || hasAnyData) {
-                finalKrakenData = convertKrakenWsStateToPerpetualsData(wsState)
-                
-                // If we got data, wait a bit more to ensure it's stable (no more updates)
-                if (wsState.lastUpdateTs && wsState.lastUpdateTs !== lastDataTimestamp) {
-                  lastDataTimestamp = wsState.lastUpdateTs
-                  // Wait 500ms to see if more data comes in
-                  await new Promise(resolve => setTimeout(resolve, 500))
-                  // Check again if we got more recent data
-                  if (krakenWsStateRef.current && krakenWsStateRef.current.lastUpdateTs && 
-                      krakenWsStateRef.current.lastUpdateTs > lastDataTimestamp) {
-                    // More data came in, update and continue waiting
-                    finalKrakenData = convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
-                    lastDataTimestamp = krakenWsStateRef.current.lastUpdateTs
-                    continue
-                  }
-                }
-                break
-              }
-            }
-            // Wait 200ms before checking again
-            await new Promise(resolve => setTimeout(resolve, 200))
-          }
-        }
-        
-        // For background refreshes or if initial wait didn't get data, use current state
-        if (!finalKrakenData && krakenWsStateRef.current) {
-          finalKrakenData = convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
-        }
-      }
+      // Get Kraken data from WebSocket (only source)
+      // Convert current WebSocket state to PerpetualsData format
+      const finalKrakenData = krakenWsStateRef.current && krakenWsStateRef.current.status === 'subscribed'
+        ? convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
+        : null
 
       console.log('[DataContext] Fetch results:', {
         asterData: !!asterData,
@@ -459,30 +405,25 @@ export function DataProvider({ children }: DataProviderProps) {
   const loadAllData = async () => {
     if (!uid) {
       setLoading(false)
-      setLoadingMessage(null)
       return
     }
 
     try {
       setError(null)
-      setLoadingMessage('Loading your data...')
       
       // Step 1: Load Firebase data
-      setLoadingMessage('Loading from database...')
       const firebaseData = await loadFirebaseData()
       
       // Step 2: Fetch exchange prices (USD→CHF rate) and crypto/stock prices
-      setLoadingMessage('Fetching market prices...')
       const [cryptoData, stockPricesData] = await Promise.all([
         fetchCryptoPrices(firebaseData.items),
         fetchStockPricesData(firebaseData.items),
       ])
       
       // Step 3: Fetch Perpetuals data (reads from WebSocket state for Kraken)
-      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items, true)
+      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items)
       
       // Step 4: Calculate totals
-      setLoadingMessage('Calculating totals...')
       const calculationResult = calculateTotals(
         itemsWithPerpetuals,
         firebaseData.transactions,
@@ -495,7 +436,6 @@ export function DataProvider({ children }: DataProviderProps) {
       if (uid && !isSavingSummaryRef.current) {
         isSavingSummaryRef.current = true
         try {
-          setLoadingMessage('Saving summary...')
           const summary = calculationResultToSummary(calculationResult, uid, 'CHF')
           await saveNetWorthSummaryFirestore(uid, summary)
         } catch (err) {
@@ -506,89 +446,6 @@ export function DataProvider({ children }: DataProviderProps) {
       }
       
       // Step 6: Update frontend (single state update)
-      setLoadingMessage('Finalizing...')
-      
-      // Verify calculationResult is complete and valid before proceeding
-      let finalCalculationResult = calculationResult
-      if (!finalCalculationResult || 
-          finalCalculationResult.totalNetWorthChf === undefined || 
-          finalCalculationResult.totalNetWorthChf === null ||
-          isNaN(finalCalculationResult.totalNetWorthChf)) {
-        console.warn('[DataContext] Calculation result is incomplete, recalculating...')
-        // Recalculate to ensure it's complete
-        const recalculatedResult = calculateTotals(
-          itemsWithPerpetuals,
-          firebaseData.transactions,
-          cryptoData.cryptoPrices,
-          stockPricesData,
-          cryptoData.usdToChfRate
-        )
-        if (recalculatedResult && 
-            recalculatedResult.totalNetWorthChf !== undefined && 
-            recalculatedResult.totalNetWorthChf !== null &&
-            !isNaN(recalculatedResult.totalNetWorthChf)) {
-          finalCalculationResult = recalculatedResult
-        } else {
-          console.error('[DataContext] Failed to get valid calculation result, using fallback')
-          // Create a fallback result with zero values
-          finalCalculationResult = {
-            categoryTotals: {
-              'Cash': 0,
-              'Bank Accounts': 0,
-              'Retirement Funds': 0,
-              'Index Funds': 0,
-              'Stocks': 0,
-              'Commodities': 0,
-              'Crypto': 0,
-              'Perpetuals': 0,
-              'Real Estate': 0,
-              'Depreciating Assets': 0,
-            },
-            totalNetWorthChf: 0,
-          }
-        }
-      }
-      
-      // Verify all required data is present (more lenient - allow 0 values)
-      const hasAllData = 
-        itemsWithPerpetuals.length >= 0 && // Items can be empty, that's ok
-        finalCalculationResult !== null &&
-        finalCalculationResult !== undefined &&
-        finalCalculationResult.totalNetWorthChf !== undefined &&
-        finalCalculationResult.totalNetWorthChf !== null &&
-        !isNaN(finalCalculationResult.totalNetWorthChf) &&
-        cryptoData.cryptoPrices !== undefined &&
-        stockPricesData !== undefined
-      
-      if (!hasAllData) {
-        console.error('[DataContext] Data validation failed, some required data is missing', {
-          hasCalculationResult: !!finalCalculationResult,
-          hasTotalNetWorthChf: finalCalculationResult?.totalNetWorthChf !== undefined && 
-                               finalCalculationResult?.totalNetWorthChf !== null &&
-                               !isNaN(finalCalculationResult?.totalNetWorthChf),
-          hasCryptoPrices: cryptoData.cryptoPrices !== undefined,
-          hasStockPrices: stockPricesData !== undefined,
-          calculationResult: finalCalculationResult,
-        })
-        // Don't throw error - use fallback instead
-        finalCalculationResult = {
-          categoryTotals: {
-            'Cash': 0,
-            'Bank Accounts': 0,
-            'Retirement Funds': 0,
-            'Index Funds': 0,
-            'Stocks': 0,
-            'Commodities': 0,
-            'Crypto': 0,
-            'Perpetuals': 0,
-            'Real Estate': 0,
-            'Depreciating Assets': 0,
-          },
-          totalNetWorthChf: 0,
-        }
-      }
-      
-      // Set data synchronously
       setData({
         netWorthItems: itemsWithPerpetuals,
         transactions: firebaseData.transactions,
@@ -598,27 +455,14 @@ export function DataProvider({ children }: DataProviderProps) {
         cryptoPrices: cryptoData.cryptoPrices,
         stockPrices: stockPricesData,
         usdToChfRate: cryptoData.usdToChfRate,
-        calculationResult: finalCalculationResult,
+        calculationResult,
       })
       
-      // Mark data as ready - this will be checked by the loading screen
-      setIsDataReady(true)
-      
-      // Mark initial load as complete
-      initialLoadCompleteRef.current = true
-      
-      // Now we can hide the loading screen
       setLoading(false)
-      setLoadingMessage(null)
     } catch (err) {
       console.error('Error loading data:', err)
       setError(err instanceof Error ? err.message : 'Failed to load data')
-      initialLoadCompleteRef.current = true
-      // Even on error, mark as ready so the app can display the error message
-      // rather than being stuck on loading screen
-      setIsDataReady(true)
       setLoading(false)
-      setLoadingMessage(null)
     }
   }
 
@@ -692,8 +536,7 @@ export function DataProvider({ children }: DataProviderProps) {
     }
 
     try {
-      // For manual refresh, don't wait as long for WebSocket (use isInitialLoad: false)
-      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems, false)
+      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems)
 
       setData((prev) => {
         if (prev.netWorthItems.length === 0) {
@@ -730,14 +573,8 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Refresh all data
   const refreshData = async () => {
-    // Only show loading screen if initial load is not complete
-    if (!initialLoadCompleteRef.current) {
-      setLoading(true)
-    }
+    setLoading(true)
     await loadAllData()
-    if (!initialLoadCompleteRef.current) {
-      initialLoadCompleteRef.current = true
-    }
   }
 
   // Initial load
@@ -749,12 +586,8 @@ export function DataProvider({ children }: DataProviderProps) {
   // We recalculate when data changes, not when convert changes, since convert is stable
 
   // Unified refresh function: fetch exchange prices -> fetch crypto prices -> fetch perpetuals data -> update frontend
-  // This runs in the background and should NOT show loading screen
   const refreshAllData = async () => {
-    if (!uid || !initialLoadCompleteRef.current) {
-      // Don't run background refresh if initial load isn't complete
-      return
-    }
+    if (!uid) return
 
     // Get current state
     let currentItems: NetWorthItem[] = []
@@ -784,7 +617,6 @@ export function DataProvider({ children }: DataProviderProps) {
       ])
       
       // Step 2: Fetch perpetuals data (reads from WebSocket state for Kraken)
-      // For background refresh, don't wait as long for WebSocket
       const itemsWithPerpetuals = await fetchPerpetualsData(currentItems)
       
       // Step 3: Calculate totals
@@ -830,9 +662,8 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Save summary to Firestore whenever calculationResult changes
   // This ensures summary is always up-to-date for snapshot API
-  // Only runs after initial load is complete to avoid interfering with loading screen
   useEffect(() => {
-    if (!uid || loading || !initialLoadCompleteRef.current || !data.calculationResult || isSavingSummaryRef.current) {
+    if (!uid || loading || !data.calculationResult || isSavingSummaryRef.current) {
       return
     }
 
@@ -889,9 +720,7 @@ export function DataProvider({ children }: DataProviderProps) {
       value={{
         data,
         loading,
-        loadingMessage,
         error,
-        isDataReady,
         refreshData,
         refreshPrices,
         refreshPerpetuals,
