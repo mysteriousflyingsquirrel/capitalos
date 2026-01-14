@@ -444,6 +444,100 @@ function parseMarginSummary(userState: any, debug: boolean = false): { withdrawa
   return { withdrawable, totalMarginUsed }
 }
 
+// Helper: Build leverage lookup map from clearinghouseState assetPositions
+function buildLeverageMap(assetPositions: any[]): Record<string, number> {
+  const leverageMap: Record<string, number> = {}
+  const DEFAULT_LEVERAGE = 1
+  
+  if (!Array.isArray(assetPositions)) {
+    return leverageMap
+  }
+  
+  for (const pos of assetPositions) {
+    const position = pos.position || pos
+    const coin = position.coin || position.name
+    
+    if (!coin) {
+      continue
+    }
+    
+    // Parse leverage: from position.leverage.value or directly from position.leverage
+    let leverage = DEFAULT_LEVERAGE
+    if (position.leverage) {
+      if (typeof position.leverage === 'object' && position.leverage.value !== undefined) {
+        if (typeof position.leverage.value === 'string') {
+          leverage = parseFloat(position.leverage.value)
+        } else if (typeof position.leverage.value === 'number') {
+          leverage = position.leverage.value
+        }
+      } else if (typeof position.leverage === 'string') {
+        leverage = parseFloat(position.leverage)
+      } else if (typeof position.leverage === 'number') {
+        leverage = position.leverage
+      }
+    }
+    
+    if (leverage > 0) {
+      leverageMap[coin] = leverage
+    }
+  }
+  
+  return leverageMap
+}
+
+// Fetch open orders from Hyperliquid API
+async function fetchOpenOrders(walletAddress: string, dex: string = ''): Promise<any[]> {
+  try {
+    const requestBody: any = {
+      type: 'openOrders',
+      user: walletAddress,
+    }
+    
+    // Include dex field if provided
+    if (dex) {
+      requestBody.dex = dex
+    }
+    
+    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Hyperliquid API error (${response.status}): ${errorText}`)
+    }
+
+    const data = await response.json()
+    
+    // Handle array response format [null, orders] if present
+    if (Array.isArray(data)) {
+      if (data.length > 1 && Array.isArray(data[1])) {
+        return data[1]
+      } else if (Array.isArray(data[0])) {
+        return data[0]
+      } else if (data.every((item: any) => item && typeof item === 'object')) {
+        return data
+      }
+    }
+    
+    // Handle direct array or object with orders field
+    if (Array.isArray(data)) {
+      return data
+    } else if (data.orders && Array.isArray(data.orders)) {
+      return data.orders
+    }
+    
+    return []
+  } catch (error) {
+    console.error(`[Hyperliquid] Error fetching open orders for dex "${dex || 'default'}":`, error)
+    return []
+  }
+}
+
 // Helper: Sum position initial margins from assetPositions (smart calculation)
 function sumSmartPositionMargins(assetPositions: any[], debug: boolean = false): number {
   if (!Array.isArray(assetPositions)) {
@@ -627,30 +721,61 @@ async function fetchLockedMargin(walletAddress: string, debug: boolean = false):
       dexsToQuery.push(dexWithSilver)
     }
     
+    const DEFAULT_LEVERAGE = 1
     let totalLocked = 0
     
     for (const dex of dexsToQuery) {
       try {
+        // Get clearinghouseState to build leverage map
         const userState = await fetchUserState(walletAddress, dex)
-        const { totalMarginUsed } = parseMarginSummary(userState, debug)
+        const assetPositions = userState?.assetPositions || []
+        const leverageMap = buildLeverageMap(assetPositions)
         
-        // Get assetPositions to sum position margins
-        const assetPositions = userState?.assetPositions
-        const positionsUsed = sumSmartPositionMargins(assetPositions || [], debug)
+        // Fetch open orders for this dex
+        const openOrders = await fetchOpenOrders(walletAddress, dex)
         
-        // Calculate lockedMargin = max(0, totalMarginUsed - positionsUsed)
-        const lockedMargin = Math.max(0, totalMarginUsed - positionsUsed)
+        // Compute lockedMargin as sum of per-order required IM
+        let dexLocked = 0
+        
+        for (const order of openOrders) {
+          const coin = order.coin || ''
+          if (!coin) {
+            continue
+          }
+          
+          // Parse order fields
+          const px = parseFloat(order.limitPx || '0')
+          const sz = Math.abs(parseFloat(order.sz || '0'))
+          
+          // Get leverage: from leverageMap or use DEFAULT_LEVERAGE
+          const lev = leverageMap[coin] || DEFAULT_LEVERAGE
+          
+          // Compute orderLocked = (sz * px) / lev
+          const orderLocked = (sz * px) / lev
+          
+          if (debug && openOrders.indexOf(order) < 5) {
+            // Log first few orders
+            console.log('[Hyperliquid] Order locked margin calculation:', {
+              coin,
+              sz,
+              limitPx: order.limitPx,
+              levUsed: lev,
+              orderLocked,
+            })
+          }
+          
+          dexLocked += orderLocked
+        }
         
         if (debug) {
-          console.log(`[Hyperliquid] Dex "${dex || 'default'}" locked margin calculation:`, {
-            totalMarginUsed,
-            positionsUsed,
-            lockedMargin,
+          console.log(`[Hyperliquid] Dex "${dex || 'default'}" locked margin:`, {
+            numberOfOpenOrders: openOrders.length,
+            sumLockedMargin: dexLocked,
           })
         }
         
         // Sum across queried dexs
-        totalLocked += lockedMargin
+        totalLocked += dexLocked
       } catch (error) {
         console.error(`[Hyperliquid] Error fetching locked margin from dex "${dex || 'default'}":`, error)
         // Continue with other dexs even if one fails
