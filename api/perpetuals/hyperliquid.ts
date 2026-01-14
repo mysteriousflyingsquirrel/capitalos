@@ -444,45 +444,204 @@ function parseMarginSummary(userState: any, debug: boolean = false): { withdrawa
   return { withdrawable, totalMarginUsed }
 }
 
-// Helper: Build leverage lookup map from clearinghouseState assetPositions
-function buildLeverageMap(assetPositions: any[]): Record<string, number> {
-  const leverageMap: Record<string, number> = {}
-  const DEFAULT_LEVERAGE = 1
+// Meta cache per request (cleared after request completes)
+const metaCache: Record<string, { universe: any[]; marginTables: any }> = {}
+
+// Fetch meta data (universe + margin tables) for a dex
+// Caches per request to avoid duplicate calls
+async function fetchMeta(dex: string = ''): Promise<{ universe: any[]; marginTables: any } | null> {
+  const cacheKey = dex || 'default'
   
-  if (!Array.isArray(assetPositions)) {
-    return leverageMap
+  // Return cached if available
+  if (metaCache[cacheKey]) {
+    return metaCache[cacheKey]
   }
   
-  for (const pos of assetPositions) {
-    const position = pos.position || pos
-    const coin = position.coin || position.name
+  try {
+    const requestBody: any = {
+      type: 'meta',
+    }
+    
+    // Include dex field if provided
+    if (dex) {
+      requestBody.dex = dex
+    }
+    
+    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Hyperliquid API error (${response.status}): ${errorText}`)
+    }
+
+    const data = await response.json()
+    
+    // Handle array response format [universe, marginTables] (array tuple)
+    let universe: any[] = []
+    let marginTables: any = null
+    
+    if (Array.isArray(data)) {
+      if (data.length >= 2) {
+        // Format: [universe, marginTables]
+        universe = Array.isArray(data[0]) ? data[0] : (data[0]?.universe || [])
+        marginTables = data[1] || data[0]?.marginTables
+      } else if (data.length === 1) {
+        // Format: [{universe: [...], marginTables: {...}}]
+        universe = data[0]?.universe || []
+        marginTables = data[0]?.marginTables
+      }
+    } else if (data && typeof data === 'object') {
+      universe = data.universe || []
+      marginTables = data.marginTables
+    }
+    
+    // Cache the result
+    metaCache[cacheKey] = { universe, marginTables }
+    
+    return { universe, marginTables }
+  } catch (error) {
+    console.error(`[Hyperliquid] Error fetching meta for dex "${dex || 'default'}":`, error)
+    return null
+  }
+}
+
+// Build coin -> marginTableId lookup from universe
+function buildMarketMarginTableIdByCoin(universe: any[]): Record<string, number> {
+  const marketMarginTableIdByCoin: Record<string, number> = {}
+  
+  if (!Array.isArray(universe)) {
+    return marketMarginTableIdByCoin
+  }
+  
+  for (const entry of universe) {
+    // Extract coin/symbol/name
+    const coin = entry.name || entry.coin || entry.symbol || entry.token
     
     if (!coin) {
       continue
     }
     
-    // Parse leverage: from position.leverage.value or directly from position.leverage
-    let leverage = DEFAULT_LEVERAGE
-    if (position.leverage) {
-      if (typeof position.leverage === 'object' && position.leverage.value !== undefined) {
-        if (typeof position.leverage.value === 'string') {
-          leverage = parseFloat(position.leverage.value)
-        } else if (typeof position.leverage.value === 'number') {
-          leverage = position.leverage.value
-        }
-      } else if (typeof position.leverage === 'string') {
-        leverage = parseFloat(position.leverage)
-      } else if (typeof position.leverage === 'number') {
-        leverage = position.leverage
-      }
-    }
+    // Extract marginTableId (field name can vary)
+    const tableId = entry.marginTableId || entry.marginTable || entry.tableId || entry.table
     
-    if (leverage > 0) {
-      leverageMap[coin] = leverage
+    if (tableId !== undefined && tableId !== null) {
+      const tableIdNum = typeof tableId === 'string' ? parseFloat(tableId) : tableId
+      if (!isNaN(tableIdNum)) {
+        marketMarginTableIdByCoin[coin] = tableIdNum
+      }
     }
   }
   
-  return leverageMap
+  return marketMarginTableIdByCoin
+}
+
+// Build marginTableId -> tiers[] lookup from marginTables
+function buildTiersByTableId(marginTables: any): Record<number, any[]> {
+  const tiersByTableId: Record<number, any[]> = {}
+  
+  if (!marginTables) {
+    return tiersByTableId
+  }
+  
+  // marginTables can be an array of [tableId, tierData] pairs or an object
+  if (Array.isArray(marginTables)) {
+    for (const item of marginTables) {
+      if (Array.isArray(item) && item.length >= 2) {
+        // Format: [tableId, { marginTiers: [...] }]
+        const tableId = typeof item[0] === 'string' ? parseFloat(item[0]) : item[0]
+        const tierData = item[1]
+        if (!isNaN(tableId) && tierData?.marginTiers && Array.isArray(tierData.marginTiers)) {
+          tiersByTableId[tableId] = tierData.marginTiers
+        }
+      }
+    }
+  } else if (typeof marginTables === 'object') {
+    // Format: { [tableId]: { marginTiers: [...] } }
+    for (const [tableIdStr, tierData] of Object.entries(marginTables)) {
+      const tableId = parseFloat(tableIdStr)
+      if (!isNaN(tableId) && tierData && typeof tierData === 'object') {
+        const tiers = (tierData as any).marginTiers || (tierData as any).tiers || []
+        if (Array.isArray(tiers)) {
+          tiersByTableId[tableId] = tiers
+        }
+      }
+    }
+  }
+  
+  return tiersByTableId
+}
+
+// Get initial margin fraction for a given tableId and notional
+// Based on Hyperliquid's margin table semantics:
+// - If tableId < 50: single-tier table where max leverage == id
+//   => initialMarginFraction = 1 / id
+// - Else: use tier data from the table
+function getInitialMarginFraction(tableId: number, notional: number, tiersByTableId: Record<number, any[]>): number {
+  // If tableId < 50, it's a single-tier table where max leverage == id
+  if (tableId < 50) {
+    return 1 / tableId
+  }
+  
+  // Else use tier data from the table
+  const tiers = tiersByTableId[tableId]
+  if (!tiers || !Array.isArray(tiers) || tiers.length === 0) {
+    // Fallback: if no tiers found, use conservative 1x leverage
+    return 1
+  }
+  
+  // Select the correct tier for notional (use the tier whose notional range contains it)
+  // Tiers are typically ordered by lowerBound ascending
+  let selectedTier: any = null
+  
+  for (const tier of tiers) {
+    const lowerBound = parseFloat(tier.lowerBound || tier.lower || '0')
+    const upperBound = parseFloat(tier.upperBound || tier.upper || 'Infinity')
+    
+    if (notional >= lowerBound && (upperBound === Infinity || notional < upperBound)) {
+      selectedTier = tier
+      break
+    }
+  }
+  
+  // If no tier found, use the last tier (largest range)
+  if (!selectedTier && tiers.length > 0) {
+    selectedTier = tiers[tiers.length - 1]
+  }
+  
+  if (!selectedTier) {
+    // Fallback: use conservative 1x leverage
+    return 1
+  }
+  
+  // Derive IM fraction from tier
+  // If tier provides maxLeverage: imf = 1 / maxLeverage
+  if (selectedTier.maxLeverage !== undefined) {
+    const maxLeverage = typeof selectedTier.maxLeverage === 'string' 
+      ? parseFloat(selectedTier.maxLeverage) 
+      : selectedTier.maxLeverage
+    if (maxLeverage > 0) {
+      return 1 / maxLeverage
+    }
+  }
+  
+  // If tier provides initialMarginFraction directly: use it
+  if (selectedTier.initialMarginFraction !== undefined) {
+    const imf = typeof selectedTier.initialMarginFraction === 'string'
+      ? parseFloat(selectedTier.initialMarginFraction)
+      : selectedTier.initialMarginFraction
+    if (!isNaN(imf) && imf > 0) {
+      return imf
+    }
+  }
+  
+  // Fallback: use conservative 1x leverage
+  return 1
 }
 
 // Fetch open orders from Hyperliquid API
@@ -721,15 +880,24 @@ async function fetchLockedMargin(walletAddress: string, debug: boolean = false):
       dexsToQuery.push(dexWithSilver)
     }
     
-    const DEFAULT_LEVERAGE = 1
     let totalLocked = 0
     
     for (const dex of dexsToQuery) {
       try {
-        // Get clearinghouseState to build leverage map
-        const userState = await fetchUserState(walletAddress, dex)
-        const assetPositions = userState?.assetPositions || []
-        const leverageMap = buildLeverageMap(assetPositions)
+        // Fetch meta (universe + margin tables) for this dex
+        const meta = await fetchMeta(dex)
+        if (!meta) {
+          if (debug) {
+            console.log(`[Hyperliquid] Dex "${dex || 'default'}" - no meta data available`)
+          }
+          continue
+        }
+        
+        // Build coin -> marginTableId lookup from universe
+        const marketMarginTableIdByCoin = buildMarketMarginTableIdByCoin(meta.universe)
+        
+        // Build marginTableId -> tiers[] lookup
+        const tiersByTableId = buildTiersByTableId(meta.marginTables)
         
         // Fetch open orders for this dex
         const openOrders = await fetchOpenOrders(walletAddress, dex)
@@ -737,8 +905,10 @@ async function fetchLockedMargin(walletAddress: string, debug: boolean = false):
         // Compute lockedMargin as sum of per-order required IM
         let dexLocked = 0
         
-        for (const order of openOrders) {
+        for (let i = 0; i < openOrders.length; i++) {
+          const order = openOrders[i]
           const coin = order.coin || ''
+          
           if (!coin) {
             continue
           }
@@ -746,20 +916,33 @@ async function fetchLockedMargin(walletAddress: string, debug: boolean = false):
           // Parse order fields
           const px = parseFloat(order.limitPx || '0')
           const sz = Math.abs(parseFloat(order.sz || '0'))
+          const notional = sz * px
           
-          // Get leverage: from leverageMap or use DEFAULT_LEVERAGE
-          const lev = leverageMap[coin] || DEFAULT_LEVERAGE
+          // Get tableId from marketMarginTableIdByCoin
+          const tableId = marketMarginTableIdByCoin[coin]
           
-          // Compute orderLocked = (sz * px) / lev
-          const orderLocked = (sz * px) / lev
+          if (tableId === undefined || tableId === null) {
+            if (debug) {
+              console.log(`[Hyperliquid] Coin "${coin}" cannot be mapped to a margin table ID`)
+            }
+            continue
+          }
           
-          if (debug && openOrders.indexOf(order) < 5) {
-            // Log first few orders
+          // Get initial margin fraction using margin tiers
+          const imf = getInitialMarginFraction(tableId, notional, tiersByTableId)
+          
+          // Compute orderLocked = notional * imf
+          const orderLocked = notional * imf
+          
+          if (debug && i < 5) {
+            // Log first ~5 orders
             console.log('[Hyperliquid] Order locked margin calculation:', {
               coin,
               sz,
               limitPx: order.limitPx,
-              levUsed: lev,
+              notional,
+              tableId,
+              imf,
               orderLocked,
             })
           }
@@ -796,6 +979,9 @@ async function fetchLockedMargin(walletAddress: string, debug: boolean = false):
   } catch (error) {
     console.error('[Hyperliquid] Error fetching locked margin:', error)
     return []
+  } finally {
+    // Clear meta cache after request completes
+    Object.keys(metaCache).forEach(key => delete metaCache[key])
   }
 }
 
