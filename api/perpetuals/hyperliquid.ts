@@ -36,17 +36,17 @@ interface PerpetualsOpenPosition {
   positionSide?: 'LONG' | 'SHORT' | null // position direction
 }
 
-interface PerpetualsOpenOrder {
-  id: string
-  name: string
-  margin: number | null // in USD/USDT, null when not available from API
-  platform: string
-}
-
 interface ExchangeBalance {
   id: string
   item: string
   holdings: number
+  platform: string
+}
+
+interface PerpetualsOpenOrder {
+  id: string
+  name: string
+  margin: number | null
   platform: string
 }
 
@@ -74,15 +74,10 @@ async function fetchAllPerpDexs(): Promise<string[]> {
     })
 
     if (!response.ok) {
-      console.log('[Hyperliquid] perpDexs response not OK, using default dex only')
       return [''] // Return default dex if we can't fetch the list
     }
 
     const data = await response.json()
-    
-    // Debug: log raw response type
-    console.log('[Hyperliquid] perpDexs raw response type:', Array.isArray(data) ? 'array' : typeof data)
-    console.log('[Hyperliquid] perpDexs raw response:', JSON.stringify(data, null, 2))
     
     const dexNames: string[] = []
     
@@ -119,9 +114,6 @@ async function fetchAllPerpDexs(): Promise<string[]> {
     
     // Deduplicate names
     const uniqueDexNames = [...new Set(dexNames)]
-    
-    // Debug: log extracted dex names
-    console.log('[Hyperliquid] Extracted dex names:', uniqueDexNames)
     
     // Always include default dex (empty string) first
     return ['', ...uniqueDexNames]
@@ -168,36 +160,23 @@ async function dexContainsSilver(dex: string): Promise<boolean> {
       return false
     }
 
-    const data = await response.json()
-    
-    // meta returns [universe, marginTables] or similar structure
-    // universe is an array of perp entries
-    let universe: any[] = []
-    
-    if (Array.isArray(data)) {
-      // Format: [universe, marginTables] or [{universe: [...]}, ...]
-      if (data.length > 0 && Array.isArray(data[0])) {
-        universe = data[0]
-      } else if (data.length > 0 && data[0]?.universe && Array.isArray(data[0].universe)) {
-        universe = data[0].universe
-      }
-    } else if (data?.universe && Array.isArray(data.universe)) {
-      universe = data.universe
+    const meta = await fetchMeta(dex)
+    if (!meta) {
+      return false
     }
+    
+    const universe = meta.universe
     
     // Check if any universe entry contains "SILVER" (case-insensitive)
     for (const entry of universe) {
       const symbol = extractSymbol(entry)
       if (symbol && symbol.toUpperCase().includes('SILVER')) {
-        console.log(`[Hyperliquid] DEX "${dex || 'default'}" contains SILVER: true (found symbol: ${symbol})`)
         return true
       }
     }
     
-    console.log(`[Hyperliquid] DEX "${dex || 'default'}" contains SILVER: false`)
     return false
   } catch (error) {
-    console.error(`[Hyperliquid] Error checking if dex "${dex || 'default'}" contains SILVER:`, error)
     return false
   }
 }
@@ -275,8 +254,6 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
     if (dexWithSilver) {
       dexsToQuery.push(dexWithSilver)
     }
-    
-    console.log(`[Hyperliquid] Querying dexs: ${dexsToQuery.map(d => d || 'default').join(', ')}`)
     
     const allPositions: PerpetualsOpenPosition[] = []
     
@@ -371,27 +348,13 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
   }
 }
 
-// Helper: Parse margin summary from userState
-
-// Meta cache per request (cleared after request completes)
-const metaCache: Record<string, { universe: any[]; marginTables: any }> = {}
-
-// Fetch meta data (universe + margin tables) for a dex
-// Caches per request to avoid duplicate calls
-async function fetchMeta(dex: string = ''): Promise<{ universe: any[]; marginTables: any } | null> {
-  const cacheKey = dex || 'default'
-  
-  // Return cached if available
-  if (metaCache[cacheKey]) {
-    return metaCache[cacheKey]
-  }
-  
+// Fetch meta data (universe) for a dex to check if it contains SILVER
+async function fetchMeta(dex: string = ''): Promise<{ universe: any[] } | null> {
   try {
     const requestBody: any = {
       type: 'meta',
     }
     
-    // Include dex field if provided
     if (dex) {
       requestBody.dex = dex
     }
@@ -405,224 +368,26 @@ async function fetchMeta(dex: string = ''): Promise<{ universe: any[]; marginTab
     })
 
     if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Hyperliquid API error (${response.status}): ${errorText}`)
+      return null
     }
 
     const data = await response.json()
     
-    // Handle array response format [universe, marginTables] (array tuple)
     let universe: any[] = []
-    let marginTables: any = null
     
     if (Array.isArray(data)) {
-      if (data.length >= 2) {
-        // Format: [universe, marginTables]
-        universe = Array.isArray(data[0]) ? data[0] : (data[0]?.universe || [])
-        marginTables = data[1] || data[0]?.marginTables
-      } else if (data.length === 1) {
-        // Format: [{universe: [...], marginTables: {...}}]
-        universe = data[0]?.universe || []
-        marginTables = data[0]?.marginTables
+      if (data.length > 0 && Array.isArray(data[0])) {
+        universe = data[0]
+      } else if (data.length > 0 && data[0]?.universe && Array.isArray(data[0].universe)) {
+        universe = data[0].universe
       }
-    } else if (data && typeof data === 'object') {
-      universe = data.universe || []
-      marginTables = data.marginTables
+    } else if (data?.universe && Array.isArray(data.universe)) {
+      universe = data.universe
     }
     
-    // Cache the result
-    metaCache[cacheKey] = { universe, marginTables }
-    
-    return { universe, marginTables }
+    return { universe }
   } catch (error) {
-    console.error(`[Hyperliquid] Error fetching meta for dex "${dex || 'default'}":`, error)
     return null
-  }
-}
-
-// Build coin -> marginTableId lookup from universe
-function buildMarketMarginTableIdByCoin(universe: any[]): Record<string, number> {
-  const marketMarginTableIdByCoin: Record<string, number> = {}
-  
-  if (!Array.isArray(universe)) {
-    return marketMarginTableIdByCoin
-  }
-  
-  for (const entry of universe) {
-    // Extract coin/symbol/name
-    const coin = entry.name || entry.coin || entry.symbol || entry.token
-    
-    if (!coin) {
-      continue
-    }
-    
-    // Extract marginTableId (field name can vary)
-    const tableId = entry.marginTableId || entry.marginTable || entry.tableId || entry.table
-    
-    if (tableId !== undefined && tableId !== null) {
-      const tableIdNum = typeof tableId === 'string' ? parseFloat(tableId) : tableId
-      if (!isNaN(tableIdNum)) {
-        marketMarginTableIdByCoin[coin] = tableIdNum
-      }
-    }
-  }
-  
-  return marketMarginTableIdByCoin
-}
-
-// Build marginTableId -> tiers[] lookup from marginTables
-function buildTiersByTableId(marginTables: any): Record<number, any[]> {
-  const tiersByTableId: Record<number, any[]> = {}
-  
-  if (!marginTables) {
-    return tiersByTableId
-  }
-  
-  // marginTables can be an array of [tableId, tierData] pairs or an object
-  if (Array.isArray(marginTables)) {
-    for (const item of marginTables) {
-      if (Array.isArray(item) && item.length >= 2) {
-        // Format: [tableId, { marginTiers: [...] }]
-        const tableId = typeof item[0] === 'string' ? parseFloat(item[0]) : item[0]
-        const tierData = item[1]
-        if (!isNaN(tableId) && tierData?.marginTiers && Array.isArray(tierData.marginTiers)) {
-          tiersByTableId[tableId] = tierData.marginTiers
-        }
-      }
-    }
-  } else if (typeof marginTables === 'object') {
-    // Format: { [tableId]: { marginTiers: [...] } }
-    for (const [tableIdStr, tierData] of Object.entries(marginTables)) {
-      const tableId = parseFloat(tableIdStr)
-      if (!isNaN(tableId) && tierData && typeof tierData === 'object') {
-        const tiers = (tierData as any).marginTiers || (tierData as any).tiers || []
-        if (Array.isArray(tiers)) {
-          tiersByTableId[tableId] = tiers
-        }
-      }
-    }
-  }
-  
-  return tiersByTableId
-}
-
-// Get initial margin fraction for a given tableId and notional
-// Based on Hyperliquid's margin table semantics:
-// - If tableId < 50: single-tier table where max leverage == id
-//   => initialMarginFraction = 1 / id
-// - Else: use tier data from the table
-function getInitialMarginFraction(tableId: number, notional: number, tiersByTableId: Record<number, any[]>): number {
-  // If tableId < 50, it's a single-tier table where max leverage == id
-  if (tableId < 50) {
-    return 1 / tableId
-  }
-  
-  // Else use tier data from the table
-  const tiers = tiersByTableId[tableId]
-  if (!tiers || !Array.isArray(tiers) || tiers.length === 0) {
-    // Fallback: if no tiers found, use conservative 1x leverage
-    return 1
-  }
-  
-  // Select the correct tier for notional (use the tier whose notional range contains it)
-  // Tiers are typically ordered by lowerBound ascending
-  let selectedTier: any = null
-  
-  for (const tier of tiers) {
-    const lowerBound = parseFloat(tier.lowerBound || tier.lower || '0')
-    const upperBound = parseFloat(tier.upperBound || tier.upper || 'Infinity')
-    
-    if (notional >= lowerBound && (upperBound === Infinity || notional < upperBound)) {
-      selectedTier = tier
-      break
-    }
-  }
-  
-  // If no tier found, use the last tier (largest range)
-  if (!selectedTier && tiers.length > 0) {
-    selectedTier = tiers[tiers.length - 1]
-  }
-  
-  if (!selectedTier) {
-    // Fallback: use conservative 1x leverage
-    return 1
-  }
-  
-  // Derive IM fraction from tier
-  // If tier provides maxLeverage: imf = 1 / maxLeverage
-  if (selectedTier.maxLeverage !== undefined) {
-    const maxLeverage = typeof selectedTier.maxLeverage === 'string' 
-      ? parseFloat(selectedTier.maxLeverage) 
-      : selectedTier.maxLeverage
-    if (maxLeverage > 0) {
-      return 1 / maxLeverage
-    }
-  }
-  
-  // If tier provides initialMarginFraction directly: use it
-  if (selectedTier.initialMarginFraction !== undefined) {
-    const imf = typeof selectedTier.initialMarginFraction === 'string'
-      ? parseFloat(selectedTier.initialMarginFraction)
-      : selectedTier.initialMarginFraction
-    if (!isNaN(imf) && imf > 0) {
-      return imf
-    }
-  }
-  
-  // Fallback: use conservative 1x leverage
-  return 1
-}
-
-// Fetch open orders from Hyperliquid API
-async function fetchOpenOrders(walletAddress: string, dex: string = ''): Promise<any[]> {
-  try {
-    const requestBody: any = {
-      type: 'openOrders',
-      user: walletAddress,
-    }
-    
-    // Include dex field if provided
-    if (dex) {
-      requestBody.dex = dex
-    }
-    
-    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Hyperliquid API error (${response.status}): ${errorText}`)
-    }
-
-    const data = await response.json()
-    
-    // Handle array response format [null, orders] if present
-    if (Array.isArray(data)) {
-      if (data.length > 1 && Array.isArray(data[1])) {
-        return data[1]
-      } else if (Array.isArray(data[0])) {
-        return data[0]
-      } else if (data.every((item: any) => item && typeof item === 'object')) {
-        return data
-      }
-    }
-    
-    // Handle direct array or object with orders field
-    if (Array.isArray(data)) {
-      return data
-    } else if (data.orders && Array.isArray(data.orders)) {
-      return data.orders
-    }
-    
-    return []
-  } catch (error) {
-    console.error(`[Hyperliquid] Error fetching open orders for dex "${dex || 'default'}":`, error)
-    return []
   }
 }
 
@@ -677,19 +442,10 @@ async function fetchAccountEquity(walletAddress: string, debug: boolean = false)
           }
         }
         
-        if (debug) {
-          console.log(`[Hyperliquid] Dex "${dex || 'default'}" accountValue:`, accountValue)
-        }
-        
         totalAccountValue += accountValue
       } catch (error) {
-        console.error(`[Hyperliquid] Error fetching account equity from dex "${dex || 'default'}":`, error)
         // Continue with other dexs even if one fails
       }
-    }
-    
-    if (debug) {
-      console.log('[Hyperliquid] Total account equity:', totalAccountValue)
     }
     
     // Return single entry with total account equity
@@ -704,7 +460,6 @@ async function fetchAccountEquity(walletAddress: string, debug: boolean = false)
     
     return []
   } catch (error) {
-    console.error('[Hyperliquid] Error fetching account equity:', error)
     return []
   }
 }
@@ -772,51 +527,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       data: perpetualsData,
     }
     
-    // Add debug info if requested
-    if (debug) {
-      const allDexs = await fetchAllPerpDexs()
-      const dexsWithSilver: string[] = []
-      const metaUniverseSample: Record<string, any[]> = {}
-      
-      // Check each dex for SILVER
-      for (const dex of allDexs) {
-        if (await dexContainsSilver(dex)) {
-          dexsWithSilver.push(dex || 'default')
-          
-          // Get universe sample for this dex
-          try {
-            const requestBody: any = { type: 'meta' }
-            if (dex) {
-              requestBody.dex = dex
-            }
-            const metaResponse = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(requestBody),
-            })
-            if (metaResponse.ok) {
-              const metaData = await metaResponse.json()
-              let universe: any[] = []
-              if (Array.isArray(metaData) && metaData.length > 0 && Array.isArray(metaData[0])) {
-                universe = metaData[0]
-              } else if (metaData?.universe && Array.isArray(metaData.universe)) {
-                universe = metaData.universe
-              }
-              // Get first 10 symbols
-              metaUniverseSample[dex || 'default'] = universe.slice(0, 10).map((entry: any) => extractSymbol(entry)).filter((s: string | null) => s !== null)
-            }
-          } catch (error) {
-            // Ignore errors in debug mode
-          }
-        }
-      }
-      
-      response.debug = {
-        dexsDiscovered: allDexs,
-        dexsWithSilver,
-        metaUniverseSample,
-      }
-    }
 
     return res.status(200).json(response)
   } catch (error) {
