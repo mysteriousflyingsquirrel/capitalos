@@ -1,5 +1,10 @@
 import type { PerpetualsData } from '../pages/NetWorth'
 
+/**
+ * Fetches Perpetuals data from Aster API
+ * @param uid - User ID
+ * @returns Perpetuals data or null if error/not configured
+ */
 export async function fetchAsterPerpetualsData(uid: string): Promise<PerpetualsData | null> {
   try {
     const response = await fetch(`/api/perpetuals/aster?uid=${encodeURIComponent(uid)}`)
@@ -7,14 +12,25 @@ export async function fetchAsterPerpetualsData(uid: string): Promise<PerpetualsD
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
       
+      // Don't log errors for missing credentials (user hasn't configured yet)
       if (response.status === 400 && errorData.error?.includes('not configured')) {
         return null
       }
       
+      console.error('Failed to fetch Aster Perpetuals data:', errorData)
       return null
     }
 
     const result = await response.json()
+    
+    console.log('[AsterService] API response:', {
+      success: result.success,
+      hasData: !!result.data,
+      dataStructure: result.data ? {
+        openPositions: result.data.openPositions,
+        openPositionsCount: result.data.openPositions?.length || 0,
+      } : null,
+    })
     
     if (result.success && result.data) {
       return result.data
@@ -22,6 +38,7 @@ export async function fetchAsterPerpetualsData(uid: string): Promise<PerpetualsD
 
     return null
   } catch (error) {
+    console.error('Error fetching Aster Perpetuals data:', error)
     return null
   }
 }
