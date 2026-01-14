@@ -63,7 +63,7 @@ export class NetWorthCalculationService {
           }
         }
       } else if (item.category === 'Perpetuals') {
-        // For Perpetuals: calculate from subcategories
+        // For Perpetuals: calculate only from Exchange Balance (Open Positions are displayed but not included in total)
         // Server-side: perpetualsData is not available (stripped from Firestore)
         // Client-side: perpetualsData is fetched dynamically
         // Both cases should be handled gracefully
@@ -71,24 +71,22 @@ export class NetWorthCalculationService {
           if (!item.perpetualsData) {
             balance = 0
           } else {
-            const { openPositions } = item.perpetualsData || {}
+            const { exchangeBalance } = item.perpetualsData || {}
             
             // Ensure arrays exist and are actually arrays (defensive programming)
-            const safeOpenPositions = Array.isArray(openPositions) ? openPositions : []
+            const safeExchangeBalance = Array.isArray(exchangeBalance) ? exchangeBalance : []
             
             // Sum all CHF balances directly
             let totalChf = 0
             
-            // Open Positions: convert each balance to CHF and sum
-            safeOpenPositions.forEach(pos => {
-              if (pos && typeof pos === 'object') {
-                const margin = typeof pos.margin === 'number' && isFinite(pos.margin) ? pos.margin : 0
-                const pnl = typeof pos.pnl === 'number' && isFinite(pos.pnl) ? pos.pnl : 0
-                const balanceUsd = margin + pnl
-                if (isFinite(balanceUsd)) {
+            // Exchange Balance: convert each holdings to CHF and sum
+            safeExchangeBalance.forEach(balance => {
+              if (balance && typeof balance === 'object') {
+                const holdings = typeof balance.holdings === 'number' && isFinite(balance.holdings) ? balance.holdings : 0
+                if (isFinite(holdings)) {
                   const balanceChf = usdToChfRate && usdToChfRate > 0 
-                    ? balanceUsd * usdToChfRate 
-                    : convert(balanceUsd, 'USD')
+                    ? holdings * usdToChfRate 
+                    : convert(holdings, 'USD')
                   if (isFinite(balanceChf)) {
                     totalChf += balanceChf
                   }
@@ -96,6 +94,7 @@ export class NetWorthCalculationService {
               }
             })
             
+            // Note: Open Positions are displayed but NOT included in the total perpetuals value
             balance = totalChf
           }
         } catch (error) {

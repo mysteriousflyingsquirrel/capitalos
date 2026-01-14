@@ -185,9 +185,9 @@ function NetWorthCategorySection({
       return sum + (isNaN(balanceUsd) || !isFinite(balanceUsd) ? 0 : balanceUsd)
     }
     if (category === 'Perpetuals') {
-      // For Perpetuals: calculate from subcategories
+      // For Perpetuals: calculate only from Exchange Balance (Open Positions are displayed but not included in total)
       if (!item.perpetualsData) return sum
-      const { exchangeBalance, openPositions } = item.perpetualsData
+      const { exchangeBalance } = item.perpetualsData
       
       // Sum all CHF balances directly (matching what's displayed in tables)
       let totalChf = 0
@@ -202,14 +202,7 @@ function NetWorthCategorySection({
         })
       }
       
-      // Open Positions: convert each balance to CHF and sum
-      openPositions.forEach(pos => {
-        const balanceUsd = pos.margin + pos.pnl
-        const balanceChf = usdToChfRate && usdToChfRate > 0 
-          ? balanceUsd * usdToChfRate 
-          : convert(balanceUsd, 'USD')
-        totalChf += balanceChf
-      })
+      // Note: Open Positions are displayed but NOT included in the total perpetuals value
       
       return sum + (isNaN(totalChf) || !isFinite(totalChf) ? 0 : totalChf)
     }

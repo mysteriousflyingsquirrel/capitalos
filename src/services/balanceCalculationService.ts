@@ -25,17 +25,18 @@ export function calculateBalanceChf(
     }
   }
   
-  // For Perpetuals items, calculate from subcategories (returns USD, caller must convert to CHF)
+  // For Perpetuals items, calculate only from Exchange Balance (Open Positions are displayed but not included in total)
   if (item?.category === 'Perpetuals' && item.perpetualsData) {
-    const { openPositions } = item.perpetualsData
+    const { exchangeBalance } = item.perpetualsData
     
-    // Open Positions: balance = margin + pnl (in USD)
-    const openPositionsTotal = openPositions.reduce((posSum, pos) => {
-      return posSum + (pos.margin + pos.pnl)
+    // Exchange Balance: sum of all holdings (in USD)
+    const exchangeBalanceTotal = (exchangeBalance || []).reduce((sum, balance) => {
+      return sum + (balance.holdings || 0)
     }, 0)
     
     // Total in USD - returns USD value, caller must convert to CHF
-    return openPositionsTotal
+    // Note: Open Positions are displayed but NOT included in the total perpetuals value
+    return exchangeBalanceTotal
   }
   
   // For Depreciating Assets, calculate depreciation based on time since purchase

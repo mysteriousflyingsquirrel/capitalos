@@ -395,20 +395,23 @@ function Dashboard() {
           if (!item.perpetualsData) {
             balance = 0
           } else {
-            const { openPositions } = item.perpetualsData
+            const { exchangeBalance } = item.perpetualsData
             
             // Sum all CHF balances directly (matching NetWorth page logic)
+            // Only Exchange Balance contributes to total (Open Positions are displayed but not included)
             let totalChf = 0
             
-            // Open Positions: convert each balance to CHF and sum
-            openPositions.forEach(pos => {
-              const balanceUsd = pos.margin + pos.pnl
-              const balanceChf = usdToChfRate && usdToChfRate > 0 
-                ? balanceUsd * usdToChfRate 
-                : convert(balanceUsd, 'USD')
-              totalChf += balanceChf
-            })
+            // Exchange Balance: convert each holdings to CHF and sum
+            if (exchangeBalance) {
+              exchangeBalance.forEach(balance => {
+                const balanceChf = usdToChfRate && usdToChfRate > 0 
+                  ? balance.holdings * usdToChfRate 
+                  : convert(balance.holdings, 'USD')
+                totalChf += balanceChf
+              })
+            }
             
+            // Note: Open Positions are displayed but NOT included in the total perpetuals value
             balance = totalChf
           }
         } else {
