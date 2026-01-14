@@ -32,6 +32,7 @@ export type KrakenBalances = {
   unrealizedFunding?: number
   totalUnrealized?: number
   marginEquity?: number
+  flexFuturesBalanceValue?: number // Account Equity: flex_futures.balance_value
 }
 
 export type KrakenWsState = {
@@ -90,6 +91,9 @@ interface BalancesMessage extends WsMessage {
     unrealized_funding?: number
     total_unrealized?: number
     margin_equity?: number
+    flex_futures?: {
+      balance_value?: number
+    }
   }
 }
 
@@ -318,6 +322,7 @@ export class KrakenFuturesWs {
           unrealizedFunding: balancesMessage.data.unrealized_funding,
           totalUnrealized: balancesMessage.data.total_unrealized,
           marginEquity: balancesMessage.data.margin_equity,
+          flexFuturesBalanceValue: balancesMessage.data.flex_futures?.balance_value,
         }
         this.updateState({
           balances,

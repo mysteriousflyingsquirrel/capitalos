@@ -167,8 +167,25 @@ export function DataProvider({ children }: DataProviderProps) {
       leverage: pos.effectiveLeverage !== undefined && pos.effectiveLeverage !== null ? pos.effectiveLeverage : null,
     }))
 
+    // Extract Account Equity from flex_futures.balance_value
+    const exchangeBalance: import('../pages/NetWorth').ExchangeBalance[] = []
+    if (wsState.balances?.flexFuturesBalanceValue !== undefined && wsState.balances.flexFuturesBalanceValue !== null) {
+      const accountValue = typeof wsState.balances.flexFuturesBalanceValue === 'number' 
+        ? wsState.balances.flexFuturesBalanceValue 
+        : parseFloat(String(wsState.balances.flexFuturesBalanceValue)) || 0
+      
+      if (accountValue > 0) {
+        exchangeBalance.push({
+          id: 'kraken-account-equity',
+          item: 'Account Equity',
+          holdings: accountValue,
+          platform: 'Kraken',
+        })
+      }
+    }
+
     return {
-      exchangeBalance: [],
+      exchangeBalance,
       openPositions: positions,
     }
   }
