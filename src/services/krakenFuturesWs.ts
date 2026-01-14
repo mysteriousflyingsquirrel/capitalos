@@ -164,7 +164,6 @@ export class KrakenFuturesWs {
    */
   connect(): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[KrakenFuturesWs] Already connected')
       return
     }
 
@@ -172,7 +171,6 @@ export class KrakenFuturesWs {
     this.updateState({ status: 'connecting' })
 
     this.connectInternal().catch((error) => {
-      console.error('[KrakenFuturesWs] Connection failed:', error)
       this.updateState({
         status: 'error',
         error: error instanceof Error ? error.message : 'Connection failed',
@@ -184,12 +182,10 @@ export class KrakenFuturesWs {
   private async connectInternal(): Promise<void> {
     return new Promise((resolve, reject) => {
       const wsUrl = 'wss://futures.kraken.com/ws/v1'
-      console.log('[KrakenFuturesWs] Connecting to', wsUrl)
 
       this.ws = new WebSocket(wsUrl)
 
       this.ws.onopen = async () => {
-        console.log('[KrakenFuturesWs] WebSocket opened')
         this.reconnectAttempts = 0
         this.reconnectDelay = 1000
 
@@ -207,12 +203,11 @@ export class KrakenFuturesWs {
           const message: WsMessage = JSON.parse(event.data)
           this.handleMessage(message)
         } catch (error) {
-          console.error('[KrakenFuturesWs] Failed to parse message:', error, event.data)
+          // Silently handle parse errors
         }
       }
 
       this.ws.onerror = (error) => {
-        console.error('[KrakenFuturesWs] WebSocket error:', error)
         this.updateState({
           status: 'error',
           error: 'WebSocket error occurred',
@@ -221,7 +216,6 @@ export class KrakenFuturesWs {
       }
 
       this.ws.onclose = (event) => {
-        console.log('[KrakenFuturesWs] WebSocket closed', { code: event.code, reason: event.reason })
         this.ws = null
         this.challenge = null
         this.subscribedFeeds.clear()
@@ -246,30 +240,24 @@ export class KrakenFuturesWs {
       api_key: this.apiKey,
     }
 
-    console.log('[KrakenFuturesWs] Requesting challenge...')
     this.ws.send(JSON.stringify(challengeRequest))
   }
 
   private async handleMessage(message: WsMessage): Promise<void> {
-    console.log('[KrakenFuturesWs] Received message:', message)
-
     // Handle challenge response
     if (message.event === 'challenge' && message.message) {
       const challengeResponse = message as ChallengeResponse
       this.challenge = challengeResponse.message
-      console.log('[KrakenFuturesWs] Challenge received:', this.challenge)
 
       this.updateState({ status: 'challenged' })
 
       try {
         // Step B: Sign challenge
         const signedChallenge = await signWsChallenge(this.challenge, this.apiSecret)
-        console.log('[KrakenFuturesWs] Challenge signed')
 
         // Step C: Subscribe to feeds
         await this.subscribeToFeeds(signedChallenge)
       } catch (error) {
-        console.error('[KrakenFuturesWs] Failed to sign challenge or subscribe:', error)
         this.updateState({
           status: 'error',
           error: error instanceof Error ? error.message : 'Authentication failed',
@@ -281,7 +269,6 @@ export class KrakenFuturesWs {
     // Handle subscription confirmation
     if (message.event === 'subscribed') {
       const subscribeResponse = message as SubscribeResponse
-      console.log('[KrakenFuturesWs] Subscribed to feed:', subscribeResponse.feed)
       this.subscribedFeeds.add(subscribeResponse.feed)
       
       if (this.subscribedFeeds.size >= 2) {
@@ -342,7 +329,6 @@ export class KrakenFuturesWs {
 
     // Handle error messages
     if (message.event === 'error' || message.error) {
-      console.error('[KrakenFuturesWs] Error message:', message)
       this.updateState({
         status: 'error',
         error: message.error || message.message || 'Unknown error',
@@ -364,7 +350,6 @@ export class KrakenFuturesWs {
       original_challenge: this.challenge,
       signed_challenge: signedChallenge,
     }
-    console.log('[KrakenFuturesWs] Subscribing to open_positions...')
     this.ws.send(JSON.stringify(openPositionsSubscribe))
 
     // Subscribe to balances
@@ -375,7 +360,6 @@ export class KrakenFuturesWs {
       original_challenge: this.challenge,
       signed_challenge: signedChallenge,
     }
-    console.log('[KrakenFuturesWs] Subscribing to balances...')
     this.ws.send(JSON.stringify(balancesSubscribe))
   }
 
@@ -384,7 +368,6 @@ export class KrakenFuturesWs {
    */
   private subscribeToTicker(productId: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[KrakenFuturesWs] Cannot subscribe to ticker: WebSocket not open')
       return
     }
 
@@ -393,7 +376,6 @@ export class KrakenFuturesWs {
       feed: 'ticker',
       product_ids: [productId],
     }
-    console.log(`[KrakenFuturesWs] Subscribing to ticker for ${productId}...`)
     this.ws.send(JSON.stringify(tickerSubscribe))
   }
 
@@ -409,7 +391,6 @@ export class KrakenFuturesWs {
         // WebSocket ping frame (if supported by browser)
         // Some browsers don't expose ping, so we'll rely on the connection staying alive
         // and reconnect on close
-        console.log('[KrakenFuturesWs] Keep-alive check')
       }
     }, 50000)
   }
@@ -420,7 +401,6 @@ export class KrakenFuturesWs {
     }
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('[KrakenFuturesWs] Max reconnect attempts reached')
       this.updateState({
         status: 'error',
         error: 'Max reconnect attempts reached',
@@ -430,13 +410,10 @@ export class KrakenFuturesWs {
 
     this.reconnectAttempts++
     const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 60000) // Max 60s
-    console.log(`[KrakenFuturesWs] Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`)
 
     this.reconnectTimer = setTimeout(() => {
       if (!this.isIntentionallyDisconnected) {
-        console.log(`[KrakenFuturesWs] Reconnecting (attempt ${this.reconnectAttempts})...`)
         this.connectInternal().catch((error) => {
-          console.error('[KrakenFuturesWs] Reconnect failed:', error)
           this.scheduleReconnect()
         })
       }
@@ -476,7 +453,7 @@ export class KrakenFuturesWs {
     try {
       this.onState({ ...this.state })
     } catch (error) {
-      console.error('[KrakenFuturesWs] Error in state update callback:', error)
+      // Silently handle callback errors
     }
   }
 

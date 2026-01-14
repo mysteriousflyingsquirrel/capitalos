@@ -249,20 +249,10 @@ export function DataProvider({ children }: DataProviderProps) {
         hyperliquidAvailableMargin: hyperliquidData?.availableMargin?.length || 0,
         krakenData: !!finalKrakenData,
         krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
-        krakenDataType: finalKrakenData ? typeof finalKrakenData : 'null',
         krakenPositions: finalKrakenData?.openPositions?.length || 0,
         krakenOrders: finalKrakenData?.openOrders?.length || 0,
         krakenLockedMargin: finalKrakenData?.lockedMargin?.length || 0,
         krakenAvailableMargin: finalKrakenData?.availableMargin?.length || 0,
-        krakenDataKeys: finalKrakenData ? Object.keys(finalKrakenData) : [],
-      })
-      
-      console.log('[DataContext] Kraken data details:', {
-        data: finalKrakenData,
-        positions: finalKrakenData?.openPositions,
-        orders: finalKrakenData?.openOrders,
-        availableMargin: finalKrakenData?.availableMargin,
-        lockedMargin: finalKrakenData?.lockedMargin,
       })
 
       // Log the actual data structures
