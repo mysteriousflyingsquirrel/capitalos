@@ -261,20 +261,78 @@ async function fetchOpenOrders(
 
 
 /**
+ * Fetches account equity (total balance) from Aster API
+ */
+async function fetchAccountEquity(
+  apiKey: string,
+  apiSecret: string
+): Promise<ExchangeBalance[]> {
+  try {
+    const queryString = buildSignedQueryString({}, apiSecret)
+    const url = `${ASTER_BASE_URL}/fapi/v2/account?${queryString}`
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-MBX-APIKEY': apiKey,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`[Aster] Failed to fetch account data (${response.status}): ${errorText}`)
+      return []
+    }
+
+    const accountData = await response.json()
+    
+    // Extract total account balance
+    // Priority: totalWalletBalance (includes unrealized PnL) > totalMarginBalance > availableBalance
+    let accountValue = 0
+    
+    // Try totalWalletBalance first (includes unrealized PnL)
+    if (accountData.totalWalletBalance !== undefined) {
+      accountValue = parseFloat(accountData.totalWalletBalance || '0')
+    } else if (accountData.totalMarginBalance !== undefined) {
+      accountValue = parseFloat(accountData.totalMarginBalance || '0')
+    } else if (accountData.availableBalance !== undefined) {
+      accountValue = parseFloat(accountData.availableBalance || '0')
+    }
+    
+    // Return single entry with total account equity
+    if (accountValue > 0) {
+      return [{
+        id: 'aster-account-equity',
+        item: 'Account Equity',
+        holdings: accountValue,
+        platform: 'Aster',
+      }]
+    }
+    
+    return []
+  } catch (error) {
+    console.error('[Aster] Error fetching account equity:', error)
+    return []
+  }
+}
+
+/**
  * Fetches all Perpetuals data from Aster API
  */
 async function fetchAsterPerpetualsData(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsData> {
-  // Fetch positions and orders in parallel
-  const [openPositions, openOrders] = await Promise.all([
+  // Fetch positions, orders, and account equity in parallel
+  const [openPositions, openOrders, exchangeBalance] = await Promise.all([
     fetchOpenPositions(apiKey, apiSecret),
     fetchOpenOrders(apiKey, apiSecret),
+    fetchAccountEquity(apiKey, apiSecret),
   ])
 
   return {
-    exchangeBalance: [],
+    exchangeBalance,
     openPositions,
     openOrders,
   }
