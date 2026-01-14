@@ -186,6 +186,72 @@ export class KrakenFuturesWs {
   }
 
   /**
+   * Normalize balances payload: handle both message.data and top-level fields
+   */
+  private normalizeBalancesPayload(message: WsMessage): any {
+    // If message.data exists and is an object, use that
+    if (message.data && typeof message.data === 'object' && !Array.isArray(message.data)) {
+      return message.data
+    }
+    
+    // Otherwise, treat message itself as payload (minus meta fields)
+    const metaFields = new Set(['feed', 'seq', 'timestamp', 'account', 'event', 'message', 'data'])
+    const payload: any = {}
+    
+    for (const [key, value] of Object.entries(message)) {
+      if (!metaFields.has(key)) {
+        payload[key] = value
+      }
+    }
+    
+    return payload
+  }
+
+  /**
+   * Normalize positions payload: handle different structures
+   */
+  private normalizePositionsPayload(message: WsMessage): any[] | null {
+    // If message.positions exists and is an array
+    if (message.positions && Array.isArray(message.positions)) {
+      return message.positions
+    }
+    
+    // If message.data?.positions exists and is an array
+    if (message.data && typeof message.data === 'object' && !Array.isArray(message.data)) {
+      if (Array.isArray((message.data as any).positions)) {
+        return (message.data as any).positions
+      }
+    }
+    
+    // If message.data is an array and looks like positions
+    if (Array.isArray(message.data)) {
+      // Check if it looks like positions (has instrument or similar fields)
+      if (message.data.length > 0 && message.data[0] && typeof message.data[0] === 'object') {
+        const firstItem = message.data[0] as any
+        if (firstItem.instrument || firstItem.symbol || firstItem.product_id) {
+          return message.data
+        }
+      }
+    }
+    
+    return null
+  }
+
+  /**
+   * Check if a message is a balances feed (snapshot, update, or legacy)
+   */
+  private isBalancesFeed(feed: string | undefined): boolean {
+    return feed === 'balances' || feed === 'balances_snapshot' || feed === 'balances_update'
+  }
+
+  /**
+   * Check if a message is a positions feed (snapshot, update, or legacy)
+   */
+  private isPositionsFeed(feed: string | undefined): boolean {
+    return feed === 'open_positions' || feed === 'open_positions_snapshot' || feed === 'open_positions_update'
+  }
+
+  /**
    * Connect to WebSocket
    */
   connect(): void {
@@ -305,21 +371,32 @@ export class KrakenFuturesWs {
       return
     }
 
-    // Handle open_positions feed
-    if (message.feed === 'open_positions') {
-      const positionsMessage = message as OpenPositionsMessage
-      if (positionsMessage.positions) {
-        const positions: KrakenOpenPosition[] = positionsMessage.positions.map((pos) => ({
-          instrument: pos.instrument,
-          balance: pos.balance,
-          entryPrice: pos.entry_price,
-          markPrice: pos.mark_price,
-          pnl: pos.pnl,
-          initialMargin: pos.initial_margin,
-          maintenanceMargin: pos.maintenance_margin,
-          initialMarginWithOrders: pos.initial_margin_with_orders,
-          effectiveLeverage: pos.effective_leverage,
+    // Handle open_positions feed (snapshot, update, or legacy)
+    if (this.isPositionsFeed(message.feed)) {
+      const positionsArray = this.normalizePositionsPayload(message)
+      
+      if (this.debug) {
+        console.log('[KrakenFuturesWs] Positions feed:', {
+          feed: message.feed,
+          hasPositions: !!positionsArray,
+          positionsCount: positionsArray?.length || 0,
+          messageKeys: Object.keys(message),
+        })
+      }
+      
+      if (positionsArray && Array.isArray(positionsArray)) {
+        const positions: KrakenOpenPosition[] = positionsArray.map((pos: any) => ({
+          instrument: pos.instrument || pos.symbol || pos.product_id || '',
+          balance: this.toNumber(pos.balance) || 0,
+          entryPrice: this.toNumber(pos.entry_price || pos.entryPrice),
+          markPrice: this.toNumber(pos.mark_price || pos.markPrice),
+          pnl: this.toNumber(pos.pnl),
+          initialMargin: this.toNumber(pos.initial_margin || pos.initialMargin),
+          maintenanceMargin: this.toNumber(pos.maintenance_margin || pos.maintenanceMargin),
+          initialMarginWithOrders: this.toNumber(pos.initial_margin_with_orders || pos.initialMarginWithOrders),
+          effectiveLeverage: this.toNumber(pos.effective_leverage || pos.effectiveLeverage),
         }))
+        
         this.updateState({
           positions,
           lastUpdateTs: Date.now(),
@@ -328,46 +405,38 @@ export class KrakenFuturesWs {
       return
     }
 
-    // Handle balances feed
-    if (message.feed === 'balances') {
-      const balancesMessage = message as BalancesMessage
-      if (balancesMessage.data) {
+    // Handle balances feed (snapshot, update, or legacy)
+    if (this.isBalancesFeed(message.feed)) {
+      const payload = this.normalizeBalancesPayload(message)
+      
+      if (this.debug) {
+        console.log('[KrakenFuturesWs] Balances feed:', {
+          feed: message.feed,
+          payloadKeys: Object.keys(payload),
+          hasFlexFutures: !!payload.flex_futures,
+          rawFlexValue: payload.flex_futures?.balance_value,
+          rawMarginEquity: payload.margin_equity,
+          rawPortfolioValue: payload.portfolio_value,
+          rawBalance: payload.balance,
+        })
+      }
+      
+      if (payload && typeof payload === 'object') {
         // Get previous balances to merge with
         const prevBalances = this.state.balances ?? {}
         
-        // Log raw data structure for debugging
-        console.log('[KrakenFuturesWs] Raw balances data:', {
-          hasData: !!balancesMessage.data,
-          dataKeys: Object.keys(balancesMessage.data),
-          flexFutures: balancesMessage.data.flex_futures,
-          marginEquity: balancesMessage.data.margin_equity,
-          portfolioValue: balancesMessage.data.portfolio_value,
-          balance: balancesMessage.data.balance,
-          rawFlexValue: balancesMessage.data.flex_futures?.balance_value,
-          rawMarginEquity: balancesMessage.data.margin_equity,
-        })
-        
-        // Parse all numeric fields defensively
-        const flex = this.toNumber(balancesMessage.data.flex_futures?.balance_value)
-        const marginEq = this.toNumber(balancesMessage.data.margin_equity)
-        const portfolio = this.toNumber(balancesMessage.data.portfolio_value)
-        const balance = this.toNumber(balancesMessage.data.balance)
-        const available = this.toNumber(balancesMessage.data.available)
-        const initialMargin = this.toNumber(balancesMessage.data.initial_margin)
-        const maintenanceMargin = this.toNumber(balancesMessage.data.maintenance_margin)
-        const pnl = this.toNumber(balancesMessage.data.pnl)
-        const unrealizedFunding = this.toNumber(balancesMessage.data.unrealized_funding)
-        const totalUnrealized = this.toNumber(balancesMessage.data.total_unrealized)
-        const collateralValue = this.toNumber(balancesMessage.data.collateral_value)
-        
-        // Log parsed values
-        console.log('[KrakenFuturesWs] Parsed values:', {
-          flex: flex,
-          marginEq: marginEq,
-          portfolio: portfolio,
-          balance: balance,
-          prevTotalBalance: prevBalances.totalBalance,
-        })
+        // Parse all numeric fields defensively from normalized payload
+        const flex = this.toNumber(payload.flex_futures?.balance_value)
+        const marginEq = this.toNumber(payload.margin_equity)
+        const portfolio = this.toNumber(payload.portfolio_value)
+        const balance = this.toNumber(payload.balance)
+        const available = this.toNumber(payload.available)
+        const initialMargin = this.toNumber(payload.initial_margin)
+        const maintenanceMargin = this.toNumber(payload.maintenance_margin)
+        const pnl = this.toNumber(payload.pnl)
+        const unrealizedFunding = this.toNumber(payload.unrealized_funding)
+        const totalUnrealized = this.toNumber(payload.total_unrealized)
+        const collateralValue = this.toNumber(payload.collateral_value)
         
         // Compute totalBalance with priority fallback
         // Priority: flex_futures.balance_value > margin_equity > portfolio_value > balance
@@ -376,27 +445,32 @@ export class KrakenFuturesWs {
         // If totalBalance is undefined, preserve previous value
         if (totalBalance === undefined && prevBalances.totalBalance !== undefined) {
           totalBalance = prevBalances.totalBalance
-          console.log('[KrakenFuturesWs] Preserving previous totalBalance:', totalBalance)
         }
         
-        // Log computed totalBalance and source
+        // Determine source for debug logging
         const source = flex !== undefined ? 'flex_futures.balance_value' 
           : marginEq !== undefined ? 'margin_equity'
           : portfolio !== undefined ? 'portfolio_value'
           : balance !== undefined ? 'balance'
           : 'none (preserved)'
         
-        console.log('[KrakenFuturesWs] Computed totalBalance:', {
-          value: totalBalance,
-          source: source,
-          changed: totalBalance !== prevBalances.totalBalance,
-          previous: prevBalances.totalBalance,
-        })
+        if (this.debug) {
+          console.log('[KrakenFuturesWs] Parsed balances:', {
+            flex,
+            marginEq,
+            portfolio,
+            balance,
+            totalBalance,
+            source,
+            changed: totalBalance !== prevBalances.totalBalance,
+            previous: prevBalances.totalBalance,
+          })
+        }
         
         // Merge: only overwrite fields if new parsed value is not undefined
         const balances: KrakenBalances = {
           // Preserve previous values if new ones are undefined
-          currency: balancesMessage.data.currency ?? prevBalances.currency,
+          currency: payload.currency ?? prevBalances.currency,
           balance: balance ?? prevBalances.balance,
           portfolioValue: portfolio ?? prevBalances.portfolioValue,
           collateralValue: collateralValue ?? prevBalances.collateralValue,
@@ -411,19 +485,14 @@ export class KrakenFuturesWs {
           totalBalance: totalBalance,
         }
         
-        console.log('[KrakenFuturesWs] Final balances object:', {
-          totalBalance: balances.totalBalance,
-          flexFuturesBalanceValue: balances.flexFuturesBalanceValue,
-          marginEquity: balances.marginEquity,
-          portfolioValue: balances.portfolioValue,
-        })
-        
         this.updateState({
           balances,
           lastUpdateTs: Date.now(),
         })
       } else {
-        console.warn('[KrakenFuturesWs] Balances message received but data is missing')
+        if (this.debug) {
+          console.warn('[KrakenFuturesWs] Balances message received but payload is invalid:', message)
+        }
       }
       return
     }
