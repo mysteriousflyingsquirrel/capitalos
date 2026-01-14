@@ -33,6 +33,7 @@ export type KrakenBalances = {
   totalUnrealized?: number
   marginEquity?: number
   flexFuturesBalanceValue?: number // Account Equity: flex_futures.balance_value
+  totalBalance?: number // Canonical total balance for Kraken Futures
 }
 
 export type KrakenWsState = {
@@ -152,15 +153,36 @@ export class KrakenFuturesWs {
   private challenge: string | null = null
   private subscribedFeeds: Set<string> = new Set()
   private isIntentionallyDisconnected = false
+  private debug = false // Enable debug logging
 
   constructor(args: {
     apiKey: string
     apiSecret: string // base64
     onState: (s: KrakenWsState) => void
+    debug?: boolean
   }) {
     this.apiKey = args.apiKey
     this.apiSecret = args.apiSecret
     this.onState = args.onState
+    this.debug = args.debug || false
+  }
+
+  /**
+   * Helper: Safely parse number from string, number, null, or undefined
+   * Returns a finite number or undefined
+   */
+  private toNumber(value: number | string | null | undefined): number | undefined {
+    if (value === null || value === undefined) {
+      return undefined
+    }
+    if (typeof value === 'number') {
+      return isFinite(value) ? value : undefined
+    }
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value)
+      return isFinite(parsed) ? parsed : undefined
+    }
+    return undefined
   }
 
   /**
@@ -310,20 +332,58 @@ export class KrakenFuturesWs {
     if (message.feed === 'balances') {
       const balancesMessage = message as BalancesMessage
       if (balancesMessage.data) {
-        const balances: KrakenBalances = {
-          currency: balancesMessage.data.currency,
-          balance: balancesMessage.data.balance,
-          portfolioValue: balancesMessage.data.portfolio_value,
-          collateralValue: balancesMessage.data.collateral_value,
-          availableMargin: balancesMessage.data.available, // WS sends 'available' field
-          initialMargin: balancesMessage.data.initial_margin,
-          maintenanceMargin: balancesMessage.data.maintenance_margin,
-          pnl: balancesMessage.data.pnl,
-          unrealizedFunding: balancesMessage.data.unrealized_funding,
-          totalUnrealized: balancesMessage.data.total_unrealized,
-          marginEquity: balancesMessage.data.margin_equity,
-          flexFuturesBalanceValue: balancesMessage.data.flex_futures?.balance_value,
+        // Get previous balances to merge with
+        const prevBalances = this.state.balances ?? {}
+        
+        // Parse all numeric fields defensively
+        const flex = this.toNumber(balancesMessage.data.flex_futures?.balance_value)
+        const marginEq = this.toNumber(balancesMessage.data.margin_equity)
+        const portfolio = this.toNumber(balancesMessage.data.portfolio_value)
+        const balance = this.toNumber(balancesMessage.data.balance)
+        const available = this.toNumber(balancesMessage.data.available)
+        const initialMargin = this.toNumber(balancesMessage.data.initial_margin)
+        const maintenanceMargin = this.toNumber(balancesMessage.data.maintenance_margin)
+        const pnl = this.toNumber(balancesMessage.data.pnl)
+        const unrealizedFunding = this.toNumber(balancesMessage.data.unrealized_funding)
+        const totalUnrealized = this.toNumber(balancesMessage.data.total_unrealized)
+        const collateralValue = this.toNumber(balancesMessage.data.collateral_value)
+        
+        // Compute totalBalance with priority fallback
+        // Priority: flex_futures.balance_value > margin_equity > portfolio_value > balance
+        let totalBalance: number | undefined = flex ?? marginEq ?? portfolio ?? balance
+        
+        // If totalBalance is undefined, preserve previous value
+        if (totalBalance === undefined && prevBalances.totalBalance !== undefined) {
+          totalBalance = prevBalances.totalBalance
         }
+        
+        // Debug logging: log when totalBalance source changes
+        if (this.debug && totalBalance !== undefined && prevBalances.totalBalance !== totalBalance) {
+          const source = flex !== undefined ? 'flex_futures.balance_value' 
+            : marginEq !== undefined ? 'margin_equity'
+            : portfolio !== undefined ? 'portfolio_value'
+            : 'balance'
+          console.log(`[KrakenFuturesWs] totalBalance changed: ${prevBalances.totalBalance} -> ${totalBalance} (source: ${source})`)
+        }
+        
+        // Merge: only overwrite fields if new parsed value is not undefined
+        const balances: KrakenBalances = {
+          // Preserve previous values if new ones are undefined
+          currency: balancesMessage.data.currency ?? prevBalances.currency,
+          balance: balance ?? prevBalances.balance,
+          portfolioValue: portfolio ?? prevBalances.portfolioValue,
+          collateralValue: collateralValue ?? prevBalances.collateralValue,
+          availableMargin: available ?? prevBalances.availableMargin,
+          initialMargin: initialMargin ?? prevBalances.initialMargin,
+          maintenanceMargin: maintenanceMargin ?? prevBalances.maintenanceMargin,
+          pnl: pnl ?? prevBalances.pnl,
+          unrealizedFunding: unrealizedFunding ?? prevBalances.unrealizedFunding,
+          totalUnrealized: totalUnrealized ?? prevBalances.totalUnrealized,
+          marginEquity: marginEq ?? prevBalances.marginEquity,
+          flexFuturesBalanceValue: flex ?? prevBalances.flexFuturesBalanceValue,
+          totalBalance: totalBalance,
+        }
+        
         this.updateState({
           balances,
           lastUpdateTs: Date.now(),

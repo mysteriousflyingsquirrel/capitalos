@@ -167,12 +167,12 @@ export function DataProvider({ children }: DataProviderProps) {
       leverage: pos.effectiveLeverage !== undefined && pos.effectiveLeverage !== null ? pos.effectiveLeverage : null,
     }))
 
-    // Extract Account Equity from flex_futures.balance_value
+    // Extract Account Equity from totalBalance (canonical field)
     const exchangeBalance: import('../pages/NetWorth').ExchangeBalance[] = []
-    if (wsState.balances?.flexFuturesBalanceValue !== undefined && wsState.balances.flexFuturesBalanceValue !== null) {
-      const accountValue = typeof wsState.balances.flexFuturesBalanceValue === 'number' 
-        ? wsState.balances.flexFuturesBalanceValue 
-        : parseFloat(String(wsState.balances.flexFuturesBalanceValue)) || 0
+    if (wsState.balances?.totalBalance !== undefined && wsState.balances.totalBalance !== null) {
+      const accountValue = typeof wsState.balances.totalBalance === 'number' 
+        ? wsState.balances.totalBalance 
+        : parseFloat(String(wsState.balances.totalBalance)) || 0
       
       if (accountValue > 0) {
         exchangeBalance.push({
