@@ -236,6 +236,9 @@ export function DataProvider({ children }: DataProviderProps) {
       const asterOrders = Array.isArray(asterData?.openOrders) ? [...asterData.openOrders] : []
       const hyperliquidOrders = Array.isArray(hyperliquidData?.openOrders) ? [...hyperliquidData.openOrders] : []
       const krakenOrders = Array.isArray(finalKrakenData?.openOrders) ? [...finalKrakenData.openOrders] : []
+      const asterExchangeBalance = Array.isArray(asterData?.exchangeBalance) ? [...asterData.exchangeBalance] : []
+      const hyperliquidExchangeBalance = Array.isArray(hyperliquidData?.exchangeBalance) ? [...hyperliquidData.exchangeBalance] : []
+      const krakenExchangeBalance = Array.isArray(finalKrakenData?.exchangeBalance) ? [...finalKrakenData.exchangeBalance] : []
       
       console.log('[DataContext] Before merge - counts:', {
         asterPositions: asterPositions.length,
@@ -244,6 +247,9 @@ export function DataProvider({ children }: DataProviderProps) {
         asterOrders: asterOrders.length,
         hyperliquidOrders: hyperliquidOrders.length,
         krakenOrders: krakenOrders.length,
+        asterExchangeBalance: asterExchangeBalance.length,
+        hyperliquidExchangeBalance: hyperliquidExchangeBalance.length,
+        krakenExchangeBalance: krakenExchangeBalance.length,
       })
       
       const mergedData = {
@@ -283,7 +289,18 @@ export function DataProvider({ children }: DataProviderProps) {
       // Update items with merged data (or just ensure exchangeBalance is set)
       const updatedItems = items.map((item) => {
         if (item.category === 'Perpetuals') {
-          const exchangeBalance = ensureExchangeBalance(item)
+          // Merge exchangeBalance from API sources
+          const apiExchangeBalance = [...asterExchangeBalance, ...hyperliquidExchangeBalance, ...krakenExchangeBalance]
+          
+          // Use API exchangeBalance if available, otherwise use existing or default
+          let exchangeBalance: import('../pages/NetWorth').ExchangeBalance[]
+          if (apiExchangeBalance.length > 0) {
+            // Use exchangeBalance from APIs
+            exchangeBalance = apiExchangeBalance
+          } else {
+            // Fallback to existing or default
+            exchangeBalance = ensureExchangeBalance(item)
+          }
           
           if (asterData || hyperliquidData || finalKrakenData) {
             // We have API data, merge it
@@ -291,6 +308,7 @@ export function DataProvider({ children }: DataProviderProps) {
             console.log('[DataContext] Merged data being set:', {
               openPositionsCount: mergedData.openPositions.length,
               openOrdersCount: mergedData.openOrders.length,
+              exchangeBalanceCount: exchangeBalance.length,
               openPositions: mergedData.openPositions,
             })
             

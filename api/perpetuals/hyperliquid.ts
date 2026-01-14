@@ -628,14 +628,98 @@ async function fetchOpenOrders(walletAddress: string, dex: string = ''): Promise
 
 
 
+async function fetchAccountEquity(walletAddress: string, debug: boolean = false): Promise<ExchangeBalance[]> {
+  try {
+    // Use the same DEX discovery logic as fetchOpenPositions
+    const allDexs = await fetchAllPerpDexs()
+    const dexDefault = ''
+    let dexWithSilver: string | null = null
+    
+    // Check each non-default dex to find which one contains SILVER
+    for (const dex of allDexs) {
+      if (dex && dex !== dexDefault) {
+        const containsSilver = await dexContainsSilver(dex)
+        if (containsSilver) {
+          dexWithSilver = dex
+          break
+        }
+      }
+    }
+    
+    const dexsToQuery = [dexDefault]
+    if (dexWithSilver) {
+      dexsToQuery.push(dexWithSilver)
+    }
+    
+    let totalAccountValue = 0
+    
+    // Fetch account value from each relevant dex
+    for (const dex of dexsToQuery) {
+      try {
+        const userState = await fetchUserState(walletAddress, dex)
+        
+        // Extract accountValue from clearinghouseState.marginSummary.accountValue
+        let accountValue = 0
+        if (userState?.clearinghouseState?.marginSummary?.accountValue !== undefined) {
+          const value = userState.clearinghouseState.marginSummary.accountValue
+          if (typeof value === 'string') {
+            accountValue = parseFloat(value)
+          } else if (typeof value === 'number') {
+            accountValue = value
+          }
+        } else if (userState?.marginSummary?.accountValue !== undefined) {
+          // Fallback: check top-level marginSummary
+          const value = userState.marginSummary.accountValue
+          if (typeof value === 'string') {
+            accountValue = parseFloat(value)
+          } else if (typeof value === 'number') {
+            accountValue = value
+          }
+        }
+        
+        if (debug) {
+          console.log(`[Hyperliquid] Dex "${dex || 'default'}" accountValue:`, accountValue)
+        }
+        
+        totalAccountValue += accountValue
+      } catch (error) {
+        console.error(`[Hyperliquid] Error fetching account equity from dex "${dex || 'default'}":`, error)
+        // Continue with other dexs even if one fails
+      }
+    }
+    
+    if (debug) {
+      console.log('[Hyperliquid] Total account equity:', totalAccountValue)
+    }
+    
+    // Return single entry with total account equity
+    if (totalAccountValue > 0) {
+      return [{
+        id: 'hyperliquid-account-equity',
+        item: 'Account Equity',
+        holdings: totalAccountValue,
+        platform: 'Hyperliquid',
+      }]
+    }
+    
+    return []
+  } catch (error) {
+    console.error('[Hyperliquid] Error fetching account equity:', error)
+    return []
+  }
+}
+
 async function fetchHyperliquidPerpetualsData(
   walletAddress: string,
   debug: boolean = false
 ): Promise<PerpetualsData> {
-  const openPositions = await fetchOpenPositions(walletAddress)
+  const [openPositions, exchangeBalance] = await Promise.all([
+    fetchOpenPositions(walletAddress),
+    fetchAccountEquity(walletAddress, debug),
+  ])
 
   return {
-    exchangeBalance: [],
+    exchangeBalance,
     openPositions,
     openOrders: [],
   }
