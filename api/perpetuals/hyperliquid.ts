@@ -444,8 +444,8 @@ function parseMarginSummary(userState: any, debug: boolean = false): { withdrawa
   return { withdrawable, totalMarginUsed }
 }
 
-// Helper: Sum position margins from assetPositions
-function sumPositionMargins(assetPositions: any[]): number {
+// Helper: Sum position initial margins from assetPositions (smart calculation)
+function sumSmartPositionMargins(assetPositions: any[], debug: boolean = false): number {
   if (!Array.isArray(assetPositions)) {
     return 0
   }
@@ -454,7 +454,7 @@ function sumPositionMargins(assetPositions: any[]): number {
   for (const pos of assetPositions) {
     const position = pos.position || pos
     
-    // Only include positions where abs(szi) > 0
+    // Extract size (szi)
     let size = 0
     if (typeof position.szi === 'string') {
       size = parseFloat(position.szi)
@@ -462,16 +462,81 @@ function sumPositionMargins(assetPositions: any[]): number {
       size = position.szi
     }
     
+    // Skip if abs(szi) < 0.0001
     if (Math.abs(size) < 0.0001) {
       continue
     }
     
-    // Extract position.marginUsed (defensive parsing)
     let positionMargin = 0
-    if (typeof position.marginUsed === 'string') {
-      positionMargin = parseFloat(position.marginUsed)
-    } else if (typeof position.marginUsed === 'number') {
-      positionMargin = position.marginUsed
+    let computedInitialMargin = 0
+    let usedMarginUsed = false
+    
+    // If position.marginUsed exists and > 0, use that
+    if (position.marginUsed !== undefined && position.marginUsed !== null) {
+      if (typeof position.marginUsed === 'string') {
+        positionMargin = parseFloat(position.marginUsed)
+      } else if (typeof position.marginUsed === 'number') {
+        positionMargin = position.marginUsed
+      }
+      
+      if (positionMargin > 0) {
+        usedMarginUsed = true
+      }
+    }
+    
+    // Otherwise compute initialMargin = abs(szi) * markPx / leverage
+    if (!usedMarginUsed || positionMargin === 0) {
+      // Get markPx: use position.markPx, fallback to position.entryPx
+      let markPx = 0
+      if (position.markPx !== undefined && position.markPx !== null) {
+        if (typeof position.markPx === 'string') {
+          markPx = parseFloat(position.markPx)
+        } else if (typeof position.markPx === 'number') {
+          markPx = position.markPx
+        }
+      } else if (position.entryPx !== undefined && position.entryPx !== null) {
+        if (typeof position.entryPx === 'string') {
+          markPx = parseFloat(position.entryPx)
+        } else if (typeof position.entryPx === 'number') {
+          markPx = position.entryPx
+        }
+      }
+      
+      // Parse leverage: from position.leverage.value or directly from position.leverage
+      let leverage = 1
+      if (position.leverage) {
+        if (typeof position.leverage === 'object' && position.leverage.value !== undefined) {
+          // leverage.value exists
+          if (typeof position.leverage.value === 'string') {
+            leverage = parseFloat(position.leverage.value)
+          } else if (typeof position.leverage.value === 'number') {
+            leverage = position.leverage.value
+          }
+        } else if (typeof position.leverage === 'string') {
+          leverage = parseFloat(position.leverage)
+        } else if (typeof position.leverage === 'number') {
+          leverage = position.leverage
+        }
+      }
+      
+      // Compute initialMargin = abs(szi) * markPx / leverage
+      if (markPx > 0 && leverage > 0) {
+        computedInitialMargin = Math.abs(size) * markPx / leverage
+        positionMargin = computedInitialMargin
+      }
+    }
+    
+    if (debug) {
+      const coin = position.coin || position.name || 'unknown'
+      console.log('[Hyperliquid] Position margin calculation:', {
+        coin,
+        szi: size,
+        markPx: position.markPx || position.entryPx,
+        leverage: position.leverage?.value || position.leverage,
+        marginUsed: position.marginUsed,
+        computedInitialMargin: computedInitialMargin > 0 ? computedInitialMargin : null,
+        finalMargin: positionMargin,
+      })
     }
     
     sum += positionMargin
@@ -571,17 +636,17 @@ async function fetchLockedMargin(walletAddress: string, debug: boolean = false):
         
         // Get assetPositions to sum position margins
         const assetPositions = userState?.assetPositions
-        const positionMarginSum = sumPositionMargins(assetPositions || [])
+        const positionsUsed = sumSmartPositionMargins(assetPositions || [], debug)
+        
+        // Calculate lockedMargin = max(0, totalMarginUsed - positionsUsed)
+        const lockedMargin = Math.max(0, totalMarginUsed - positionsUsed)
         
         if (debug) {
-          console.log(`[Hyperliquid] Dex "${dex || 'default'}" totalMarginUsed:`, totalMarginUsed, 'positionMarginSum:', positionMarginSum)
-        }
-        
-        // Calculate lockedMargin = max(0, totalMarginUsed - positionMarginSum)
-        const lockedMargin = Math.max(0, totalMarginUsed - positionMarginSum)
-        
-        if (debug) {
-          console.log(`[Hyperliquid] Dex "${dex || 'default'}" calculated lockedMargin:`, lockedMargin)
+          console.log(`[Hyperliquid] Dex "${dex || 'default'}" locked margin calculation:`, {
+            totalMarginUsed,
+            positionsUsed,
+            lockedMargin,
+          })
         }
         
         // Sum across queried dexs
