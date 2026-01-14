@@ -6,7 +6,6 @@ import NetWorth from './pages/NetWorth'
 import Analytics from './pages/Analytics'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
-import LoadingScreen from './components/LoadingScreen'
 import { CurrencyProvider } from './contexts/CurrencyContext'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { IncognitoProvider } from './contexts/IncognitoContext'
@@ -17,14 +16,16 @@ function ProtectedRoutes() {
   const { user, loading: authLoading } = useAuth()
   const { loading: dataLoading, error: dataError } = useData()
 
-  const isLoading = authLoading || dataLoading
-
-  if (isLoading) {
-    return <LoadingScreen />
+  if (authLoading) {
+    return null
   }
 
   if (!user) {
     return <Login />
+  }
+
+  if (dataLoading) {
+    return null
   }
 
   if (dataError) {
