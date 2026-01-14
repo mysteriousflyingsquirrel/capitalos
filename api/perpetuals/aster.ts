@@ -45,7 +45,15 @@ interface PerpetualsOpenOrder {
   platform: string
 }
 
+interface ExchangeBalance {
+  id: string
+  item: string
+  holdings: number
+  platform: string
+}
+
 interface PerpetualsData {
+  exchangeBalance: ExchangeBalance[]
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
 }
@@ -266,6 +274,7 @@ async function fetchAsterPerpetualsData(
   ])
 
   return {
+    exchangeBalance: [],
     openPositions,
     openOrders,
   }

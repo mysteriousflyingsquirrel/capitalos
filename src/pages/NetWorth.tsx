@@ -46,7 +46,15 @@ export interface PerpetualsOpenPosition {
   positionSide?: 'LONG' | 'SHORT' | null // position direction
 }
 
+export interface ExchangeBalance {
+  id: string
+  item: string
+  holdings: number
+  platform: string
+}
+
 export interface PerpetualsData {
+  exchangeBalance: ExchangeBalance[]
   openPositions: PerpetualsOpenPosition[]
 }
 
@@ -83,6 +91,14 @@ const mockNetWorthItems: NetWorthItem[] = []
 
 // Empty data for Perpetuals category (will be populated from Aster API)
 const defaultPerpetualsData: PerpetualsData = {
+  exchangeBalance: [
+    {
+      id: 'exchange-balance-total-equity',
+      item: 'Total equity',
+      holdings: 10000,
+      platform: 'Kraken',
+    },
+  ],
   openPositions: [],
 }
 
@@ -171,10 +187,20 @@ function NetWorthCategorySection({
     if (category === 'Perpetuals') {
       // For Perpetuals: calculate from subcategories
       if (!item.perpetualsData) return sum
-      const { openPositions } = item.perpetualsData
+      const { exchangeBalance, openPositions } = item.perpetualsData
       
       // Sum all CHF balances directly (matching what's displayed in tables)
       let totalChf = 0
+      
+      // Exchange Balance: convert each holdings to CHF and sum
+      if (exchangeBalance) {
+        exchangeBalance.forEach(balance => {
+          const balanceChf = usdToChfRate && usdToChfRate > 0 
+            ? balance.holdings * usdToChfRate 
+            : convert(balance.holdings, 'USD')
+          totalChf += balanceChf
+        })
+      }
       
       // Open Positions: convert each balance to CHF and sum
       openPositions.forEach(pos => {
@@ -290,6 +316,93 @@ function NetWorthCategorySection({
             
             return (
               <div className="space-y-6">
+              {/* Exchange Balance Table */}
+              <div>
+                <Heading level={3} className="mb-3 text-text-secondary">Exchange Balance</Heading>
+                <div className="w-full overflow-hidden">
+                  <style>{`
+                    @media (max-width: 767px) {
+                      .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
+                      .perp-table-holdings-col { width: calc((100% - 55px) * 1 / 6) !important; }
+                      .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
+                      .perp-table-actions-col { width: 55px !important; }
+                      .perp-table-balance-cell { padding-right: 0.25rem !important; }
+                    }
+                    @media (min-width: 768px) {
+                      .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
+                      .perp-table-holdings-col { width: calc((100% - 85px) * 1 / 8) !important; }
+                      .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
+                      .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
+                      .perp-table-actions-col { width: 85px !important; }
+                    }
+                  `}</style>
+                  <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <colgroup>
+                      <col className="perp-table-item-col" />
+                      <col className="perp-table-holdings-col" />
+                      <col className="perp-table-balance-col" />
+                      <col className="perp-table-platform-col hidden md:table-column" />
+                      <col className="perp-table-actions-col" />
+                    </colgroup>
+                    <thead>
+                      <tr className="border-b border-border-subtle">
+                        <th className="text-left pb-2">
+                          <Heading level={4}>Item</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Holdings</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Balance</Heading>
+                        </th>
+                        <th className="text-right pb-2 hidden md:table-cell">
+                          <Heading level={4}>Platform</Heading>
+                        </th>
+                        <th className="text-right pb-2">
+                          <Heading level={4}>Actions</Heading>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(perpetualsData.exchangeBalance || []).map((balance) => {
+                        const balanceChf = usdToChfRate && usdToChfRate > 0 
+                          ? balance.holdings * usdToChfRate 
+                          : convert(balance.holdings, 'USD')
+                        return (
+                          <tr key={balance.id} className="border-b border-border-subtle last:border-b-0">
+                            <td className="py-2 pr-2">
+                              <div className="text2 truncate">
+                                {balance.item}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right px-2">
+                              <div className="text2 whitespace-nowrap">
+                                {formatNumber(balance.holdings, 'ch', { incognito: isIncognito })}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right px-2 perp-table-balance-cell">
+                              <div className="text2 whitespace-nowrap">
+                                {formatCurrency(balanceChf)}
+                              </div>
+                            </td>
+                            <td className="py-2 text-right pr-2 hidden md:table-cell">
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text2 truncate">
+                                  {balance.platform}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2">
+                              {/* Actions column - empty */}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* Open Positions Table */}
               <div>
                 <Heading level={3} className="mb-3 text-text-secondary">Open Positions</Heading>

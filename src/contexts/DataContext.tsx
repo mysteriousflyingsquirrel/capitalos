@@ -168,6 +168,7 @@ export function DataProvider({ children }: DataProviderProps) {
     }))
 
     return {
+      exchangeBalance: [],
       openPositions: positions,
     }
   }
@@ -262,19 +263,40 @@ export function DataProvider({ children }: DataProviderProps) {
         openPositionsCount: mergedData.openPositions.length,
       })
 
-      // Update items with merged data
-      if (asterData || hyperliquidData || finalKrakenData) {
-        console.log('[DataContext] Updating items with merged Perpetuals data')
-        console.log('[DataContext] Merged data being set:', {
-          openPositionsCount: mergedData.openPositions.length,
-          openOrdersCount: mergedData.openOrders.length,
-          openPositions: mergedData.openPositions,
-        })
-        
-        const updatedItems = items.map((item) => {
-          if (item.category === 'Perpetuals') {
+      // Helper function to ensure exchangeBalance is initialized
+      const ensureExchangeBalance = (item: NetWorthItem): import('../pages/NetWorth').ExchangeBalance[] => {
+        const existingExchangeBalance = item.perpetualsData?.exchangeBalance || []
+        if (existingExchangeBalance.length > 0) {
+          return existingExchangeBalance
+        }
+        // Return default if no existing exchangeBalance
+        return [
+          {
+            id: 'exchange-balance-total-equity',
+            item: 'Total equity',
+            holdings: 10000,
+            platform: 'Kraken',
+          },
+        ]
+      }
+
+      // Update items with merged data (or just ensure exchangeBalance is set)
+      const updatedItems = items.map((item) => {
+        if (item.category === 'Perpetuals') {
+          const exchangeBalance = ensureExchangeBalance(item)
+          
+          if (asterData || hyperliquidData || finalKrakenData) {
+            // We have API data, merge it
+            console.log('[DataContext] Updating items with merged Perpetuals data')
+            console.log('[DataContext] Merged data being set:', {
+              openPositionsCount: mergedData.openPositions.length,
+              openOrdersCount: mergedData.openOrders.length,
+              openPositions: mergedData.openPositions,
+            })
+            
             // Create a deep copy of mergedData to prevent mutation
             const perpetualsDataCopy = {
+              exchangeBalance: exchangeBalance.map(b => ({ ...b })),
               openPositions: mergedData.openPositions.map(p => ({ ...p })),
               openOrders: mergedData.openOrders.map(o => ({ ...o })),
             }
@@ -286,29 +308,46 @@ export function DataProvider({ children }: DataProviderProps) {
             console.log('[DataContext] Updated Perpetuals item:', {
               itemId: updatedItem.id,
               hasPerpetualsData: !!updatedItem.perpetualsData,
+              exchangeBalanceCount: updatedItem.perpetualsData?.exchangeBalance?.length || 0,
               positionsCount: updatedItem.perpetualsData?.openPositions?.length || 0,
               openOrdersCount: updatedItem.perpetualsData?.openOrders?.length || 0,
               positionsIds: updatedItem.perpetualsData?.openPositions?.map(p => p.id),
               ordersIds: updatedItem.perpetualsData?.openOrders?.map(o => o.id),
             })
             return updatedItem
+          } else {
+            // No API data, but ensure exchangeBalance and perpetualsData structure is set
+            const perpetualsDataCopy = {
+              exchangeBalance: exchangeBalance.map(b => ({ ...b })),
+              openPositions: (item.perpetualsData?.openPositions || []).map(p => ({ ...p })),
+              openOrders: (item.perpetualsData?.openOrders || []).map(o => ({ ...o })),
+            }
+            
+            const updatedItem = {
+              ...item,
+              perpetualsData: perpetualsDataCopy,
+            }
+            console.log('[DataContext] No API data, but ensured exchangeBalance:', {
+              itemId: updatedItem.id,
+              exchangeBalanceCount: updatedItem.perpetualsData?.exchangeBalance?.length || 0,
+            })
+            return updatedItem
           }
-          return item
-        })
-        
-        const finalPerpetualsItem = updatedItems.find(i => i.category === 'Perpetuals')
-        console.log('[DataContext] Final Perpetuals item before return:', {
-          hasItem: !!finalPerpetualsItem,
-          hasPerpetualsData: !!finalPerpetualsItem?.perpetualsData,
-          positionsCount: finalPerpetualsItem?.perpetualsData?.openPositions?.length || 0,
-          openOrdersCount: finalPerpetualsItem?.perpetualsData?.openOrders?.length || 0,
-          positionsIds: finalPerpetualsItem?.perpetualsData?.openPositions?.map(p => p.id),
-          ordersIds: finalPerpetualsItem?.perpetualsData?.openOrders?.map(o => o.id),
-        })
-        return updatedItems
-      } else {
-        console.log('[DataContext] No data from Aster, Hyperliquid, or Kraken, keeping existing items')
-      }
+        }
+        return item
+      })
+      
+      const finalPerpetualsItem = updatedItems.find(i => i.category === 'Perpetuals')
+      console.log('[DataContext] Final Perpetuals item before return:', {
+        hasItem: !!finalPerpetualsItem,
+        hasPerpetualsData: !!finalPerpetualsItem?.perpetualsData,
+        exchangeBalanceCount: finalPerpetualsItem?.perpetualsData?.exchangeBalance?.length || 0,
+        positionsCount: finalPerpetualsItem?.perpetualsData?.openPositions?.length || 0,
+        openOrdersCount: finalPerpetualsItem?.perpetualsData?.openOrders?.length || 0,
+        positionsIds: finalPerpetualsItem?.perpetualsData?.openPositions?.map(p => p.id),
+        ordersIds: finalPerpetualsItem?.perpetualsData?.openOrders?.map(o => o.id),
+      })
+      return updatedItems
     } catch (error) {
       console.error('[DataContext] Error fetching Perpetuals data:', error)
     }
