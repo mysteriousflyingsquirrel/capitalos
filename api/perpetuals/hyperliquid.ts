@@ -67,6 +67,7 @@ interface PerpetualsData {
 const HYPERLIQUID_BASE_URL = 'https://api.hyperliquid.xyz'
 
 // Fetch all perpetual dexs to support builder-deployed dexs (HIP-3)
+// According to docs: perpDexs returns [null, {...}] format
 async function fetchAllPerpDexs(): Promise<string[]> {
   try {
     const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
@@ -80,40 +81,31 @@ async function fetchAllPerpDexs(): Promise<string[]> {
     })
 
     if (!response.ok) {
-      console.error('[Hyperliquid] Failed to fetch perp dexs')
       return [''] // Return default dex if we can't fetch the list
     }
 
     const data = await response.json()
-    console.log('[Hyperliquid] Raw perpDexs response:', JSON.stringify(data, null, 2))
     
-    // Handle array response format [null, dexs]
-    const dexs = Array.isArray(data) && data.length > 1 ? data[1] : data
-    
-    console.log('[Hyperliquid] Processed dexs array:', JSON.stringify(dexs, null, 2))
-    
-    if (Array.isArray(dexs)) {
-      // Extract dex names, including empty string for default dex
+    // According to docs: perpDexs returns [null, dexs] where dexs is an array
+    if (Array.isArray(data) && data.length > 1 && Array.isArray(data[1])) {
+      const dexs = data[1]
+      // Extract dex names from the array, filter out nulls
       const dexNames = dexs
         .filter((dex: any) => dex !== null && dex?.name !== undefined)
         .map((dex: any) => dex.name)
       
-      console.log('[Hyperliquid] Extracted dex names:', dexNames)
-      
       // Always include default dex (empty string) first
-      const allDexs = ['', ...dexNames]
-      console.log('[Hyperliquid] All dexs to query:', allDexs)
-      return allDexs
+      return ['', ...dexNames]
     }
     
-    console.log('[Hyperliquid] No dexs found, using default only')
     return ['']
   } catch (error) {
-    console.error('[Hyperliquid] Error fetching perp dexs:', error)
     return [''] // Fallback to default dex
   }
 }
 
+// According to docs: clearinghouseState returns a direct object (not array)
+// Request body: { type: 'clearinghouseState', user: walletAddress, dex?: string }
 async function fetchUserState(walletAddress: string, dex: string = ''): Promise<any> {
   try {
     const requestBody: any = {
@@ -121,12 +113,11 @@ async function fetchUserState(walletAddress: string, dex: string = ''): Promise<
       user: walletAddress,
     }
     
-    // Only include dex parameter if it's not empty (empty string means default dex)
+    // According to docs: dex parameter is optional, defaults to empty string (first perp dex)
+    // Only include if not empty
     if (dex) {
       requestBody.dex = dex
     }
-    
-    console.log(`[Hyperliquid] Fetching user state for dex "${dex || 'default'}":`, JSON.stringify(requestBody, null, 2))
     
     const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
       method: 'POST',
@@ -138,81 +129,65 @@ async function fetchUserState(walletAddress: string, dex: string = ''): Promise<
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error(`[Hyperliquid] API error for dex "${dex || 'default'}":`, response.status, errorText)
       throw new Error(`Hyperliquid API error (${response.status}): ${errorText}`)
     }
 
     const data = await response.json()
-    console.log(`[Hyperliquid] Raw response for dex "${dex || 'default'}":`, JSON.stringify(data, null, 2))
     
-    // Handle array response format [null, state] if present (as shown in some Hyperliquid endpoints)
-    if (Array.isArray(data) && data.length > 1 && data[1] !== null) {
-      console.log(`[Hyperliquid] Using array index [1] for dex "${dex || 'default'}"`)
-      return data[1]
-    }
-    
-    // Handle direct object response (as shown in clearinghouseState docs)
+    // According to docs: clearinghouseState returns a direct object with assetPositions at top level
+    // Not an array format
     if (data && typeof data === 'object' && !Array.isArray(data)) {
       return data
     }
     
-    // Fallback
     return data
   } catch (error) {
-    console.error(`[Hyperliquid] Error fetching user state for dex "${dex || 'default'}":`, error)
     throw error
   }
 }
 
 
+// According to Hyperliquid API docs:
+// 1. Fetch all dexs using perpDexs
+// 2. For each dex, call clearinghouseState with dex parameter
+// 3. Response has assetPositions array at top level
+// 4. Each position has: position.coin, position.szi, position.marginUsed, position.unrealizedPnl, position.leverage.value
 async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpenPosition[]> {
   try {
-    // Fetch all perpetual dexs to get positions from all dexs (including builder-deployed)
+    // Step 1: Fetch all perpetual dexs
     const dexs = await fetchAllPerpDexs()
-    console.log('[Hyperliquid] Fetching positions from dexs:', dexs)
     
     const allPositions: PerpetualsOpenPosition[] = []
     
-    // Fetch positions from each dex
+    // Step 2: Fetch positions from each dex
     for (const dex of dexs) {
       try {
         const userState = await fetchUserState(walletAddress, dex)
         
-        // According to Hyperliquid API docs, assetPositions is at the top level of the response
+        // According to docs: assetPositions is at the top level of the response
         const assetPositions = userState?.assetPositions
         
-        console.log(`[Hyperliquid] User state keys for dex "${dex || 'default'}":`, Object.keys(userState || {}))
-        console.log(`[Hyperliquid] assetPositions for dex "${dex || 'default'}":`, JSON.stringify(assetPositions, null, 2))
-        
         if (!assetPositions || !Array.isArray(assetPositions)) {
-          console.log(`[Hyperliquid] No assetPositions found for dex "${dex || 'default'}"`)
           continue
         }
         
-        console.log(`[Hyperliquid] Found ${assetPositions.length} asset positions in dex "${dex || 'default'}"`)
-        
+        // Step 3: Process each position according to docs structure
         for (const pos of assetPositions) {
-          // According to docs, position data is in pos.position
+          // According to docs: position data is in pos.position
           const position = pos.position || pos
-          
-          console.log(`[Hyperliquid] Processing position in dex "${dex || 'default'}":`, JSON.stringify(position, null, 2))
           
           // Size is in position.szi (as shown in docs example)
           const size = parseFloat(position.szi || '0')
           
           // Skip positions with zero size
           if (Math.abs(size) < 0.0001) {
-            console.log(`[Hyperliquid] Skipping position with size ${size} in dex "${dex || 'default'}"`)
             continue
           }
 
           // Coin symbol is in position.coin (as shown in docs)
           const symbol = position.coin || ''
           
-          console.log(`[Hyperliquid] Position symbol: "${symbol}", size: ${size} in dex "${dex || 'default'}"`)
-          
           if (!symbol) {
-            console.warn('[Hyperliquid] Position missing coin symbol:', position)
             continue
           }
           
@@ -231,7 +206,7 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           // Determine position side from size
           const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
 
-          const positionData = {
+          allPositions.push({
             id: `hyperliquid-pos-${symbol}-${dex || 'default'}-${Date.now()}`,
             ticker: symbol,
             margin,
@@ -239,19 +214,14 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             platform: 'Hyperliquid',
             leverage,
             positionSide,
-          }
-          
-          console.log(`[Hyperliquid] Adding position:`, positionData)
-          allPositions.push(positionData)
+          })
         }
       } catch (error) {
-        console.error(`[Hyperliquid] Error fetching positions from dex "${dex || 'default'}":`, error)
-        // Continue with other dexs even if one fails
+        // Silently continue if dex doesn't exist or has no positions
+        continue
       }
     }
     
-    console.log('[Hyperliquid] Processed', allPositions.length, 'total positions across all dexs')
-    console.log('[Hyperliquid] Final positions list:', allPositions.map(p => ({ ticker: p.ticker, margin: p.margin, pnl: p.pnl })))
     return allPositions
   } catch (error) {
     console.error('Error fetching Hyperliquid open positions:', error)
