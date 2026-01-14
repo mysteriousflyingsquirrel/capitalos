@@ -67,7 +67,8 @@ interface PerpetualsData {
 const HYPERLIQUID_BASE_URL = 'https://api.hyperliquid.xyz'
 
 // Step 1: Discover the perp DEX name for XYZ perps
-// According to docs: perpDexs returns an array of perp DEX entries with fields like name, full_name, etc.
+// According to docs: perpDexs returns [null, {name: "..."}, {name: "..."}] format
+// First element is null (default DEX), subsequent elements are objects describing a DEX
 async function fetchAllPerpDexs(): Promise<string[]> {
   try {
     const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
@@ -81,37 +82,131 @@ async function fetchAllPerpDexs(): Promise<string[]> {
     })
 
     if (!response.ok) {
+      console.log('[Hyperliquid] perpDexs response not OK, using default dex only')
       return [''] // Return default dex if we can't fetch the list
     }
 
     const data = await response.json()
     
-    // Handle array response format [null, dexs] where dexs is an array of dex entries
-    let dexsArray: any[] = []
+    // Debug: log raw response type
+    console.log('[Hyperliquid] perpDexs raw response type:', Array.isArray(data) ? 'array' : typeof data)
+    console.log('[Hyperliquid] perpDexs raw response:', JSON.stringify(data, null, 2))
+    
+    const dexNames: string[] = []
+    
+    // Handle documented format: [null, {name: "..."}, {name: "..."}]
     if (Array.isArray(data)) {
-      if (data.length > 1 && Array.isArray(data[1])) {
-        // Format: [null, [dex1, dex2, ...]]
-        dexsArray = data[1]
-      } else if (Array.isArray(data[0])) {
-        // Format: [[dex1, dex2, ...]]
-        dexsArray = data[0]
-      } else if (data.every(item => item && typeof item === 'object' && item.name)) {
-        // Format: [dex1, dex2, ...]
-        dexsArray = data
+      // Check if first element is null and subsequent are objects
+      if (data.length > 0 && data[0] === null && data.length > 1) {
+        // Format: [null, {name: "..."}, {name: "..."}]
+        for (let i = 1; i < data.length; i++) {
+          const dex = data[i]
+          if (dex && typeof dex === 'object' && typeof dex.name === 'string') {
+            dexNames.push(dex.name)
+          }
+        }
       }
-    } else if (Array.isArray(data.dexs)) {
-      dexsArray = data.dexs
+      // Defensive: handle nested array format [null, [{name: "..."}, ...]]
+      else if (data.length > 1 && Array.isArray(data[1])) {
+        const nestedArray = data[1]
+        for (const dex of nestedArray) {
+          if (dex && typeof dex === 'object' && typeof dex.name === 'string') {
+            dexNames.push(dex.name)
+          }
+        }
+      }
+      // Defensive: handle direct array of objects [{name: "..."}, ...]
+      else if (data.every((item: any) => item && typeof item === 'object' && typeof item.name === 'string')) {
+        for (const dex of data) {
+          if (dex && typeof dex.name === 'string') {
+            dexNames.push(dex.name)
+          }
+        }
+      }
     }
     
-    // Extract dex names from the array (each entry has a 'name' field)
-    const dexNames = dexsArray
-      .filter((dex: any) => dex !== null && dex?.name !== undefined)
-      .map((dex: any) => dex.name)
+    // Deduplicate names
+    const uniqueDexNames = [...new Set(dexNames)]
+    
+    // Debug: log extracted dex names
+    console.log('[Hyperliquid] Extracted dex names:', uniqueDexNames)
     
     // Always include default dex (empty string) first
-    return ['', ...dexNames]
+    return ['', ...uniqueDexNames]
   } catch (error) {
+    console.error('[Hyperliquid] Error fetching perpDexs:', error)
     return [''] // Fallback to default dex
+  }
+}
+
+// Helper: Extract symbol from universe entry (handles various formats)
+function extractSymbol(universeEntry: any): string | null {
+  if (typeof universeEntry === 'string') {
+    return universeEntry
+  }
+  if (typeof universeEntry === 'object' && universeEntry !== null) {
+    // Try common field names
+    return universeEntry.name || universeEntry.coin || universeEntry.token || universeEntry.symbol || null
+  }
+  return null
+}
+
+// Helper: Check if a DEX contains SILVER in its universe
+// Uses meta endpoint which returns the perp universe (available perps)
+async function dexContainsSilver(dex: string): Promise<boolean> {
+  try {
+    const requestBody: any = {
+      type: 'meta',
+    }
+    
+    // Include dex parameter if not empty
+    if (dex) {
+      requestBody.dex = dex
+    }
+    
+    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      return false
+    }
+
+    const data = await response.json()
+    
+    // meta returns [universe, marginTables] or similar structure
+    // universe is an array of perp entries
+    let universe: any[] = []
+    
+    if (Array.isArray(data)) {
+      // Format: [universe, marginTables] or [{universe: [...]}, ...]
+      if (data.length > 0 && Array.isArray(data[0])) {
+        universe = data[0]
+      } else if (data.length > 0 && data[0]?.universe && Array.isArray(data[0].universe)) {
+        universe = data[0].universe
+      }
+    } else if (data?.universe && Array.isArray(data.universe)) {
+      universe = data.universe
+    }
+    
+    // Check if any universe entry contains "SILVER" (case-insensitive)
+    for (const entry of universe) {
+      const symbol = extractSymbol(entry)
+      if (symbol && symbol.toUpperCase().includes('SILVER')) {
+        console.log(`[Hyperliquid] DEX "${dex || 'default'}" contains SILVER: true (found symbol: ${symbol})`)
+        return true
+      }
+    }
+    
+    console.log(`[Hyperliquid] DEX "${dex || 'default'}" contains SILVER: false`)
+    return false
+  } catch (error) {
+    console.error(`[Hyperliquid] Error checking if dex "${dex || 'default'}" contains SILVER:`, error)
+    return false
   }
 }
 
@@ -158,20 +253,43 @@ async function fetchUserState(walletAddress: string, dex: string = ''): Promise<
 }
 
 
-// According to Hyperliquid API docs:
+// Optimized position fetching:
 // 1. Fetch all dexs using perpDexs
-// 2. For each dex, call clearinghouseState with dex parameter
-// 3. Response has assetPositions array at top level
-// 4. Each position has: position.coin, position.szi, position.marginUsed, position.unrealizedPnl, position.leverage.value
+// 2. Determine which dex contains SILVER using meta
+// 3. Only query clearinghouseState for default dex and dex with SILVER
+// 4. Extract positions with robust parsing
 async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpenPosition[]> {
   try {
     // Step 1: Fetch all perpetual dexs
-    const dexs = await fetchAllPerpDexs()
+    const allDexs = await fetchAllPerpDexs()
+    
+    // Step 2: Determine which dexs to query
+    const dexDefault = '' // Always query default for BTC/ETH
+    let dexWithSilver: string | null = null
+    
+    // Check each non-default dex to find which one contains SILVER
+    for (const dex of allDexs) {
+      if (dex && dex !== dexDefault) {
+        const containsSilver = await dexContainsSilver(dex)
+        if (containsSilver) {
+          dexWithSilver = dex
+          break // Found it, no need to check others
+        }
+      }
+    }
+    
+    // Step 3: Query only the necessary dexs
+    const dexsToQuery = [dexDefault]
+    if (dexWithSilver) {
+      dexsToQuery.push(dexWithSilver)
+    }
+    
+    console.log(`[Hyperliquid] Querying dexs: ${dexsToQuery.map(d => d || 'default').join(', ')}`)
     
     const allPositions: PerpetualsOpenPosition[] = []
     
-    // Step 2: Fetch positions from each dex
-    for (const dex of dexs) {
+    // Step 4: Fetch positions from each relevant dex
+    for (const dex of dexsToQuery) {
       try {
         const userState = await fetchUserState(walletAddress, dex)
         
@@ -182,37 +300,58 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           continue
         }
         
-        // Step 3: Process each position according to docs structure
+        // Step 5: Process each position with robust extraction
         for (const pos of assetPositions) {
-          // According to docs: position data is in pos.position
+          // Position data might be in pos.position or directly in pos
           const position = pos.position || pos
           
-          // Size is in position.szi (as shown in docs example)
-          const size = parseFloat(position.szi || '0')
+          // Size parsing: handle both string and number
+          let size = 0
+          if (typeof position.szi === 'string') {
+            size = parseFloat(position.szi)
+          } else if (typeof position.szi === 'number') {
+            size = position.szi
+          } else if (typeof position.size === 'string') {
+            size = parseFloat(position.size)
+          } else if (typeof position.size === 'number') {
+            size = position.size
+          }
           
-          // Skip positions with zero size
+          // Skip positions with zero size (use tiny epsilon)
           if (Math.abs(size) < 0.0001) {
             continue
           }
 
-          // Coin symbol is in position.coin (as shown in docs)
-          const symbol = position.coin || ''
+          // Extract symbol: try coin first, then name as fallback
+          const symbol = position.coin || position.name || ''
           
           if (!symbol) {
             continue
           }
           
-          // Leverage is in position.leverage.value (as shown in docs)
+          // Leverage extraction
           let leverage: number | null = null
           if (position.leverage && typeof position.leverage === 'object' && position.leverage.value !== undefined) {
-            leverage = parseFloat(position.leverage.value)
+            leverage = typeof position.leverage.value === 'string' 
+              ? parseFloat(position.leverage.value) 
+              : position.leverage.value
           }
           
-          // Margin used is in position.marginUsed (as shown in docs)
-          const margin = parseFloat(position.marginUsed || '0')
+          // Margin parsing: handle string or number
+          let margin = 0
+          if (typeof position.marginUsed === 'string') {
+            margin = parseFloat(position.marginUsed)
+          } else if (typeof position.marginUsed === 'number') {
+            margin = position.marginUsed
+          }
           
-          // Unrealized PnL is in position.unrealizedPnl (as shown in docs)
-          const unrealizedPnl = parseFloat(position.unrealizedPnl || '0')
+          // PnL parsing: handle string or number
+          let unrealizedPnl = 0
+          if (typeof position.unrealizedPnl === 'string') {
+            unrealizedPnl = parseFloat(position.unrealizedPnl)
+          } else if (typeof position.unrealizedPnl === 'number') {
+            unrealizedPnl = position.unrealizedPnl
+          }
           
           // Determine position side from size
           const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
@@ -384,6 +523,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Get user ID from query
     const uid = req.query?.uid as string
+    const debug = req.query?.debug === 'true'
 
     if (!uid || typeof uid !== 'string') {
       return res.status(400).json({ 
@@ -413,10 +553,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const perpetualsData = await fetchHyperliquidPerpetualsData(walletAddress)
 
     // Return the data
-    return res.status(200).json({
+    const response: any = {
       success: true,
       data: perpetualsData,
-    })
+    }
+    
+    // Add debug info if requested
+    if (debug) {
+      const allDexs = await fetchAllPerpDexs()
+      const dexsWithSilver: string[] = []
+      const metaUniverseSample: Record<string, any[]> = {}
+      
+      // Check each dex for SILVER
+      for (const dex of allDexs) {
+        if (await dexContainsSilver(dex)) {
+          dexsWithSilver.push(dex || 'default')
+          
+          // Get universe sample for this dex
+          try {
+            const requestBody: any = { type: 'meta' }
+            if (dex) {
+              requestBody.dex = dex
+            }
+            const metaResponse = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(requestBody),
+            })
+            if (metaResponse.ok) {
+              const metaData = await metaResponse.json()
+              let universe: any[] = []
+              if (Array.isArray(metaData) && metaData.length > 0 && Array.isArray(metaData[0])) {
+                universe = metaData[0]
+              } else if (metaData?.universe && Array.isArray(metaData.universe)) {
+                universe = metaData.universe
+              }
+              // Get first 10 symbols
+              metaUniverseSample[dex || 'default'] = universe.slice(0, 10).map((entry: any) => extractSymbol(entry)).filter((s: string | null) => s !== null)
+            }
+          } catch (error) {
+            // Ignore errors in debug mode
+          }
+        }
+      }
+      
+      response.debug = {
+        dexsDiscovered: allDexs,
+        dexsWithSilver,
+        metaUniverseSample,
+      }
+    }
+
+    return res.status(200).json(response)
   } catch (error) {
     console.error('Error fetching Hyperliquid Perpetuals data:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
