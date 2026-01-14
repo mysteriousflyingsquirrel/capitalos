@@ -66,8 +66,8 @@ interface PerpetualsData {
 
 const HYPERLIQUID_BASE_URL = 'https://api.hyperliquid.xyz'
 
-// Fetch all perpetual dexs to support builder-deployed dexs (HIP-3)
-// According to docs: perpDexs returns [null, {...}] format
+// Step 1: Discover the perp DEX name for XYZ perps
+// According to docs: perpDexs returns an array of perp DEX entries with fields like name, full_name, etc.
 async function fetchAllPerpDexs(): Promise<string[]> {
   try {
     const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
@@ -86,25 +86,37 @@ async function fetchAllPerpDexs(): Promise<string[]> {
 
     const data = await response.json()
     
-    // According to docs: perpDexs returns [null, dexs] where dexs is an array
-    if (Array.isArray(data) && data.length > 1 && Array.isArray(data[1])) {
-      const dexs = data[1]
-      // Extract dex names from the array, filter out nulls
-      const dexNames = dexs
-        .filter((dex: any) => dex !== null && dex?.name !== undefined)
-        .map((dex: any) => dex.name)
-      
-      // Always include default dex (empty string) first
-      return ['', ...dexNames]
+    // Handle array response format [null, dexs] where dexs is an array of dex entries
+    let dexsArray: any[] = []
+    if (Array.isArray(data)) {
+      if (data.length > 1 && Array.isArray(data[1])) {
+        // Format: [null, [dex1, dex2, ...]]
+        dexsArray = data[1]
+      } else if (Array.isArray(data[0])) {
+        // Format: [[dex1, dex2, ...]]
+        dexsArray = data[0]
+      } else if (data.every(item => item && typeof item === 'object' && item.name)) {
+        // Format: [dex1, dex2, ...]
+        dexsArray = data
+      }
+    } else if (Array.isArray(data.dexs)) {
+      dexsArray = data.dexs
     }
     
-    return ['']
+    // Extract dex names from the array (each entry has a 'name' field)
+    const dexNames = dexsArray
+      .filter((dex: any) => dex !== null && dex?.name !== undefined)
+      .map((dex: any) => dex.name)
+    
+    // Always include default dex (empty string) first
+    return ['', ...dexNames]
   } catch (error) {
     return [''] // Fallback to default dex
   }
 }
 
-// According to docs: clearinghouseState returns a direct object (not array)
+// Step 2: Fetch open positions from the perp DEX
+// According to docs: clearinghouseState returns a direct object with assetPositions at top level
 // Request body: { type: 'clearinghouseState', user: walletAddress, dex?: string }
 async function fetchUserState(walletAddress: string, dex: string = ''): Promise<any> {
   try {
@@ -113,8 +125,7 @@ async function fetchUserState(walletAddress: string, dex: string = ''): Promise<
       user: walletAddress,
     }
     
-    // According to docs: dex parameter is optional, defaults to empty string (first perp dex)
-    // Only include if not empty
+    // Include dex field if provided (the dex name found from perpDexs)
     if (dex) {
       requestBody.dex = dex
     }
@@ -134,8 +145,8 @@ async function fetchUserState(walletAddress: string, dex: string = ''): Promise<
 
     const data = await response.json()
     
-    // According to docs: clearinghouseState returns a direct object with assetPositions at top level
-    // Not an array format
+    // According to docs: clearinghouseState returns a direct object (not array)
+    // with assetPositions at top level
     if (data && typeof data === 'object' && !Array.isArray(data)) {
       return data
     }
