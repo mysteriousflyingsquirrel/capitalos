@@ -697,17 +697,21 @@ async function fetchOpenOrders(walletAddress: string, dex: string = ''): Promise
   }
 }
 
-// Helper: Sum position initial margins from assetPositions (smart calculation)
-function sumSmartPositionMargins(assetPositions: any[], debug: boolean = false): number {
+// Helper: Sum position.marginUsed from assetPositions
+// Always trusts API's marginUsed field - does not recompute from markPx/leverage
+function sumPositionMarginUsed(assetPositions: any[]): { sum: number; count: number } {
   if (!Array.isArray(assetPositions)) {
-    return 0
+    return { sum: 0, count: 0 }
   }
   
   let sum = 0
+  let count = 0
+  const EPSILON = 0.0001
+  
   for (const pos of assetPositions) {
     const position = pos.position || pos
     
-    // Extract size (szi)
+    // Parse szi and skip if abs(szi) < epsilon
     let size = 0
     if (typeof position.szi === 'string') {
       size = parseFloat(position.szi)
@@ -715,87 +719,30 @@ function sumSmartPositionMargins(assetPositions: any[], debug: boolean = false):
       size = position.szi
     }
     
-    // Skip if abs(szi) < 0.0001
-    if (Math.abs(size) < 0.0001) {
+    if (Math.abs(size) < EPSILON) {
       continue
     }
     
-    let positionMargin = 0
-    let computedInitialMargin = 0
-    let usedMarginUsed = false
-    
-    // If position.marginUsed exists and > 0, use that
+    // Parse marginUsed (string or number). If missing/NaN, treat as 0
+    let marginUsed = 0
     if (position.marginUsed !== undefined && position.marginUsed !== null) {
       if (typeof position.marginUsed === 'string') {
-        positionMargin = parseFloat(position.marginUsed)
+        marginUsed = parseFloat(position.marginUsed)
       } else if (typeof position.marginUsed === 'number') {
-        positionMargin = position.marginUsed
-      }
-      
-      if (positionMargin > 0) {
-        usedMarginUsed = true
+        marginUsed = position.marginUsed
       }
     }
     
-    // Otherwise compute initialMargin = abs(szi) * markPx / leverage
-    if (!usedMarginUsed || positionMargin === 0) {
-      // Get markPx: use position.markPx, fallback to position.entryPx
-      let markPx = 0
-      if (position.markPx !== undefined && position.markPx !== null) {
-        if (typeof position.markPx === 'string') {
-          markPx = parseFloat(position.markPx)
-        } else if (typeof position.markPx === 'number') {
-          markPx = position.markPx
-        }
-      } else if (position.entryPx !== undefined && position.entryPx !== null) {
-        if (typeof position.entryPx === 'string') {
-          markPx = parseFloat(position.entryPx)
-        } else if (typeof position.entryPx === 'number') {
-          markPx = position.entryPx
-        }
-      }
-      
-      // Parse leverage: from position.leverage.value or directly from position.leverage
-      let leverage = 1
-      if (position.leverage) {
-        if (typeof position.leverage === 'object' && position.leverage.value !== undefined) {
-          // leverage.value exists
-          if (typeof position.leverage.value === 'string') {
-            leverage = parseFloat(position.leverage.value)
-          } else if (typeof position.leverage.value === 'number') {
-            leverage = position.leverage.value
-          }
-        } else if (typeof position.leverage === 'string') {
-          leverage = parseFloat(position.leverage)
-        } else if (typeof position.leverage === 'number') {
-          leverage = position.leverage
-        }
-      }
-      
-      // Compute initialMargin = abs(szi) * markPx / leverage
-      if (markPx > 0 && leverage > 0) {
-        computedInitialMargin = Math.abs(size) * markPx / leverage
-        positionMargin = computedInitialMargin
+    // Only add if valid (not NaN)
+    if (!isNaN(marginUsed)) {
+      sum += marginUsed
+      if (marginUsed > 0) {
+        count++
       }
     }
-    
-    if (debug) {
-      const coin = position.coin || position.name || 'unknown'
-      console.log('[Hyperliquid] Position margin calculation:', {
-        coin,
-        szi: size,
-        markPx: position.markPx || position.entryPx,
-        leverage: position.leverage?.value || position.leverage,
-        marginUsed: position.marginUsed,
-        computedInitialMargin: computedInitialMargin > 0 ? computedInitialMargin : null,
-        finalMargin: positionMargin,
-      })
-    }
-    
-    sum += positionMargin
   }
   
-  return sum
+  return { sum, count }
 }
 
 async function fetchAvailableMargin(walletAddress: string, debug: boolean = false): Promise<PerpetualsAvailableMargin[]> {
@@ -884,76 +831,27 @@ async function fetchLockedMargin(walletAddress: string, debug: boolean = false):
     
     for (const dex of dexsToQuery) {
       try {
-        // Fetch meta (universe + margin tables) for this dex
-        const meta = await fetchMeta(dex)
-        if (!meta) {
-          if (debug) {
-            console.log(`[Hyperliquid] Dex "${dex || 'default'}" - no meta data available`)
-          }
-          continue
-        }
+        // Fetch clearinghouseState (already done via fetchUserState)
+        const userState = await fetchUserState(walletAddress, dex)
         
-        // Build coin -> marginTableId lookup from universe
-        const marketMarginTableIdByCoin = buildMarketMarginTableIdByCoin(meta.universe)
+        // Extract totalMarginUsed from margin summary
+        const { totalMarginUsed } = parseMarginSummary(userState, debug)
         
-        // Build marginTableId -> tiers[] lookup
-        const tiersByTableId = buildTiersByTableId(meta.marginTables)
+        // Extract assetPositions from the same response
+        const assetPositions = userState?.assetPositions || []
         
-        // Fetch open orders for this dex
-        const openOrders = await fetchOpenOrders(walletAddress, dex)
+        // Compute positionsMarginUsed = sum of position.marginUsed for all non-zero positions
+        const { sum: positionsUsed, count: positionsCount } = sumPositionMarginUsed(assetPositions)
         
-        // Compute lockedMargin as sum of per-order required IM
-        let dexLocked = 0
-        
-        for (let i = 0; i < openOrders.length; i++) {
-          const order = openOrders[i]
-          const coin = order.coin || ''
-          
-          if (!coin) {
-            continue
-          }
-          
-          // Parse order fields
-          const px = parseFloat(order.limitPx || '0')
-          const sz = Math.abs(parseFloat(order.sz || '0'))
-          const notional = sz * px
-          
-          // Get tableId from marketMarginTableIdByCoin
-          const tableId = marketMarginTableIdByCoin[coin]
-          
-          if (tableId === undefined || tableId === null) {
-            if (debug) {
-              console.log(`[Hyperliquid] Coin "${coin}" cannot be mapped to a margin table ID`)
-            }
-            continue
-          }
-          
-          // Get initial margin fraction using margin tiers
-          const imf = getInitialMarginFraction(tableId, notional, tiersByTableId)
-          
-          // Compute orderLocked = notional * imf
-          const orderLocked = notional * imf
-          
-          if (debug && i < 5) {
-            // Log first ~5 orders
-            console.log('[Hyperliquid] Order locked margin calculation:', {
-              coin,
-              sz,
-              limitPx: order.limitPx,
-              notional,
-              tableId,
-              imf,
-              orderLocked,
-            })
-          }
-          
-          dexLocked += orderLocked
-        }
+        // Compute dexLocked = max(0, totalMarginUsed - positionsUsed)
+        const dexLocked = Math.max(0, totalMarginUsed - positionsUsed)
         
         if (debug) {
-          console.log(`[Hyperliquid] Dex "${dex || 'default'}" locked margin:`, {
-            numberOfOpenOrders: openOrders.length,
-            sumLockedMargin: dexLocked,
+          console.log(`[Hyperliquid] Dex "${dex || 'default'}" locked margin calculation:`, {
+            totalMarginUsed,
+            positionsUsed,
+            positionsCount,
+            dexLocked,
           })
         }
         
@@ -979,9 +877,6 @@ async function fetchLockedMargin(walletAddress: string, debug: boolean = false):
   } catch (error) {
     console.error('[Hyperliquid] Error fetching locked margin:', error)
     return []
-  } finally {
-    // Clear meta cache after request completes
-    Object.keys(metaCache).forEach(key => delete metaCache[key])
   }
 }
 
