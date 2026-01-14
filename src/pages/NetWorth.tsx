@@ -46,24 +46,8 @@ export interface PerpetualsOpenPosition {
   positionSide?: 'LONG' | 'SHORT' | null // position direction
 }
 
-export interface PerpetualsLockedMargin {
-  id: string
-  asset: string
-  margin: number // in quote currency (USD/USDT)
-  platform: string
-}
-
-export interface PerpetualsAvailableMargin {
-  id: string
-  asset: string
-  margin: number // in quote currency (USD/USDT)
-  platform: string
-}
-
 export interface PerpetualsData {
   openPositions: PerpetualsOpenPosition[]
-  lockedMargin: PerpetualsLockedMargin[] // Asset-based locked margin from /fapi/v4/account
-  availableMargin: PerpetualsAvailableMargin[]
 }
 
 export interface NetWorthItem {
@@ -100,8 +84,6 @@ const mockNetWorthItems: NetWorthItem[] = []
 // Empty data for Perpetuals category (will be populated from Aster API)
 const defaultPerpetualsData: PerpetualsData = {
   openPositions: [],
-  lockedMargin: [],
-  availableMargin: [],
 }
 
 const initialMockTransactions: NetWorthTransaction[] = []
@@ -189,7 +171,7 @@ function NetWorthCategorySection({
     if (category === 'Perpetuals') {
       // For Perpetuals: calculate from subcategories
       if (!item.perpetualsData) return sum
-      const { openPositions, availableMargin, lockedMargin } = item.perpetualsData
+      const { openPositions } = item.perpetualsData
       
       // Sum all CHF balances directly (matching what's displayed in tables)
       let totalChf = 0
@@ -197,24 +179,6 @@ function NetWorthCategorySection({
       // Open Positions: convert each balance to CHF and sum
       openPositions.forEach(pos => {
         const balanceUsd = pos.margin + pos.pnl
-        const balanceChf = usdToChfRate && usdToChfRate > 0 
-          ? balanceUsd * usdToChfRate 
-          : convert(balanceUsd, 'USD')
-        totalChf += balanceChf
-      })
-      
-      // Locked Margin: convert each balance to CHF and sum
-      lockedMargin.forEach(margin => {
-        const balanceUsd = margin.margin
-        const balanceChf = usdToChfRate && usdToChfRate > 0 
-          ? balanceUsd * usdToChfRate 
-          : convert(balanceUsd, 'USD')
-        totalChf += balanceChf
-      })
-      
-      // Available Margin: convert each balance to CHF and sum
-      availableMargin.forEach(margin => {
-        const balanceUsd = margin.margin
         const balanceChf = usdToChfRate && usdToChfRate > 0 
           ? balanceUsd * usdToChfRate 
           : convert(balanceUsd, 'USD')
@@ -303,15 +267,11 @@ function NetWorthCategorySection({
               perpetualsData: perpetualsData,
               hasPerpetualsData: !!perpetualsData,
               positionsCount: perpetualsData?.openPositions?.length || 0,
-              availableMarginCount: perpetualsData?.availableMargin?.length || 0,
-              lockedMarginCount: perpetualsData?.lockedMargin?.length || 0,
             })
             
             if (perpetualsData) {
               console.log('[NetWorth] Perpetuals data details:', {
                 openPositions: perpetualsData.openPositions,
-                availableMargin: perpetualsData.availableMargin,
-                lockedMargin: perpetualsData.lockedMargin,
               })
             } else {
               console.warn('[NetWorth] No perpetualsData found!', {
@@ -459,181 +419,6 @@ function NetWorthCategorySection({
                 </div>
               </div>
 
-              {/* Locked Margin Table */}
-              <div>
-                <Heading level={3} className="mb-3 text-text-secondary">Locked Margin</Heading>
-                <div className="w-full overflow-hidden">
-                  <style>{`
-                    @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
-                      .perp-table-margin-col { width: calc((100% - 55px) * 1 / 6) !important; }
-                      .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
-                      .perp-table-actions-col { width: 55px !important; }
-                      .perp-table-balance-cell { padding-right: 0.25rem !important; }
-                    }
-                    @media (min-width: 768px) {
-                      .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
-                      .perp-table-margin-col { width: calc((100% - 85px) * 1 / 8) !important; }
-                      .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
-                      .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
-                      .perp-table-actions-col { width: 85px !important; }
-                    }
-                  `}</style>
-                  <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
-                    <colgroup>
-                      <col className="perp-table-item-col" />
-                      <col className="perp-table-margin-col" />
-                      <col className="perp-table-balance-col" />
-                      <col className="perp-table-platform-col hidden md:table-column" />
-                      <col className="perp-table-actions-col" />
-                    </colgroup>
-                    <thead>
-                      <tr className="border-b border-border-subtle">
-                        <th className="text-left pb-2">
-                          <Heading level={4}>Item</Heading>
-                        </th>
-                        <th className="text-right pb-2">
-                          <Heading level={4}>Holdings</Heading>
-                        </th>
-                        <th className="text-right pb-2">
-                          <Heading level={4}>Balance</Heading>
-                        </th>
-                        <th className="text-right pb-2 hidden md:table-cell">
-                          <Heading level={4}>Platform</Heading>
-                        </th>
-                        <th className="text-right pb-2">
-                          <Heading level={4}>Actions</Heading>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {perpetualsData.lockedMargin.map((margin) => {
-                        const balanceUsd = margin.margin
-                        const balanceChf = usdToChfRate && usdToChfRate > 0 
-                          ? balanceUsd * usdToChfRate 
-                          : convert(balanceUsd, 'USD')
-                        return (
-                          <tr key={margin.id} className="border-b border-border-subtle last:border-b-0">
-                            <td className="py-2 pr-2">
-                              <div className="text2 truncate">
-                                {margin.asset}
-                              </div>
-                            </td>
-                            <td className="py-2 text-right px-2">
-                              <div className="text2 whitespace-nowrap">
-                                {formatNumber(margin.margin, 'ch', { incognito: isIncognito })}
-                              </div>
-                            </td>
-                            <td className="py-2 text-right px-2 perp-table-balance-cell">
-                              <div className="text2 whitespace-nowrap">
-                                {formatCurrency(balanceChf)}
-                              </div>
-                            </td>
-                            <td className="py-2 text-right pr-2 hidden md:table-cell">
-                              <div className="flex items-center justify-end gap-2">
-                                <span className="text2 truncate">
-                                  {margin.platform}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-2">
-                              {/* Actions column - empty */}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Available Margin Table */}
-              <div>
-                <Heading level={3} className="mb-3 text-text-secondary">Available Margin</Heading>
-                <div className="w-full overflow-hidden">
-                  <style>{`
-                    @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
-                      .perp-table-margin-col { width: calc((100% - 55px) * 1 / 6) !important; }
-                      .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
-                      .perp-table-actions-col { width: 55px !important; }
-                      .perp-table-balance-cell { padding-right: 0.25rem !important; }
-                    }
-                    @media (min-width: 768px) {
-                      .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
-                      .perp-table-margin-col { width: calc((100% - 85px) * 1 / 8) !important; }
-                      .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
-                      .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
-                      .perp-table-actions-col { width: 85px !important; }
-                    }
-                  `}</style>
-                  <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
-                    <colgroup>
-                      <col className="perp-table-item-col" />
-                      <col className="perp-table-margin-col" />
-                      <col className="perp-table-balance-col" />
-                      <col className="perp-table-platform-col hidden md:table-column" />
-                      <col className="perp-table-actions-col" />
-                    </colgroup>
-                    <thead>
-                      <tr className="border-b border-border-subtle">
-                        <th className="text-left pb-2">
-                          <Heading level={4}>Item</Heading>
-                        </th>
-                        <th className="text-right pb-2">
-                          <Heading level={4}>Holdings</Heading>
-                        </th>
-                        <th className="text-right pb-2">
-                          <Heading level={4}>Balance</Heading>
-                        </th>
-                        <th className="text-right pb-2 hidden md:table-cell">
-                          <Heading level={4}>Platform</Heading>
-                        </th>
-                        <th className="text-right pb-2">
-                          <Heading level={4}>Actions</Heading>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {perpetualsData.availableMargin.map((margin) => {
-                        const balanceUsd = margin.margin
-                        const balanceChf = usdToChfRate && usdToChfRate > 0 
-                          ? balanceUsd * usdToChfRate 
-                          : convert(balanceUsd, 'USD')
-                        return (
-                          <tr key={margin.id} className="border-b border-border-subtle last:border-b-0">
-                            <td className="py-2 pr-2">
-                              <div className="text2 truncate">
-                                {margin.asset}
-                              </div>
-                            </td>
-                            <td className="py-2 text-right px-2">
-                              <div className="text2 whitespace-nowrap">
-                                {formatNumber(margin.margin, 'ch', { incognito: isIncognito })}
-                              </div>
-                            </td>
-                            <td className="py-2 text-right px-2 perp-table-balance-cell">
-                              <div className="text2 whitespace-nowrap">
-                                {formatCurrency(balanceChf)}
-                              </div>
-                            </td>
-                            <td className="py-2 text-right pr-2 hidden md:table-cell">
-                              <div className="flex items-center justify-end gap-2">
-                                <span className="text2 truncate">
-                                  {margin.platform}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-2">
-                              {/* Actions column - empty */}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
               </div>
             )
           })()

@@ -81,14 +81,6 @@ async function fetchItemsForUid(uid: string): Promise<NetWorthItem[]> {
             ...(asterData?.openOrders || []),
             ...(hyperliquidData?.openOrders || []),
           ],
-          availableMargin: [
-            ...(asterData?.availableMargin || []),
-            ...(hyperliquidData?.availableMargin || []),
-          ],
-          lockedMargin: [
-            ...(asterData?.lockedMargin || []),
-            ...(hyperliquidData?.lockedMargin || []),
-          ],
         }
 
         // Update the perpetuals item with merged data

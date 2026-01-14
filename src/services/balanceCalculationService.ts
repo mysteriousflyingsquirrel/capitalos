@@ -27,25 +27,15 @@ export function calculateBalanceChf(
   
   // For Perpetuals items, calculate from subcategories (returns USD, caller must convert to CHF)
   if (item?.category === 'Perpetuals' && item.perpetualsData) {
-    const { openPositions, availableMargin, lockedMargin } = item.perpetualsData
+    const { openPositions } = item.perpetualsData
     
     // Open Positions: balance = margin + pnl (in USD)
     const openPositionsTotal = openPositions.reduce((posSum, pos) => {
       return posSum + (pos.margin + pos.pnl)
     }, 0)
     
-    // Locked Margin: sum of all locked margin assets (in USD)
-    const lockedMarginTotal = lockedMargin.reduce((sum, margin) => {
-      return sum + margin.margin
-    }, 0)
-    
-    // Available Margin: balance = margin (in USD)
-    const availableMarginTotal = availableMargin.reduce((marginSum, margin) => {
-      return marginSum + margin.margin
-    }, 0)
-    
     // Total in USD - returns USD value, caller must convert to CHF
-    return openPositionsTotal + lockedMarginTotal + availableMarginTotal
+    return openPositionsTotal
   }
   
   // For Depreciating Assets, calculate depreciation based on time since purchase

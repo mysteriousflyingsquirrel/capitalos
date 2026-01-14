@@ -395,7 +395,7 @@ function Dashboard() {
           if (!item.perpetualsData) {
             balance = 0
           } else {
-            const { openPositions, lockedMargin, availableMargin } = item.perpetualsData
+            const { openPositions } = item.perpetualsData
             
             // Sum all CHF balances directly (matching NetWorth page logic)
             let totalChf = 0
@@ -403,24 +403,6 @@ function Dashboard() {
             // Open Positions: convert each balance to CHF and sum
             openPositions.forEach(pos => {
               const balanceUsd = pos.margin + pos.pnl
-              const balanceChf = usdToChfRate && usdToChfRate > 0 
-                ? balanceUsd * usdToChfRate 
-                : convert(balanceUsd, 'USD')
-              totalChf += balanceChf
-            })
-            
-            // Locked Margin: convert each balance to CHF and sum
-            lockedMargin.forEach(margin => {
-              const balanceUsd = margin.margin
-              const balanceChf = usdToChfRate && usdToChfRate > 0 
-                ? balanceUsd * usdToChfRate 
-                : convert(balanceUsd, 'USD')
-              totalChf += balanceChf
-            })
-            
-            // Available Margin: convert each balance to CHF and sum
-            availableMargin.forEach(margin => {
-              const balanceUsd = margin.margin
               const balanceChf = usdToChfRate && usdToChfRate > 0 
                 ? balanceUsd * usdToChfRate 
                 : convert(balanceUsd, 'USD')

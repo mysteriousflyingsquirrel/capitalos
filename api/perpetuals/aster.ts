@@ -45,25 +45,9 @@ interface PerpetualsOpenOrder {
   platform: string
 }
 
-interface PerpetualsAvailableMargin {
-  id: string
-  asset: string
-  margin: number // in USD/USDT
-  platform: string
-}
-
-interface PerpetualsLockedMargin {
-  id: string
-  asset: string
-  margin: number
-  platform: string
-}
-
 interface PerpetualsData {
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
-  availableMargin: PerpetualsAvailableMargin[]
-  lockedMargin: PerpetualsLockedMargin[] // Asset-based locked margin from /fapi/v4/account (in USD/USDT)
 }
 
 const ASTER_BASE_URL = 'https://fapi.asterdex.com'
@@ -267,107 +251,6 @@ async function fetchOpenOrders(
   return orders
 }
 
-/**
- * Fetches account-level data including locked margin from /fapi/v4/account
- */
-async function fetchAccountData(
-  apiKey: string,
-  apiSecret: string
-): Promise<{ lockedMargin: number | null }> {
-  try {
-    const accountQueryString = buildSignedQueryString({}, apiSecret)
-    const accountUrl = `${ASTER_BASE_URL}/fapi/v4/account?${accountQueryString}`
-    
-    const accountResponse = await fetch(accountUrl, {
-      method: 'GET',
-      headers: {
-        'X-MBX-APIKEY': apiKey,
-        'Content-Type': 'application/json',
-      },
-    })
-
-    if (!accountResponse.ok) {
-      const errorText = await accountResponse.text()
-      console.warn(`Failed to fetch account data (${accountResponse.status}): ${errorText}`)
-      return { lockedMargin: null }
-    }
-
-    const accountData = await accountResponse.json()
-    
-    // Debug logging: inspect account fields
-    console.log('[DEBUG] Account data fields:', {
-      totalOpenOrderInitialMargin: accountData.totalOpenOrderInitialMargin,
-      totalInitialMargin: accountData.totalInitialMargin,
-      totalMarginUsed: accountData.totalMarginUsed,
-      availableBalance: accountData.availableBalance,
-      totalWalletBalance: accountData.totalWalletBalance,
-    })
-    
-    // Use totalOpenOrderInitialMargin as the authoritative locked margin value
-    // This represents margin reserved by open orders
-    const lockedMargin = accountData.totalOpenOrderInitialMargin !== undefined
-      ? parseFloat(accountData.totalOpenOrderInitialMargin || '0')
-      : null
-    
-    if (lockedMargin !== null) {
-      console.log(`[DEBUG] Using totalOpenOrderInitialMargin as locked margin: ${lockedMargin}`)
-    }
-
-    return { lockedMargin }
-  } catch (error) {
-    console.warn('Failed to fetch account data:', error)
-    return { lockedMargin: null }
-  }
-}
-
-/**
- * Fetches available margin from Aster API
- */
-async function fetchAvailableMargin(
-  apiKey: string,
-  apiSecret: string
-): Promise<PerpetualsAvailableMargin[]> {
-  // Fetch balance first
-  const balanceQueryString = buildSignedQueryString({}, apiSecret)
-  const balanceUrl = `${ASTER_BASE_URL}/fapi/v2/balance?${balanceQueryString}`
-
-  const balanceResponse = await fetch(balanceUrl, {
-    method: 'GET',
-    headers: {
-      'X-MBX-APIKEY': apiKey,
-      'Content-Type': 'application/json',
-    },
-  })
-
-  if (!balanceResponse.ok) {
-    const errorText = await balanceResponse.text()
-    throw new Error(`Aster API error (${balanceResponse.status}): ${errorText}`)
-  }
-
-  const balanceData = await balanceResponse.json()
-
-  const margins: PerpetualsAvailableMargin[] = []
-
-  if (Array.isArray(balanceData)) {
-    for (const asset of balanceData) {
-      const assetName = asset.asset || ''
-      const availableBalance = parseFloat(asset.availableBalance || '0')
-      
-      // Only include assets with available balance > 0
-      // Focus on common collateral assets (USDT, USDC, etc.)
-      if (availableBalance > 0 && (assetName === 'USDT' || assetName === 'USDC' || assetName === 'BUSD')) {
-        margins.push({
-          id: `aster-margin-${assetName}`,
-          asset: assetName,
-          margin: availableBalance,
-          platform: 'Aster',
-        })
-      }
-    }
-  }
-
-  return margins
-}
 
 /**
  * Fetches all Perpetuals data from Aster API
@@ -376,38 +259,15 @@ async function fetchAsterPerpetualsData(
   apiKey: string,
   apiSecret: string
 ): Promise<PerpetualsData> {
-  // Fetch positions, orders, and margin in parallel
-  // Account data is fetched separately as it's needed for locked margin
-  const [openPositions, openOrders, availableMargin, accountData] = await Promise.all([
+  // Fetch positions and orders in parallel
+  const [openPositions, openOrders] = await Promise.all([
     fetchOpenPositions(apiKey, apiSecret),
     fetchOpenOrders(apiKey, apiSecret),
-    fetchAvailableMargin(apiKey, apiSecret),
-    fetchAccountData(apiKey, apiSecret),
   ])
-
-  // Convert lockedMargin from number | null to array format to match interface
-  const lockedMarginArray: Array<{
-    id: string
-    asset: string
-    margin: number
-    platform: string
-  }> = []
-  
-  if (accountData.lockedMargin !== null && accountData.lockedMargin > 0) {
-    // Aster uses USDT as the quote currency
-    lockedMarginArray.push({
-      id: 'aster-locked-margin-USDT',
-      asset: 'USDT',
-      margin: accountData.lockedMargin,
-      platform: 'Aster',
-    })
-  }
 
   return {
     openPositions,
     openOrders,
-    availableMargin,
-    lockedMargin: lockedMarginArray,
   }
 }
 

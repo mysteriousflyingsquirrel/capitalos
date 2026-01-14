@@ -167,39 +167,8 @@ export function DataProvider({ children }: DataProviderProps) {
       leverage: pos.effectiveLeverage !== undefined && pos.effectiveLeverage !== null ? pos.effectiveLeverage : null,
     }))
 
-    // Map balances to available/locked margin
-    const availableMargin: import('../pages/NetWorth').PerpetualsAvailableMargin[] = []
-    const lockedMargin: import('../pages/NetWorth').PerpetualsLockedMargin[] = []
-
-    if (wsState.balances) {
-      const balances = wsState.balances
-      const unit = balances.currency || 'USD'
-      
-      // Available margin
-      if (balances.availableMargin !== undefined && balances.availableMargin !== null) {
-        availableMargin.push({
-          id: 'kraken-available',
-          asset: unit,
-          margin: balances.availableMargin,
-          platform: 'Kraken',
-        })
-      }
-
-      // Locked margin (initial margin)
-      if (balances.initialMargin !== undefined && balances.initialMargin !== null) {
-        lockedMargin.push({
-          id: 'kraken-locked',
-          asset: unit,
-          margin: balances.initialMargin,
-          platform: 'Kraken',
-        })
-      }
-    }
-
     return {
       openPositions: positions,
-      availableMargin,
-      lockedMargin,
     }
   }
 
@@ -241,31 +210,21 @@ export function DataProvider({ children }: DataProviderProps) {
       console.log('[DataContext] Fetch results:', {
         asterData: !!asterData,
         asterPositions: asterData?.openPositions?.length || 0,
-        asterLockedMargin: asterData?.lockedMargin?.length || 0,
-        asterAvailableMargin: asterData?.availableMargin?.length || 0,
         hyperliquidData: !!hyperliquidData,
         hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
-        hyperliquidLockedMargin: hyperliquidData?.lockedMargin?.length || 0,
-        hyperliquidAvailableMargin: hyperliquidData?.availableMargin?.length || 0,
         krakenData: !!finalKrakenData,
         krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
         krakenPositions: finalKrakenData?.openPositions?.length || 0,
         krakenOrders: finalKrakenData?.openOrders?.length || 0,
-        krakenLockedMargin: finalKrakenData?.lockedMargin?.length || 0,
-        krakenAvailableMargin: finalKrakenData?.availableMargin?.length || 0,
       })
 
       // Log the actual data structures
       console.log('[DataContext] Aster data structure:', {
         openPositions: asterData?.openPositions,
-        availableMargin: asterData?.availableMargin,
-        lockedMargin: asterData?.lockedMargin,
       })
       
       console.log('[DataContext] Hyperliquid data structure:', {
         openPositions: hyperliquidData?.openPositions,
-        availableMargin: hyperliquidData?.availableMargin,
-        lockedMargin: hyperliquidData?.lockedMargin,
       })
 
       // Merge Aster, Hyperliquid, and Kraken data
@@ -276,12 +235,6 @@ export function DataProvider({ children }: DataProviderProps) {
       const asterOrders = Array.isArray(asterData?.openOrders) ? [...asterData.openOrders] : []
       const hyperliquidOrders = Array.isArray(hyperliquidData?.openOrders) ? [...hyperliquidData.openOrders] : []
       const krakenOrders = Array.isArray(finalKrakenData?.openOrders) ? [...finalKrakenData.openOrders] : []
-      const asterAvailableMargin = Array.isArray(asterData?.availableMargin) ? [...asterData.availableMargin] : []
-      const hyperliquidAvailableMargin = Array.isArray(hyperliquidData?.availableMargin) ? [...hyperliquidData.availableMargin] : []
-      const krakenAvailableMargin = Array.isArray(finalKrakenData?.availableMargin) ? [...finalKrakenData.availableMargin] : []
-      const asterLockedMargin = Array.isArray(asterData?.lockedMargin) ? [...asterData.lockedMargin] : []
-      const hyperliquidLockedMargin = Array.isArray(hyperliquidData?.lockedMargin) ? [...hyperliquidData.lockedMargin] : []
-      const krakenLockedMargin = Array.isArray(finalKrakenData?.lockedMargin) ? [...finalKrakenData.lockedMargin] : []
       
       console.log('[DataContext] Before merge - counts:', {
         asterPositions: asterPositions.length,
@@ -295,8 +248,6 @@ export function DataProvider({ children }: DataProviderProps) {
       const mergedData = {
         openPositions: [...asterPositions, ...hyperliquidPositions, ...krakenPositions],
         openOrders: [...asterOrders, ...hyperliquidOrders, ...krakenOrders],
-        availableMargin: [...asterAvailableMargin, ...hyperliquidAvailableMargin, ...krakenAvailableMargin],
-        lockedMargin: [...asterLockedMargin, ...hyperliquidLockedMargin, ...krakenLockedMargin],
       }
       
       console.log('[DataContext] After merge - mergedData structure:', {
@@ -308,11 +259,7 @@ export function DataProvider({ children }: DataProviderProps) {
 
       console.log('[DataContext] Merged data:', {
         openPositions: mergedData.openPositions,
-        availableMargin: mergedData.availableMargin,
-        lockedMargin: mergedData.lockedMargin,
         openPositionsCount: mergedData.openPositions.length,
-        availableMarginCount: mergedData.availableMargin.length,
-        lockedMarginCount: mergedData.lockedMargin.length,
       })
 
       // Update items with merged data
@@ -321,8 +268,6 @@ export function DataProvider({ children }: DataProviderProps) {
         console.log('[DataContext] Merged data being set:', {
           openPositionsCount: mergedData.openPositions.length,
           openOrdersCount: mergedData.openOrders.length,
-          availableMarginCount: mergedData.availableMargin.length,
-          lockedMarginCount: mergedData.lockedMargin.length,
           openPositions: mergedData.openPositions,
         })
         
@@ -332,8 +277,6 @@ export function DataProvider({ children }: DataProviderProps) {
             const perpetualsDataCopy = {
               openPositions: mergedData.openPositions.map(p => ({ ...p })),
               openOrders: mergedData.openOrders.map(o => ({ ...o })),
-              availableMargin: mergedData.availableMargin.map(m => ({ ...m })),
-              lockedMargin: mergedData.lockedMargin.map(m => ({ ...m })),
             }
             
             const updatedItem = {

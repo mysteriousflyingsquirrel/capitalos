@@ -71,12 +71,10 @@ export class NetWorthCalculationService {
           if (!item.perpetualsData) {
             balance = 0
           } else {
-            const { openPositions, lockedMargin, availableMargin } = item.perpetualsData || {}
+            const { openPositions } = item.perpetualsData || {}
             
             // Ensure arrays exist and are actually arrays (defensive programming)
             const safeOpenPositions = Array.isArray(openPositions) ? openPositions : []
-            const safeLockedMargin = Array.isArray(lockedMargin) ? lockedMargin : []
-            const safeAvailableMargin = Array.isArray(availableMargin) ? availableMargin : []
             
             // Sum all CHF balances directly
             let totalChf = 0
@@ -91,36 +89,6 @@ export class NetWorthCalculationService {
                   const balanceChf = usdToChfRate && usdToChfRate > 0 
                     ? balanceUsd * usdToChfRate 
                     : convert(balanceUsd, 'USD')
-                  if (isFinite(balanceChf)) {
-                    totalChf += balanceChf
-                  }
-                }
-              }
-            })
-            
-            // Locked Margin: convert each balance to CHF and sum
-            safeLockedMargin.forEach(margin => {
-              if (margin && typeof margin === 'object') {
-                const marginValue = typeof margin.margin === 'number' && isFinite(margin.margin) ? margin.margin : 0
-                if (isFinite(marginValue)) {
-                  const balanceChf = usdToChfRate && usdToChfRate > 0 
-                    ? marginValue * usdToChfRate 
-                    : convert(marginValue, 'USD')
-                  if (isFinite(balanceChf)) {
-                    totalChf += balanceChf
-                  }
-                }
-              }
-            })
-            
-            // Available Margin: convert each balance to CHF and sum
-            safeAvailableMargin.forEach(margin => {
-              if (margin && typeof margin === 'object') {
-                const marginValue = typeof margin.margin === 'number' && isFinite(margin.margin) ? margin.margin : 0
-                if (isFinite(marginValue)) {
-                  const balanceChf = usdToChfRate && usdToChfRate > 0 
-                    ? marginValue * usdToChfRate 
-                    : convert(marginValue, 'USD')
                   if (isFinite(balanceChf)) {
                     totalChf += balanceChf
                   }

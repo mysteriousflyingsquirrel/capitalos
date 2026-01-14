@@ -43,25 +43,9 @@ interface PerpetualsOpenOrder {
   platform: string
 }
 
-interface PerpetualsAvailableMargin {
-  id: string
-  asset: string
-  margin: number // in USD/USDT
-  platform: string
-}
-
-interface PerpetualsLockedMargin {
-  id: string
-  asset: string
-  margin: number
-  platform: string
-}
-
 interface PerpetualsData {
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
-  availableMargin: PerpetualsAvailableMargin[]
-  lockedMargin: PerpetualsLockedMargin[]
 }
 
 const HYPERLIQUID_BASE_URL = 'https://api.hyperliquid.xyz'
@@ -380,69 +364,6 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
 }
 
 // Helper: Parse margin summary from userState
-function parseMarginSummary(userState: any, debug: boolean = false): { withdrawable: number; totalMarginUsed: number } {
-  let withdrawable = 0
-  let totalMarginUsed = 0
-  
-  // Parse withdrawable (free margin) in order:
-  // 1. userState.withdrawable
-  // 2. userState.marginSummary?.withdrawable
-  // 3. userState.clearinghouseState?.marginSummary?.withdrawable (defensive)
-  if (typeof userState.withdrawable === 'string') {
-    withdrawable = parseFloat(userState.withdrawable)
-  } else if (typeof userState.withdrawable === 'number') {
-    withdrawable = userState.withdrawable
-  } else if (userState.marginSummary) {
-    if (typeof userState.marginSummary.withdrawable === 'string') {
-      withdrawable = parseFloat(userState.marginSummary.withdrawable)
-    } else if (typeof userState.marginSummary.withdrawable === 'number') {
-      withdrawable = userState.marginSummary.withdrawable
-    }
-  } else if (userState.clearinghouseState?.marginSummary) {
-    if (typeof userState.clearinghouseState.marginSummary.withdrawable === 'string') {
-      withdrawable = parseFloat(userState.clearinghouseState.marginSummary.withdrawable)
-    } else if (typeof userState.clearinghouseState.marginSummary.withdrawable === 'number') {
-      withdrawable = userState.clearinghouseState.marginSummary.withdrawable
-    }
-  }
-  
-  // Parse totalMarginUsed in order:
-  // 1. marginSummary.totalMarginUsed (preferred)
-  // 2. marginSummary.marginUsed (fallback only)
-  let summary: any = null
-  if (userState.clearinghouseState?.userState?.marginSummary) {
-    summary = userState.clearinghouseState.userState.marginSummary
-  } else if (userState.clearinghouseState?.marginSummary) {
-    summary = userState.clearinghouseState.marginSummary
-  } else if (userState.marginSummary) {
-    summary = userState.marginSummary
-  }
-  
-  if (summary) {
-    // Prefer totalMarginUsed
-    if (typeof summary.totalMarginUsed === 'string') {
-      totalMarginUsed = parseFloat(summary.totalMarginUsed)
-    } else if (typeof summary.totalMarginUsed === 'number') {
-      totalMarginUsed = summary.totalMarginUsed
-    } else if (typeof summary.marginUsed === 'string') {
-      // Fallback to marginUsed
-      totalMarginUsed = parseFloat(summary.marginUsed)
-    } else if (typeof summary.marginUsed === 'number') {
-      totalMarginUsed = summary.marginUsed
-    }
-  }
-  
-  if (debug) {
-    console.log('[Hyperliquid] parseMarginSummary:', {
-      withdrawable,
-      totalMarginUsed,
-      userStateKeys: Object.keys(userState || {}),
-      hasMarginSummary: !!summary,
-    })
-  }
-  
-  return { withdrawable, totalMarginUsed }
-}
 
 // Meta cache per request (cleared after request completes)
 const metaCache: Record<string, { universe: any[]; marginTables: any }> = {}
@@ -697,205 +618,17 @@ async function fetchOpenOrders(walletAddress: string, dex: string = ''): Promise
   }
 }
 
-// Helper: Sum position.marginUsed from assetPositions
-// Always trusts API's marginUsed field - does not recompute from markPx/leverage
-function sumPositionMarginUsed(assetPositions: any[]): { sum: number; count: number } {
-  if (!Array.isArray(assetPositions)) {
-    return { sum: 0, count: 0 }
-  }
-  
-  let sum = 0
-  let count = 0
-  const EPSILON = 0.0001
-  
-  for (const pos of assetPositions) {
-    const position = pos.position || pos
-    
-    // Parse szi and skip if abs(szi) < epsilon
-    let size = 0
-    if (typeof position.szi === 'string') {
-      size = parseFloat(position.szi)
-    } else if (typeof position.szi === 'number') {
-      size = position.szi
-    }
-    
-    if (Math.abs(size) < EPSILON) {
-      continue
-    }
-    
-    // Parse marginUsed (string or number). If missing/NaN, treat as 0
-    let marginUsed = 0
-    if (position.marginUsed !== undefined && position.marginUsed !== null) {
-      if (typeof position.marginUsed === 'string') {
-        marginUsed = parseFloat(position.marginUsed)
-      } else if (typeof position.marginUsed === 'number') {
-        marginUsed = position.marginUsed
-      }
-    }
-    
-    // Only add if valid (not NaN)
-    if (!isNaN(marginUsed)) {
-      sum += marginUsed
-      if (marginUsed > 0) {
-        count++
-      }
-    }
-  }
-  
-  return { sum, count }
-}
 
-async function fetchAvailableMargin(walletAddress: string, debug: boolean = false): Promise<PerpetualsAvailableMargin[]> {
-  try {
-    // Use the same dexs as positions (default + dexWithSilver)
-    const allDexs = await fetchAllPerpDexs()
-    const dexDefault = ''
-    let dexWithSilver: string | null = null
-    
-    // Check each non-default dex to find which one contains SILVER
-    for (const dex of allDexs) {
-      if (dex && dex !== dexDefault) {
-        const containsSilver = await dexContainsSilver(dex)
-        if (containsSilver) {
-          dexWithSilver = dex
-          break
-        }
-      }
-    }
-    
-    const dexsToQuery = [dexDefault]
-    if (dexWithSilver) {
-      dexsToQuery.push(dexWithSilver)
-    }
-    
-    let totalWithdrawable = 0
-    
-    for (const dex of dexsToQuery) {
-      try {
-        const userState = await fetchUserState(walletAddress, dex)
-        const { withdrawable } = parseMarginSummary(userState, debug)
-        
-        if (debug) {
-          console.log(`[Hyperliquid] Dex "${dex || 'default'}" withdrawable:`, withdrawable)
-        }
-        
-        // Sum withdrawable across queried dexs
-        totalWithdrawable += withdrawable
-      } catch (error) {
-        console.error(`[Hyperliquid] Error fetching margin from dex "${dex || 'default'}":`, error)
-        // Continue with other dexs even if one fails
-      }
-    }
-    
-    if (debug) {
-      console.log('[Hyperliquid] Total withdrawable:', totalWithdrawable)
-    }
-    
-    // Always return a single entry (even if margin is 0)
-    return [{
-      id: 'hyperliquid-available-margin-USDC',
-      asset: 'USDC',
-      margin: totalWithdrawable,
-      platform: 'Hyperliquid',
-    }]
-  } catch (error) {
-    console.error('[Hyperliquid] Error fetching available margin:', error)
-    return []
-  }
-}
-
-async function fetchLockedMargin(walletAddress: string, debug: boolean = false): Promise<PerpetualsLockedMargin[]> {
-  try {
-    // Get the dexs we query for positions (same logic as fetchOpenPositions)
-    const allDexs = await fetchAllPerpDexs()
-    const dexDefault = ''
-    let dexWithSilver: string | null = null
-    
-    // Check each non-default dex to find which one contains SILVER
-    for (const dex of allDexs) {
-      if (dex && dex !== dexDefault) {
-        const containsSilver = await dexContainsSilver(dex)
-        if (containsSilver) {
-          dexWithSilver = dex
-          break
-        }
-      }
-    }
-    
-    const dexsToQuery = [dexDefault]
-    if (dexWithSilver) {
-      dexsToQuery.push(dexWithSilver)
-    }
-    
-    let totalLocked = 0
-    
-    for (const dex of dexsToQuery) {
-      try {
-        // Fetch clearinghouseState (already done via fetchUserState)
-        const userState = await fetchUserState(walletAddress, dex)
-        
-        // Extract totalMarginUsed from margin summary
-        const { totalMarginUsed } = parseMarginSummary(userState, debug)
-        
-        // Extract assetPositions from the same response
-        const assetPositions = userState?.assetPositions || []
-        
-        // Compute positionsMarginUsed = sum of position.marginUsed for all non-zero positions
-        const { sum: positionsUsed, count: positionsCount } = sumPositionMarginUsed(assetPositions)
-        
-        // Compute dexLocked = max(0, totalMarginUsed - positionsUsed)
-        const dexLocked = Math.max(0, totalMarginUsed - positionsUsed)
-        
-        if (debug) {
-          console.log(`[Hyperliquid] Dex "${dex || 'default'}" locked margin calculation:`, {
-            totalMarginUsed,
-            positionsUsed,
-            positionsCount,
-            dexLocked,
-          })
-        }
-        
-        // Sum across queried dexs
-        totalLocked += dexLocked
-      } catch (error) {
-        console.error(`[Hyperliquid] Error fetching locked margin from dex "${dex || 'default'}":`, error)
-        // Continue with other dexs even if one fails
-      }
-    }
-    
-    if (debug) {
-      console.log('[Hyperliquid] Total locked margin:', totalLocked)
-    }
-    
-    // Always return a single entry (even if margin is 0)
-    return [{
-      id: 'hyperliquid-locked-margin-USDC',
-      asset: 'USDC',
-      margin: totalLocked,
-      platform: 'Hyperliquid',
-    }]
-  } catch (error) {
-    console.error('[Hyperliquid] Error fetching locked margin:', error)
-    return []
-  }
-}
 
 async function fetchHyperliquidPerpetualsData(
   walletAddress: string,
   debug: boolean = false
 ): Promise<PerpetualsData> {
-  // Fetch positions, margin in parallel
-  const [openPositions, availableMargin, lockedMargin] = await Promise.all([
-    fetchOpenPositions(walletAddress),
-    fetchAvailableMargin(walletAddress, debug),
-    fetchLockedMargin(walletAddress, debug),
-  ])
+  const openPositions = await fetchOpenPositions(walletAddress)
 
   return {
     openPositions,
     openOrders: [],
-    availableMargin,
-    lockedMargin,
   }
 }
 
