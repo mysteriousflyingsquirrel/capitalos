@@ -385,6 +385,11 @@ async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAv
     const allMargins: PerpetualsAvailableMargin[] = []
     
     for (const dex of dexs) {
+      // Skip xyz dex - don't include its margin
+      if (dex === 'xyz') {
+        continue
+      }
+      
       try {
         const userState = await fetchUserState(walletAddress, dex)
         
