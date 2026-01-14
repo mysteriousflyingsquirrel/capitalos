@@ -379,10 +379,83 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
   }
 }
 
+// Helper: Parse margin summary from userState
+function parseMarginSummary(userState: any): { availableBalance: number; marginUsed: number } {
+  let availableBalance = 0
+  let marginUsed = 0
+  
+  let summary: any = null
+  if (userState.clearinghouseState?.userState?.marginSummary) {
+    summary = userState.clearinghouseState.userState.marginSummary
+  } else if (userState.clearinghouseState?.marginSummary) {
+    summary = userState.clearinghouseState.marginSummary
+  } else if (userState.marginSummary) {
+    summary = userState.marginSummary
+  }
+  
+  if (summary) {
+    // Parse availableBalance (defensive: handle string | number)
+    if (typeof summary.availableBalance === 'string') {
+      availableBalance = parseFloat(summary.availableBalance)
+    } else if (typeof summary.availableBalance === 'number') {
+      availableBalance = summary.availableBalance
+    }
+    
+    // Parse marginUsed (defensive: handle string | number)
+    if (typeof summary.marginUsed === 'string') {
+      marginUsed = parseFloat(summary.marginUsed)
+    } else if (typeof summary.marginUsed === 'number') {
+      marginUsed = summary.marginUsed
+    } else if (typeof summary.totalMarginUsed === 'string') {
+      marginUsed = parseFloat(summary.totalMarginUsed)
+    } else if (typeof summary.totalMarginUsed === 'number') {
+      marginUsed = summary.totalMarginUsed
+    }
+  }
+  
+  return { availableBalance, marginUsed }
+}
+
+// Helper: Sum position margins from assetPositions
+function sumPositionMargins(assetPositions: any[]): number {
+  if (!Array.isArray(assetPositions)) {
+    return 0
+  }
+  
+  let sum = 0
+  for (const pos of assetPositions) {
+    const position = pos.position || pos
+    
+    // Only include positions where abs(szi) > 0
+    let size = 0
+    if (typeof position.szi === 'string') {
+      size = parseFloat(position.szi)
+    } else if (typeof position.szi === 'number') {
+      size = position.szi
+    }
+    
+    if (Math.abs(size) < 0.0001) {
+      continue
+    }
+    
+    // Extract position.marginUsed (defensive parsing)
+    let positionMargin = 0
+    if (typeof position.marginUsed === 'string') {
+      positionMargin = parseFloat(position.marginUsed)
+    } else if (typeof position.marginUsed === 'number') {
+      positionMargin = position.marginUsed
+    }
+    
+    sum += positionMargin
+  }
+  
+  return sum
+}
+
 async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAvailableMargin[]> {
   try {
     const dexs = await fetchAllPerpDexs()
-    const allMargins: PerpetualsAvailableMargin[] = []
+    let totalAvailableMargin = 0
     
     for (const dex of dexs) {
       // Skip xyz dex - don't include its margin
@@ -392,64 +465,27 @@ async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAv
       
       try {
         const userState = await fetchUserState(walletAddress, dex)
+        const { availableBalance } = parseMarginSummary(userState)
         
-        let availableBalance = 0
-        
-        if (userState.clearinghouseState?.userState?.marginSummary) {
-          const summary = userState.clearinghouseState.userState.marginSummary
-          availableBalance = parseFloat(summary.accountValue || summary.availableBalance || summary.accountEquity || '0')
-        } else if (userState.clearinghouseState?.marginSummary) {
-          const summary = userState.clearinghouseState.marginSummary
-          availableBalance = parseFloat(summary.accountValue || summary.availableBalance || summary.accountEquity || '0')
-        } else if (userState.marginSummary) {
-          availableBalance = parseFloat(userState.marginSummary.accountValue || userState.marginSummary.availableBalance || userState.marginSummary.accountEquity || '0')
-        } else if (userState.balances && Array.isArray(userState.balances)) {
-          for (const balance of userState.balances) {
-            const balanceAsset = balance.coin || balance.asset || 'USDC'
-            const available = parseFloat(balance.available || balance.availableBalance || '0')
-            
-            if (available > 0) {
-              allMargins.push({
-                id: `hyperliquid-margin-${balanceAsset}-${dex || 'default'}`,
-                asset: balanceAsset,
-                margin: available,
-                platform: 'Hyperliquid',
-              })
-            }
-          }
-          continue // Skip the rest for this dex
-        } else if (userState.userState?.balances && Array.isArray(userState.userState.balances)) {
-          for (const balance of userState.userState.balances) {
-            const balanceAsset = balance.coin || balance.asset || 'USDC'
-            const available = parseFloat(balance.available || balance.availableBalance || '0')
-            
-            if (available > 0) {
-              allMargins.push({
-                id: `hyperliquid-margin-${balanceAsset}-${dex || 'default'}`,
-                asset: balanceAsset,
-                margin: available,
-                platform: 'Hyperliquid',
-              })
-            }
-          }
-          continue // Skip the rest for this dex
-        }
-        
-        if (availableBalance > 0) {
-          allMargins.push({
-            id: `hyperliquid-margin-USDC-${dex || 'default'}`,
-            asset: 'USDC',
-            margin: availableBalance,
-            platform: 'Hyperliquid',
-          })
-        }
+        // Use availableBalance directly (not calculated)
+        totalAvailableMargin += availableBalance
       } catch (error) {
         console.error(`[Hyperliquid] Error fetching margin from dex "${dex || 'default'}":`, error)
         // Continue with other dexs even if one fails
       }
     }
     
-    return allMargins
+    // Return consolidated value
+    if (totalAvailableMargin > 0) {
+      return [{
+        id: 'hyperliquid-margin-USDC',
+        asset: 'USDC',
+        margin: totalAvailableMargin,
+        platform: 'Hyperliquid',
+      }]
+    }
+    
+    return []
   } catch (error) {
     console.error('[Hyperliquid] Error fetching available margin:', error)
     return []
@@ -458,40 +494,64 @@ async function fetchAvailableMargin(walletAddress: string): Promise<PerpetualsAv
 
 async function fetchLockedMargin(walletAddress: string): Promise<PerpetualsLockedMargin[]> {
   try {
-    const dexs = await fetchAllPerpDexs()
-    const allLockedMargins: PerpetualsLockedMargin[] = []
+    // Get the dexs we query for positions (same logic as fetchOpenPositions)
+    const allDexs = await fetchAllPerpDexs()
+    const dexDefault = ''
+    let dexWithSilver: string | null = null
     
-    for (const dex of dexs) {
+    // Check each non-default dex to find which one contains SILVER
+    for (const dex of allDexs) {
+      if (dex && dex !== dexDefault) {
+        const containsSilver = await dexContainsSilver(dex)
+        if (containsSilver) {
+          dexWithSilver = dex
+          break
+        }
+      }
+    }
+    
+    const dexsToQuery = [dexDefault]
+    if (dexWithSilver) {
+      dexsToQuery.push(dexWithSilver)
+    }
+    
+    let totalLockedMargin = 0
+    
+    for (const dex of dexsToQuery) {
       try {
         const userState = await fetchUserState(walletAddress, dex)
+        const { marginUsed } = parseMarginSummary(userState)
         
-        let marginUsed = 0
+        // Get assetPositions to sum position margins
+        const assetPositions = userState?.assetPositions
+        const positionMarginSum = sumPositionMargins(assetPositions || [])
         
-        if (userState.clearinghouseState?.userState?.marginSummary) {
-          const summary = userState.clearinghouseState.userState.marginSummary
-          marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || '0')
-        } else if (userState.clearinghouseState?.marginSummary) {
-          const summary = userState.clearinghouseState.marginSummary
-          marginUsed = parseFloat(summary.marginUsed || summary.totalMarginUsed || '0')
-        } else if (userState.marginSummary) {
-          marginUsed = parseFloat(userState.marginSummary.marginUsed || userState.marginSummary.totalMarginUsed || '0')
+        // Calculate lockedMargin = marginUsed - sum(position.marginUsed)
+        let lockedMargin = marginUsed - positionMarginSum
+        
+        // If result is negative or extremely close to zero, return 0
+        if (lockedMargin < 0 || Math.abs(lockedMargin) < 0.0001) {
+          lockedMargin = 0
         }
         
-        if (marginUsed > 0) {
-          allLockedMargins.push({
-            id: `hyperliquid-locked-margin-USDC-${dex || 'default'}`,
-            asset: 'USDC',
-            margin: marginUsed,
-            platform: 'Hyperliquid',
-          })
-        }
+        totalLockedMargin += lockedMargin
       } catch (error) {
         console.error(`[Hyperliquid] Error fetching locked margin from dex "${dex || 'default'}":`, error)
         // Continue with other dexs even if one fails
       }
     }
     
-    return allLockedMargins
+    // Return consolidated value
+    if (totalLockedMargin > 0) {
+      return [{
+        id: 'hyperliquid-locked-margin-USDC',
+        asset: 'USDC',
+        margin: totalLockedMargin,
+        platform: 'Hyperliquid',
+      }]
+    }
+    
+    return []
   } catch (error) {
     console.error('[Hyperliquid] Error fetching locked margin:', error)
     return []
