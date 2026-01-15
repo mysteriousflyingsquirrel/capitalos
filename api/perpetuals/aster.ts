@@ -238,7 +238,7 @@ async function fetchAccountEquity(
     if (accountValue > 0) {
       return [{
         id: 'aster-account-equity',
-        item: 'Account Equity',
+        item: 'Aster',
         holdings: accountValue,
         platform: 'Aster',
       }]

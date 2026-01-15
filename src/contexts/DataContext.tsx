@@ -177,7 +177,7 @@ export function DataProvider({ children }: DataProviderProps) {
       if (accountValue > 0) {
         exchangeBalance.push({
           id: 'kraken-account-equity',
-          item: 'Account Equity',
+          item: 'Kraken',
           holdings: accountValue,
           platform: 'Kraken',
         })
@@ -292,15 +292,8 @@ export function DataProvider({ children }: DataProviderProps) {
         if (existingExchangeBalance.length > 0) {
           return existingExchangeBalance
         }
-        // Return default if no existing exchangeBalance
-        return [
-          {
-            id: 'exchange-balance-total-equity',
-            item: 'Total equity',
-            holdings: 10000,
-            platform: 'Kraken',
-          },
-        ]
+        // Return empty array if no existing exchangeBalance (no default entry)
+        return []
       }
 
       // Update items with merged data (or just ensure exchangeBalance is set)

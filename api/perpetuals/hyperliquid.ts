@@ -396,7 +396,7 @@ async function fetchAccountEquity(walletAddress: string): Promise<ExchangeBalanc
     if (totalAccountValue > 0) {
       return [{
         id: 'hyperliquid-account-equity',
-        item: 'Account Equity',
+        item: 'Hyperliquid',
         holdings: totalAccountValue,
         platform: 'Hyperliquid',
       }]

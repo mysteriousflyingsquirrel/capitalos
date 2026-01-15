@@ -311,7 +311,7 @@ function NetWorthCategorySection({
               <div className="space-y-6">
               {/* Exchange Balance Table */}
               <div>
-                <Heading level={3} className="mb-3 text-text-secondary">Exchange Balance</Heading>
+                <Heading level={3} className="mb-3 text-text-secondary">Account Equity</Heading>
                 <div className="w-full overflow-hidden">
                   <style>{`
                     @media (max-width: 767px) {
