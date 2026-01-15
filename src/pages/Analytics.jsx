@@ -12,7 +12,6 @@ import {
   loadForecastEntries, 
   saveForecastEntries
 } from '../services/forecastService'
-import { loadUserSettings, saveUserSettings } from '../services/firestoreService'
 import {
   calculateForecast,
   getPlatformBalance,
@@ -47,7 +46,7 @@ function Analytics() {
   
   const [platforms, setPlatforms] = useState([])
   const [selectedPlatformId, setSelectedPlatformId] = useState('')
-  const [safetyBuffer, setSafetyBuffer] = useState(0)
+  const [safetyBuffer, setSafetyBuffer] = useState(null)
   const [forecastEntries, setForecastEntries] = useState([])
   const [accountflowMappings, setAccountflowMappings] = useState([])
   const [editingEntry, setEditingEntry] = useState(null)
@@ -73,7 +72,11 @@ function Analytics() {
         // Auto-select default platform, or first platform if no default
         if (loadedPlatforms.length > 0 && !selectedPlatformId) {
           const defaultPlatform = loadedPlatforms.find(p => p.isDefault)
-          setSelectedPlatformId(defaultPlatform ? defaultPlatform.id : loadedPlatforms[0].id)
+          const platformToSelect = defaultPlatform ? defaultPlatform.id : loadedPlatforms[0].id
+          setSelectedPlatformId(platformToSelect)
+          // Load safety buffer for selected platform
+          const selectedPlatform = loadedPlatforms.find(p => p.id === platformToSelect)
+          setSafetyBuffer(selectedPlatform?.safetyBuffer ?? null)
         }
       } catch (error) {
         console.error('Failed to load analytics data:', error)
@@ -94,30 +97,42 @@ function Analytics() {
     }
   }, [forecastEntries, uid, dataLoading])
 
-  // Save safety buffer when it changes (with debouncing)
+  // Load safety buffer when platform changes
   useEffect(() => {
-    if (!uid || dataLoading) return
+    if (!selectedPlatformId || platforms.length === 0) {
+      setSafetyBuffer(null)
+      return
+    }
+
+    const selectedPlatform = platforms.find(p => p.id === selectedPlatformId)
+    setSafetyBuffer(selectedPlatform?.safetyBuffer ?? null)
+  }, [selectedPlatformId, platforms])
+
+  // Save safety buffer to platform when it changes (with debouncing)
+  useEffect(() => {
+    if (!uid || dataLoading || !selectedPlatformId) return
 
     const timeoutId = setTimeout(() => {
-      loadUserSettings(uid).then((settings) => {
-        const updatedSettings = {
-          ...(settings || {}),
-          analyticsSafetyBuffer: safetyBuffer,
+      const updatedPlatforms = platforms.map(platform => {
+        if (platform.id === selectedPlatformId) {
+          return {
+            ...platform,
+            safetyBuffer: safetyBuffer !== null && safetyBuffer !== undefined ? safetyBuffer : undefined,
+          }
         }
-        saveUserSettings(uid, updatedSettings).catch((error) => {
-          console.error('Failed to save safety buffer:', error)
-        })
+        return platform
+      })
+      
+      savePlatforms(updatedPlatforms, uid).then(() => {
+        // Update local state to reflect saved value
+        setPlatforms(updatedPlatforms)
       }).catch((error) => {
-        console.error('Failed to load user settings:', error)
-        // If loading fails, try to save anyway with just the safety buffer
-        saveUserSettings(uid, { analyticsSafetyBuffer: safetyBuffer }).catch((err) => {
-          console.error('Failed to save safety buffer:', err)
-        })
+        console.error('Failed to save safety buffer:', error)
       })
     }, 500) // Debounce: wait 500ms after user stops typing
 
     return () => clearTimeout(timeoutId)
-  }, [safetyBuffer, uid, dataLoading])
+  }, [safetyBuffer, selectedPlatformId, uid, dataLoading, platforms])
 
 
   // Calculate current balance and spare-change for selected platform
@@ -277,11 +292,14 @@ function Analytics() {
                 </label>
                 <input
                   type="number"
-                  value={safetyBuffer}
-                  onChange={(e) => setSafetyBuffer(parseFloat(e.target.value) || 0)}
+                  value={safetyBuffer ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setSafetyBuffer(value === '' ? null : parseFloat(value) || null)
+                  }}
                   className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue"
-                  placeholder="0"
-                  step="0.01"
+                  placeholder=""
+                  step="1"
                   min="0"
                 />
               </div>
@@ -473,7 +491,7 @@ function Analytics() {
                         <tbody>
                           {forecastResult.monthlyProjections.map((projection) => {
                             const isNegative = projection.endBalance < 0
-                            const isBelowBuffer = projection.endBalance < safetyBuffer && projection.endBalance >= 0
+                            const isBelowBuffer = safetyBuffer !== null && safetyBuffer !== undefined && projection.endBalance < safetyBuffer && projection.endBalance >= 0
                             
                             return (
                               <tr
@@ -512,7 +530,10 @@ function Analytics() {
                   <div className="bg-bg-surface-2 border border-border-subtle rounded-input p-4">
                     <Heading level={3} className="mb-4">Balance Projection Chart</Heading>
                     <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={forecastResult.monthlyProjections}>
+                      <LineChart 
+                        data={forecastResult.monthlyProjections}
+                        margin={{ left: 12, right: 12, top: 5, bottom: 5 }}
+                      >
                         <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.muted1} opacity={0.3} />
                         <XAxis
                           dataKey="month"
@@ -523,6 +544,7 @@ function Analytics() {
                           stroke={CHART_COLORS.muted1}
                           tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
                           tickFormatter={(value) => formatCurrency(value)}
+                          width={80}
                         />
                         <Tooltip
                           contentStyle={{
@@ -542,7 +564,7 @@ function Analytics() {
                           dot={{ fill: CHART_COLORS.accent1, r: 4 }}
                           activeDot={{ r: 6 }}
                         />
-                        {safetyBuffer > 0 && (
+                        {safetyBuffer !== null && safetyBuffer !== undefined && safetyBuffer > 0 && (
                           <Line
                             type="monotone"
                             dataKey={() => safetyBuffer}
@@ -553,15 +575,6 @@ function Analytics() {
                             dot={false}
                           />
                         )}
-                        <Line
-                          type="monotone"
-                          dataKey={() => 0}
-                          name="Zero Line"
-                          stroke={CHART_COLORS.danger}
-                          strokeWidth={1}
-                          strokeDasharray="3 3"
-                          dot={false}
-                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>

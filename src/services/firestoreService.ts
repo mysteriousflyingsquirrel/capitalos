@@ -210,6 +210,8 @@ export interface Platform {
   order: number
   /** Whether this platform is the default for Analytics page */
   isDefault?: boolean
+  /** Safety buffer for Analytics page (per platform) */
+  safetyBuffer?: number
 }
 
 export async function savePlatforms(uid: string, platforms: Platform[]): Promise<void> {
