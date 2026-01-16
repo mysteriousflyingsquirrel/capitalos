@@ -61,7 +61,15 @@ interface DataProviderProps {
 export function DataProvider({ children }: DataProviderProps) {
   const { uid } = useAuth()
   const { convert } = useCurrency()
-  const { rapidApiKey, krakenApiKey, krakenApiSecretKey } = useApiKeys()
+  const { 
+    rapidApiKey, 
+    krakenApiKey, 
+    krakenApiSecretKey,
+    asterApiKey,
+    asterApiSecretKey,
+    hyperliquidWalletAddress,
+    apiKeysLoaded,
+  } = useApiKeys()
   const { setHasInitialDataLoaded } = useSyncStatus()
   const prevUidRef = useRef<string | null>(null)
   
@@ -198,28 +206,62 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Fetch Aster Perpetuals data
   const fetchPerpetualsData = async (items: NetWorthItem[]): Promise<NetWorthItem[]> => {
-    console.log('[DataContext] fetchPerpetualsData called:', {
-      hasUid: !!uid,
-      uid: uid,
-      itemsCount: items.length,
-    })
+    // Dev-only structured logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[DataContext] fetchPerpetualsData called:', {
+        apiKeysLoaded,
+        hasAsterKey: !!asterApiKey,
+        hasHyperliquidKey: !!hyperliquidWalletAddress,
+        krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
+        hasUid: !!uid,
+        uid: uid,
+        itemsCount: items.length,
+      })
+    }
     
     if (!uid) {
-      console.log('[DataContext] No UID, skipping Perpetuals fetch')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DataContext] No UID, skipping Perpetuals fetch')
+      }
       return items
+    }
+
+    // Gate Perpetuals fetch on apiKeysLoaded
+    if (!apiKeysLoaded) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DataContext] Perpetuals skipped — API keys not loaded yet')
+      }
+      // Remove any existing Perpetuals items and return
+      return items.filter(item => item.category !== 'Perpetuals')
     }
 
     // Remove any existing Perpetuals items (they're created dynamically, not from Firebase)
     const itemsWithoutPerpetuals = items.filter(item => item.category !== 'Perpetuals')
 
     try {
-      console.log('[DataContext] Fetching Aster, Hyperliquid, and Kraken data...')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DataContext] Fetching Aster, Hyperliquid, and Kraken data...')
+      }
       
       // Fetch Aster and Hyperliquid data (Kraken uses WebSocket only)
-      const [asterData, hyperliquidData] = await Promise.all([
-        fetchAsterPerpetualsData(uid),
-        fetchHyperliquidPerpetualsData(uid),
-      ])
+      // Only fetch if keys are available (services will return null if keys are missing)
+      const fetchPromises: Promise<PerpetualsData | null>[] = []
+      
+      // Only fetch Aster if key is available
+      if (asterApiKey && asterApiSecretKey) {
+        fetchPromises.push(fetchAsterPerpetualsData(uid))
+      } else {
+        fetchPromises.push(Promise.resolve(null))
+      }
+      
+      // Only fetch Hyperliquid if wallet address is available
+      if (hyperliquidWalletAddress) {
+        fetchPromises.push(fetchHyperliquidPerpetualsData(uid))
+      } else {
+        fetchPromises.push(Promise.resolve(null))
+      }
+      
+      const [asterData, hyperliquidData] = await Promise.all(fetchPromises)
       
       // Get Kraken data from WebSocket (only source)
       // Convert current WebSocket state to PerpetualsData format
@@ -227,75 +269,46 @@ export function DataProvider({ children }: DataProviderProps) {
         ? convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
         : null
 
-      console.log('[DataContext] Fetch results:', {
-        asterData: !!asterData,
-        asterPositions: asterData?.openPositions?.length || 0,
-        hyperliquidData: !!hyperliquidData,
-        hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
-        krakenData: !!finalKrakenData,
-        krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
-        krakenPositions: finalKrakenData?.openPositions?.length || 0,
-        krakenOrders: finalKrakenData?.openOrders?.length || 0,
-      })
-
-      // Log the actual data structures
-      console.log('[DataContext] Aster data structure:', {
-        openPositions: asterData?.openPositions,
-      })
-      
-      console.log('[DataContext] Hyperliquid data structure:', {
-        openPositions: hyperliquidData?.openPositions,
-      })
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DataContext] Fetch results:', {
+          asterData: !!asterData,
+          asterPositions: asterData?.openPositions?.length || 0,
+          hyperliquidData: !!hyperliquidData,
+          hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
+          krakenData: !!finalKrakenData,
+          krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
+          krakenPositions: finalKrakenData?.openPositions?.length || 0,
+          krakenOrders: (finalKrakenData as any)?.openOrders?.length || 0,
+        })
+      }
 
       // Merge Aster, Hyperliquid, and Kraken data
       // Create defensive copies to prevent mutation
       const asterPositions = Array.isArray(asterData?.openPositions) ? [...asterData.openPositions] : []
       const hyperliquidPositions = Array.isArray(hyperliquidData?.openPositions) ? [...hyperliquidData.openPositions] : []
       const krakenPositions = Array.isArray(finalKrakenData?.openPositions) ? [...finalKrakenData.openPositions] : []
-      const asterOrders = Array.isArray(asterData?.openOrders) ? [...asterData.openOrders] : []
-      const hyperliquidOrders = Array.isArray(hyperliquidData?.openOrders) ? [...hyperliquidData.openOrders] : []
-      const krakenOrders = Array.isArray(finalKrakenData?.openOrders) ? [...finalKrakenData.openOrders] : []
+      // Note: openOrders may not be in PerpetualsData interface, but APIs may return it
+      // We'll handle it safely by checking if it exists
+      const asterOrders = (asterData as any)?.openOrders && Array.isArray((asterData as any).openOrders) ? [...(asterData as any).openOrders] : []
+      const hyperliquidOrders = (hyperliquidData as any)?.openOrders && Array.isArray((hyperliquidData as any).openOrders) ? [...(hyperliquidData as any).openOrders] : []
+      const krakenOrders = (finalKrakenData as any)?.openOrders && Array.isArray((finalKrakenData as any).openOrders) ? [...(finalKrakenData as any).openOrders] : []
       const asterExchangeBalance = Array.isArray(asterData?.exchangeBalance) ? [...asterData.exchangeBalance] : []
       const hyperliquidExchangeBalance = Array.isArray(hyperliquidData?.exchangeBalance) ? [...hyperliquidData.exchangeBalance] : []
       const krakenExchangeBalance = Array.isArray(finalKrakenData?.exchangeBalance) ? [...finalKrakenData.exchangeBalance] : []
       
-      console.log('[DataContext] Before merge - counts:', {
-        asterPositions: asterPositions.length,
-        hyperliquidPositions: hyperliquidPositions.length,
-        krakenPositions: krakenPositions.length,
-        asterOrders: asterOrders.length,
-        hyperliquidOrders: hyperliquidOrders.length,
-        krakenOrders: krakenOrders.length,
-        asterExchangeBalance: asterExchangeBalance.length,
-        hyperliquidExchangeBalance: hyperliquidExchangeBalance.length,
-        krakenExchangeBalance: krakenExchangeBalance.length,
-      })
-      
       const mergedData = {
         openPositions: [...asterPositions, ...hyperliquidPositions, ...krakenPositions],
+        // Note: openOrders are not part of PerpetualsData interface, but we track them for logging
         openOrders: [...asterOrders, ...hyperliquidOrders, ...krakenOrders],
       }
-      
-      console.log('[DataContext] After merge - mergedData structure:', {
-        openPositionsCount: mergedData.openPositions.length,
-        openOrdersCount: mergedData.openOrders.length,
-        openPositionsIds: mergedData.openPositions.map(p => p.id),
-        openOrdersIds: mergedData.openOrders.map(o => o.id),
-      })
-
-      console.log('[DataContext] Merged data:', {
-        openPositions: mergedData.openPositions,
-        openPositionsCount: mergedData.openPositions.length,
-      })
 
       // Merge exchangeBalance from API sources
       const apiExchangeBalance = [...asterExchangeBalance, ...hyperliquidExchangeBalance, ...krakenExchangeBalance]
       
-      // Create perpetualsData structure
-      const perpetualsData = {
+      // Create perpetualsData structure (PerpetualsData interface doesn't include openOrders)
+      const perpetualsData: PerpetualsData = {
         exchangeBalance: apiExchangeBalance.map(b => ({ ...b })),
         openPositions: mergedData.openPositions.map(p => ({ ...p })),
-        openOrders: mergedData.openOrders.map(o => ({ ...o })),
       }
 
       // Only create Perpetuals item if we have any data
@@ -310,18 +323,21 @@ export function DataProvider({ children }: DataProviderProps) {
           perpetualsData: perpetualsData,
         }
 
-        console.log('[DataContext] Created dynamic Perpetuals item:', {
-          hasPerpetualsData: !!perpetualsItem.perpetualsData,
-          exchangeBalanceCount: perpetualsItem.perpetualsData?.exchangeBalance?.length || 0,
-          positionsCount: perpetualsItem.perpetualsData?.openPositions?.length || 0,
-          openOrdersCount: perpetualsItem.perpetualsData?.openOrders?.length || 0,
-        })
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[DataContext] Created dynamic Perpetuals item:', {
+            hasPerpetualsData: !!perpetualsItem.perpetualsData,
+            exchangeBalanceCount: perpetualsItem.perpetualsData?.exchangeBalance?.length || 0,
+            positionsCount: perpetualsItem.perpetualsData?.openPositions?.length || 0,
+          })
+        }
 
         // Add Perpetuals item to items array
         return [...itemsWithoutPerpetuals, perpetualsItem]
       } else {
         // No data, return items without Perpetuals
-        console.log('[DataContext] No perpetuals data available, skipping Perpetuals item creation')
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[DataContext] No perpetuals data available, skipping Perpetuals item creation')
+        }
         return itemsWithoutPerpetuals
       }
     } catch (error) {
@@ -369,7 +385,10 @@ export function DataProvider({ children }: DataProviderProps) {
       ])
       
       // Step 3: Fetch Perpetuals data (reads from WebSocket state for Kraken)
-      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items)
+      // Only fetch if API keys are loaded
+      const itemsWithPerpetuals = apiKeysLoaded 
+        ? await fetchPerpetualsData(firebaseData.items)
+        : firebaseData.items.filter(item => item.category !== 'Perpetuals')
       
       // Step 4: Calculate totals
       const calculationResult = calculateTotals(
@@ -453,8 +472,7 @@ export function DataProvider({ children }: DataProviderProps) {
         // Save summary to Firestore (for snapshot API)
         if (uid && !isSavingSummaryRef.current) {
           isSavingSummaryRef.current = true
-          calculationResultToSummary(calculationResult, uid, 'CHF')
-            .then(summary => saveNetWorthSummaryFirestore(uid, summary))
+          saveNetWorthSummaryFirestore(uid, calculationResultToSummary(calculationResult, uid, 'CHF'))
             .catch(err => console.error('[DataContext] Error saving net worth summary:', err))
             .finally(() => { isSavingSummaryRef.current = false })
         }
@@ -505,8 +523,7 @@ export function DataProvider({ children }: DataProviderProps) {
         // Save summary to Firestore (for snapshot API)
         if (uid && !isSavingSummaryRef.current) {
           isSavingSummaryRef.current = true
-          calculationResultToSummary(calculationResult, uid, 'CHF')
-            .then(summary => saveNetWorthSummaryFirestore(uid, summary))
+          saveNetWorthSummaryFirestore(uid, calculationResultToSummary(calculationResult, uid, 'CHF'))
             .catch(err => console.error('[DataContext] Error saving net worth summary:', err))
             .finally(() => { isSavingSummaryRef.current = false })
         }
@@ -539,6 +556,18 @@ export function DataProvider({ children }: DataProviderProps) {
     }
   }, [uid, setHasInitialDataLoaded])
 
+  // Automatic retry: when apiKeysLoaded transitions false → true
+  // and data is already loaded, automatically refresh Perpetuals
+  useEffect(() => {
+    if (!uid || !apiKeysLoaded || !hasLoadedDataRef.current) {
+      return
+    }
+
+    // Keys just became ready and data is already loaded - refresh Perpetuals
+    refreshPerpetuals()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKeysLoaded, uid]) // Only trigger when apiKeysLoaded changes
+
   // Initial load
   useEffect(() => {
     if (!uid) {
@@ -548,6 +577,7 @@ export function DataProvider({ children }: DataProviderProps) {
 
     // Start loading - flag was already reset synchronously in useLayoutEffect above
     loadAllData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]) // Reload when uid changes
 
   // Note: convert function dependency is handled within calculateTotals
@@ -653,11 +683,15 @@ export function DataProvider({ children }: DataProviderProps) {
     return () => clearInterval(interval)
   }, [uid, loading])
 
+  // Track if we've already triggered refresh on first Kraken WS subscription
+  const krakenWsSubscribedRef = useRef(false)
+
   // Set up Kraken Futures WebSocket connection
   useEffect(() => {
-    if (!uid || !krakenApiKey || !krakenApiSecretKey) {
-      // Disconnect if credentials are not available
+    if (!uid || !krakenApiKey || !krakenApiSecretKey || !apiKeysLoaded) {
+      // Disconnect if credentials are not available or keys not loaded
       krakenWsStateRef.current = { status: 'disconnected' }
+      krakenWsSubscribedRef.current = false
       return
     }
 
@@ -670,6 +704,21 @@ export function DataProvider({ children }: DataProviderProps) {
         // Only store WebSocket state in ref - does NOT trigger re-renders
         // UI will be updated every 5 minutes via the periodic refresh cycle
         krakenWsStateRef.current = state
+        
+        // When WS reaches "subscribed" for the first time AND apiKeysLoaded is true,
+        // trigger a single refreshPerpetuals (debounced, one-shot)
+        if (
+          state.status === 'subscribed' && 
+          !krakenWsSubscribedRef.current && 
+          apiKeysLoaded &&
+          hasLoadedDataRef.current
+        ) {
+          krakenWsSubscribedRef.current = true
+          // Debounce: wait a short moment to ensure WS data is ready
+          setTimeout(() => {
+            refreshPerpetuals()
+          }, 500)
+        }
       },
     })
 
@@ -679,9 +728,10 @@ export function DataProvider({ children }: DataProviderProps) {
     // Cleanup on unmount or when credentials change
     return () => {
       ws.disconnect()
+      krakenWsSubscribedRef.current = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, krakenApiKey, krakenApiSecretKey])
+  }, [uid, krakenApiKey, krakenApiSecretKey, apiKeysLoaded])
 
   return (
     <DataContext.Provider

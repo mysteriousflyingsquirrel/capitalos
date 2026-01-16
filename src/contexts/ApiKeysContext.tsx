@@ -18,6 +18,7 @@ interface ApiKeysContextType {
   krakenApiSecretKey: string | null
   setKrakenApiSecretKey: (key: string) => Promise<void>
   isLoading: boolean
+  apiKeysLoaded: boolean
 }
 
 const ApiKeysContext = createContext<ApiKeysContextType | undefined>(undefined)
@@ -35,6 +36,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const [krakenApiKey, setKrakenApiKeyState] = useState<string | null>(null)
   const [krakenApiSecretKey, setKrakenApiSecretKeyState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [apiKeysLoaded, setApiKeysLoaded] = useState(false)
 
   // Load API keys from Firestore on mount
   useEffect(() => {
@@ -84,6 +86,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         console.error('Error loading API keys:', error)
       } finally {
         setIsLoading(false)
+        // Mark keys as loaded after Firestore read completes (even if no keys found)
+        setApiKeysLoaded(true)
       }
     }
 
@@ -322,6 +326,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         krakenApiSecretKey,
         setKrakenApiSecretKey,
         isLoading,
+        apiKeysLoaded,
       }}
     >
       {children}
