@@ -29,7 +29,12 @@ const FUNNY_LOADING_MESSAGES = [
 export function AuthGateUI() {
   const { state, error, retry, signOut } = useAuthGate()
   const { safeMode, quotaExceeded, online } = useSyncStatus()
-  const [loadingMessage, setLoadingMessage] = useState<string>('')
+  
+  // Initialize with a random message immediately
+  const [loadingMessage, setLoadingMessage] = useState<string>(() => {
+    const randomIndex = Math.floor(Math.random() * FUNNY_LOADING_MESSAGES.length)
+    return FUNNY_LOADING_MESSAGES[randomIndex]
+  })
 
   // Pick a random message when loading state changes
   useEffect(() => {
@@ -50,7 +55,7 @@ export function AuthGateUI() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-goldenrod mx-auto mb-4"></div>
           <div className="text-text-primary text-lg mb-2">
-            {loadingMessage || 'Loading...'}
+            {loadingMessage}
           </div>
           <div className="text-text-secondary text-sm">
             Please wait
