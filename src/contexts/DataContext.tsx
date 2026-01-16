@@ -202,7 +202,6 @@ export function DataProvider({ children }: DataProviderProps) {
       hasUid: !!uid,
       uid: uid,
       itemsCount: items.length,
-      hasPerpetualsItem: !!items.find((item) => item.category === 'Perpetuals'),
     })
     
     if (!uid) {
@@ -210,11 +209,8 @@ export function DataProvider({ children }: DataProviderProps) {
       return items
     }
 
-    const perpetualsItem = items.find((item) => item.category === 'Perpetuals')
-    if (!perpetualsItem) {
-      console.log('[DataContext] No Perpetuals item found, skipping fetch')
-      return items
-    }
+    // Remove any existing Perpetuals items (they're created dynamically, not from Firebase)
+    const itemsWithoutPerpetuals = items.filter(item => item.category !== 'Perpetuals')
 
     try {
       console.log('[DataContext] Fetching Aster, Hyperliquid, and Kraken data...')
@@ -292,101 +288,47 @@ export function DataProvider({ children }: DataProviderProps) {
         openPositionsCount: mergedData.openPositions.length,
       })
 
-      // Helper function to ensure exchangeBalance is initialized
-      const ensureExchangeBalance = (item: NetWorthItem): import('../pages/NetWorth').ExchangeBalance[] => {
-        const existingExchangeBalance = item.perpetualsData?.exchangeBalance || []
-        if (existingExchangeBalance.length > 0) {
-          return existingExchangeBalance
-        }
-        // Return empty array if no existing exchangeBalance (no default entry)
-        return []
+      // Merge exchangeBalance from API sources
+      const apiExchangeBalance = [...asterExchangeBalance, ...hyperliquidExchangeBalance, ...krakenExchangeBalance]
+      
+      // Create perpetualsData structure
+      const perpetualsData = {
+        exchangeBalance: apiExchangeBalance.map(b => ({ ...b })),
+        openPositions: mergedData.openPositions.map(p => ({ ...p })),
+        openOrders: mergedData.openOrders.map(o => ({ ...o })),
       }
 
-      // Update items with merged data (or just ensure exchangeBalance is set)
-      const updatedItems = items.map((item) => {
-        if (item.category === 'Perpetuals') {
-          // Merge exchangeBalance from API sources
-          const apiExchangeBalance = [...asterExchangeBalance, ...hyperliquidExchangeBalance, ...krakenExchangeBalance]
-          
-          // Use API exchangeBalance if available, otherwise use existing or default
-          let exchangeBalance: import('../pages/NetWorth').ExchangeBalance[]
-          if (apiExchangeBalance.length > 0) {
-            // Use exchangeBalance from APIs
-            exchangeBalance = apiExchangeBalance
-          } else {
-            // Fallback to existing or default
-            exchangeBalance = ensureExchangeBalance(item)
-          }
-          
-          if (asterData || hyperliquidData || finalKrakenData) {
-            // We have API data, merge it
-            console.log('[DataContext] Updating items with merged Perpetuals data')
-            console.log('[DataContext] Merged data being set:', {
-              openPositionsCount: mergedData.openPositions.length,
-              openOrdersCount: mergedData.openOrders.length,
-              exchangeBalanceCount: exchangeBalance.length,
-              openPositions: mergedData.openPositions,
-            })
-            
-            // Create a deep copy of mergedData to prevent mutation
-            const perpetualsDataCopy = {
-              exchangeBalance: exchangeBalance.map(b => ({ ...b })),
-              openPositions: mergedData.openPositions.map(p => ({ ...p })),
-              openOrders: mergedData.openOrders.map(o => ({ ...o })),
-            }
-            
-            const updatedItem = {
-              ...item,
-              perpetualsData: perpetualsDataCopy,
-            }
-            console.log('[DataContext] Updated Perpetuals item:', {
-              itemId: updatedItem.id,
-              hasPerpetualsData: !!updatedItem.perpetualsData,
-              exchangeBalanceCount: updatedItem.perpetualsData?.exchangeBalance?.length || 0,
-              positionsCount: updatedItem.perpetualsData?.openPositions?.length || 0,
-              openOrdersCount: updatedItem.perpetualsData?.openOrders?.length || 0,
-              positionsIds: updatedItem.perpetualsData?.openPositions?.map(p => p.id),
-              ordersIds: updatedItem.perpetualsData?.openOrders?.map(o => o.id),
-            })
-            return updatedItem
-          } else {
-            // No API data, but ensure exchangeBalance and perpetualsData structure is set
-            const perpetualsDataCopy = {
-              exchangeBalance: exchangeBalance.map(b => ({ ...b })),
-              openPositions: (item.perpetualsData?.openPositions || []).map(p => ({ ...p })),
-              openOrders: (item.perpetualsData?.openOrders || []).map(o => ({ ...o })),
-            }
-            
-            const updatedItem = {
-              ...item,
-              perpetualsData: perpetualsDataCopy,
-            }
-            console.log('[DataContext] No API data, but ensured exchangeBalance:', {
-              itemId: updatedItem.id,
-              exchangeBalanceCount: updatedItem.perpetualsData?.exchangeBalance?.length || 0,
-            })
-            return updatedItem
-          }
+      // Only create Perpetuals item if we have any data
+      if (asterData || hyperliquidData || finalKrakenData || apiExchangeBalance.length > 0) {
+        // Create Perpetuals item dynamically
+        const perpetualsItem: NetWorthItem = {
+          id: 'perpetuals-dynamic', // Special ID to indicate it's not from Firebase
+          category: 'Perpetuals',
+          name: 'Perpetuals',
+          platform: 'Multiple',
+          currency: 'USD',
+          perpetualsData: perpetualsData,
         }
-        return item
-      })
-      
-      const finalPerpetualsItem = updatedItems.find(i => i.category === 'Perpetuals')
-      console.log('[DataContext] Final Perpetuals item before return:', {
-        hasItem: !!finalPerpetualsItem,
-        hasPerpetualsData: !!finalPerpetualsItem?.perpetualsData,
-        exchangeBalanceCount: finalPerpetualsItem?.perpetualsData?.exchangeBalance?.length || 0,
-        positionsCount: finalPerpetualsItem?.perpetualsData?.openPositions?.length || 0,
-        openOrdersCount: finalPerpetualsItem?.perpetualsData?.openOrders?.length || 0,
-        positionsIds: finalPerpetualsItem?.perpetualsData?.openPositions?.map(p => p.id),
-        ordersIds: finalPerpetualsItem?.perpetualsData?.openOrders?.map(o => o.id),
-      })
-      return updatedItems
+
+        console.log('[DataContext] Created dynamic Perpetuals item:', {
+          hasPerpetualsData: !!perpetualsItem.perpetualsData,
+          exchangeBalanceCount: perpetualsItem.perpetualsData?.exchangeBalance?.length || 0,
+          positionsCount: perpetualsItem.perpetualsData?.openPositions?.length || 0,
+          openOrdersCount: perpetualsItem.perpetualsData?.openOrders?.length || 0,
+        })
+
+        // Add Perpetuals item to items array
+        return [...itemsWithoutPerpetuals, perpetualsItem]
+      } else {
+        // No data, return items without Perpetuals
+        console.log('[DataContext] No perpetuals data available, skipping Perpetuals item creation')
+        return itemsWithoutPerpetuals
+      }
     } catch (error) {
       console.error('[DataContext] Error fetching Perpetuals data:', error)
+      // Return items without Perpetuals on error
+      return itemsWithoutPerpetuals
     }
-
-    return items
   }
 
   // Calculate totals

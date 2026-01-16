@@ -140,27 +140,15 @@ export async function saveNetWorthItems<T extends { id: string }>(
   uid: string,
   items: T[]
 ): Promise<void> {
-  // Strip perpetualsData from Perpetuals items before saving (it's fetched live from API)
-  const itemsToSave = items.map(item => {
-    if ((item as any).category === 'Perpetuals' && (item as any).perpetualsData) {
-      const { perpetualsData, ...itemWithoutPerpetualsData } = item as any
-      return itemWithoutPerpetualsData
-    }
-    return item
-  })
+  // Filter out Perpetuals items - they're created dynamically, not stored in Firebase
+  const itemsToSave = items.filter(item => (item as any).category !== 'Perpetuals')
   await saveDocuments(uid, 'netWorthItems', itemsToSave)
 }
 
 export async function loadNetWorthItems<T>(uid: string): Promise<T[]> {
   const items = await loadDocuments<T>(uid, 'netWorthItems')
-  // Strip perpetualsData from loaded items (it may have been saved before we excluded it)
-  return items.map(item => {
-    if ((item as any).category === 'Perpetuals' && (item as any).perpetualsData) {
-      const { perpetualsData, ...itemWithoutPerpetualsData } = item as any
-      return itemWithoutPerpetualsData
-    }
-    return item
-  })
+  // Filter out any Perpetuals items that might have been saved before (legacy data)
+  return items.filter(item => (item as any).category !== 'Perpetuals')
 }
 
 export async function saveNetWorthTransactions<T extends { id: string }>(
