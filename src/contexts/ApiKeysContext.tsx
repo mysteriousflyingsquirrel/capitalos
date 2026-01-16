@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { saveUserSettings, loadUserSettings, type UserSettings } from '../services/firestoreService'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
@@ -37,14 +37,41 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const [krakenApiSecretKey, setKrakenApiSecretKeyState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [apiKeysLoaded, setApiKeysLoaded] = useState(false)
+  
+  // Track previous uid to detect uid changes
+  const prevUidRef = useRef<string | null>(null)
+  // Track if keys have ever been successfully loaded for the current uid
+  const keysLoadedForUidRef = useRef<string | null>(null)
 
   // Load API keys from Firestore on mount
   useEffect(() => {
     const loadApiKeys = async () => {
+      // Check if uid changed - if so, reset apiKeysLoaded for new user
+      const uidChanged = prevUidRef.current !== uid
+      const haveLoadedForThisUid = keysLoadedForUidRef.current === uid
+      
+      // Update prevUidRef
+      prevUidRef.current = uid
+      
       if (!uid) {
         setIsLoading(false)
+        // Mark as loaded even if no UID (to unblock DataContext)
+        setApiKeysLoaded(true)
         return
       }
+      
+      // Only reset apiKeysLoaded to false if uid changed and we haven't loaded keys for the new uid yet
+      if (uidChanged && !haveLoadedForThisUid) {
+        // New uid, reset loading state
+        setApiKeysLoaded(false)
+        setIsLoading(true)
+      } else if (!uidChanged && haveLoadedForThisUid) {
+        // Same uid, keys already loaded - don't reload, keep apiKeysLoaded as true
+        console.log('[ApiKeysContext] Keys already loaded for this uid, skipping reload')
+        return
+      }
+      
+      // If we get here, either uid changed (and we're loading) or it's the first load
 
       try {
         const settings = await loadUserSettings(uid)
@@ -88,11 +115,14 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         setIsLoading(false)
         // Mark keys as loaded after Firestore read completes (even if no keys found)
         setApiKeysLoaded(true)
+        // Track that keys were loaded for this uid
+        keysLoadedForUidRef.current = uid
       }
     }
 
     loadApiKeys()
-  }, [uid])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid]) // Only depend on uid - apiKeysLoaded is managed internally
 
   // Save RapidAPI key to Firestore
   const setRapidApiKey = async (key: string) => {
