@@ -384,11 +384,29 @@ export function DataProvider({ children }: DataProviderProps) {
         fetchStockPricesData(firebaseData.items),
       ])
       
-      // Step 3: Fetch Perpetuals data (reads from WebSocket state for Kraken)
-      // Only fetch if API keys are loaded
-      const itemsWithPerpetuals = apiKeysLoaded 
-        ? await fetchPerpetualsData(firebaseData.items)
-        : firebaseData.items.filter(item => item.category !== 'Perpetuals')
+      // Step 3: Wait for API keys to load (if initial load), then fetch Perpetuals data
+      // During initial load, we want to wait for keys so perpetuals are ready before showing the UI
+      const isInitialLoad = !hasLoadedDataRef.current
+      
+      if (isInitialLoad && !apiKeysLoaded) {
+        // Wait for API keys to load (max 5 seconds)
+        const maxWait = 5000
+        const startTime = Date.now()
+        
+        while (!apiKeysLoaded && (Date.now() - startTime) < maxWait) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[DataContext] Waited for API keys:', {
+            apiKeysLoaded,
+            waitedMs: Date.now() - startTime,
+          })
+        }
+      }
+      
+      // Now fetch Perpetuals data (keys are loaded or we've waited long enough)
+      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items)
       
       // Step 4: Calculate totals
       const calculationResult = calculateTotals(

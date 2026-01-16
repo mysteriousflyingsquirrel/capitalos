@@ -36,14 +36,24 @@ export function AuthGateUI() {
     return FUNNY_LOADING_MESSAGES[randomIndex]
   })
 
-  // Pick a random message when loading state changes
+  // Change message every 1 second while loading
   useEffect(() => {
-    if (state === AuthGateState.AUTH_LOADING || 
-        state === AuthGateState.INITIALIZING_USER ||
-        state === AuthGateState.SUBSCRIBING) {
+    const isLoading = state === AuthGateState.AUTH_LOADING || 
+                      state === AuthGateState.INITIALIZING_USER ||
+                      state === AuthGateState.SUBSCRIBING
+    
+    if (!isLoading) {
+      return
+    }
+
+    // Set up interval to change message every 1 second
+    const interval = setInterval(() => {
       const randomIndex = Math.floor(Math.random() * FUNNY_LOADING_MESSAGES.length)
       setLoadingMessage(FUNNY_LOADING_MESSAGES[randomIndex])
-    }
+    }, 1700)
+
+    // Cleanup interval on unmount or when loading stops
+    return () => clearInterval(interval)
   }, [state])
 
   // Show loading screen during auth transitions
@@ -193,7 +203,7 @@ export function SyncStatusIndicator() {
   }
 
   // Show listener count in dev mode
-  if (import.meta.env.DEV && activeListeners > 0) {
+  if (process.env.NODE_ENV === 'development' && activeListeners > 0) {
     return (
       <div className="fixed bottom-4 right-4 bg-space-blue border border-bronze-gold text-text-primary px-4 py-2 rounded-lg shadow-lg z-50 text-sm">
         Listeners: {activeListeners}
