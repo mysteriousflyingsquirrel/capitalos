@@ -206,18 +206,19 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Fetch Aster Perpetuals data
   const fetchPerpetualsData = async (items: NetWorthItem[]): Promise<NetWorthItem[]> => {
-    // Dev-only structured logging
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[DataContext] fetchPerpetualsData called:', {
-        apiKeysLoaded,
-        hasAsterKey: !!asterApiKey,
-        hasHyperliquidKey: !!hyperliquidWalletAddress,
-        krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
-        hasUid: !!uid,
-        uid: uid,
-        itemsCount: items.length,
-      })
-    }
+    // Always log (not just dev mode) to diagnose production issues
+    console.log('[DataContext] fetchPerpetualsData called:', {
+      apiKeysLoaded,
+      hasAsterKey: !!asterApiKey,
+      hasAsterSecretKey: !!asterApiSecretKey,
+      hasHyperliquidKey: !!hyperliquidWalletAddress,
+      krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
+      hasUid: !!uid,
+      uid: uid,
+      itemsCount: items.length,
+      hasPerpetualsInItems: items.some(item => item.category === 'Perpetuals'),
+      timestamp: new Date().toISOString(),
+    })
     
     if (!uid) {
       if (process.env.NODE_ENV === 'development') {
@@ -228,9 +229,10 @@ export function DataProvider({ children }: DataProviderProps) {
 
     // Gate Perpetuals fetch on apiKeysLoaded
     if (!apiKeysLoaded) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[DataContext] Perpetuals skipped — API keys not loaded yet')
-      }
+      console.warn('[DataContext] fetchPerpetualsData: API keys not loaded yet, removing Perpetuals items', {
+        itemsCount: items.length,
+        perpetualsItemsCount: items.filter(item => item.category === 'Perpetuals').length,
+      })
       // Remove any existing Perpetuals items and return
       return items.filter(item => item.category !== 'Perpetuals')
     }
@@ -239,9 +241,7 @@ export function DataProvider({ children }: DataProviderProps) {
     const itemsWithoutPerpetuals = items.filter(item => item.category !== 'Perpetuals')
 
     try {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[DataContext] Fetching Aster, Hyperliquid, and Kraken data...')
-      }
+      console.log('[DataContext] fetchPerpetualsData: Fetching Aster, Hyperliquid, and Kraken data...')
       
       // Fetch Aster and Hyperliquid data (Kraken uses WebSocket only)
       // Only fetch if keys are available (services will return null if keys are missing)
@@ -269,18 +269,22 @@ export function DataProvider({ children }: DataProviderProps) {
         ? convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
         : null
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[DataContext] Fetch results:', {
-          asterData: !!asterData,
-          asterPositions: asterData?.openPositions?.length || 0,
-          hyperliquidData: !!hyperliquidData,
-          hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
-          krakenData: !!finalKrakenData,
-          krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
-          krakenPositions: finalKrakenData?.openPositions?.length || 0,
-          krakenOrders: (finalKrakenData as any)?.openOrders?.length || 0,
-        })
-      }
+      // Always log fetch results (not just dev mode)
+      console.log('[DataContext] fetchPerpetualsData: Fetch results:', {
+        asterData: !!asterData,
+        asterPositions: asterData?.openPositions?.length || 0,
+        asterExchangeBalance: asterData?.exchangeBalance?.length || 0,
+        hyperliquidData: !!hyperliquidData,
+        hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
+        hyperliquidExchangeBalance: hyperliquidData?.exchangeBalance?.length || 0,
+        krakenData: !!finalKrakenData,
+        krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
+        krakenPositions: finalKrakenData?.openPositions?.length || 0,
+        krakenExchangeBalance: finalKrakenData?.exchangeBalance?.length || 0,
+        krakenOrders: (finalKrakenData as any)?.openOrders?.length || 0,
+        totalPositions: [...(asterData?.openPositions || []), ...(hyperliquidData?.openPositions || []), ...(finalKrakenData?.openPositions || [])].length,
+        totalExchangeBalance: [...(asterData?.exchangeBalance || []), ...(hyperliquidData?.exchangeBalance || []), ...(finalKrakenData?.exchangeBalance || [])].length,
+      })
 
       // Merge Aster, Hyperliquid, and Kraken data
       // Create defensive copies to prevent mutation
@@ -323,25 +327,36 @@ export function DataProvider({ children }: DataProviderProps) {
           perpetualsData: perpetualsData,
         }
 
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[DataContext] Created dynamic Perpetuals item:', {
-            hasPerpetualsData: !!perpetualsItem.perpetualsData,
-            exchangeBalanceCount: perpetualsItem.perpetualsData?.exchangeBalance?.length || 0,
-            positionsCount: perpetualsItem.perpetualsData?.openPositions?.length || 0,
-          })
-        }
+        console.log('[DataContext] fetchPerpetualsData: Created dynamic Perpetuals item:', {
+          hasPerpetualsData: !!perpetualsItem.perpetualsData,
+          exchangeBalanceCount: perpetualsItem.perpetualsData?.exchangeBalance?.length || 0,
+          positionsCount: perpetualsItem.perpetualsData?.openPositions?.length || 0,
+          itemsWithoutPerpetualsCount: itemsWithoutPerpetuals.length,
+          returningItemsCount: itemsWithoutPerpetuals.length + 1,
+        })
 
         // Add Perpetuals item to items array
         return [...itemsWithoutPerpetuals, perpetualsItem]
       } else {
         // No data, return items without Perpetuals
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[DataContext] No perpetuals data available, skipping Perpetuals item creation')
-        }
+        console.warn('[DataContext] fetchPerpetualsData: No perpetuals data available, returning items without Perpetuals', {
+          asterData: !!asterData,
+          hyperliquidData: !!hyperliquidData,
+          finalKrakenData: !!finalKrakenData,
+          apiExchangeBalanceLength: apiExchangeBalance.length,
+          itemsWithoutPerpetualsCount: itemsWithoutPerpetuals.length,
+          willReturnEmpty: itemsWithoutPerpetuals.length === 0,
+        })
         return itemsWithoutPerpetuals
       }
     } catch (error) {
-      console.error('[DataContext] Error fetching Perpetuals data:', error)
+      console.error('[DataContext] fetchPerpetualsData: Error fetching Perpetuals data:', error, {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        itemsCount: items.length,
+        itemsWithoutPerpetualsCount: itemsWithoutPerpetuals.length,
+        willReturnEmpty: itemsWithoutPerpetuals.length === 0,
+      })
       // Return items without Perpetuals on error
       return itemsWithoutPerpetuals
     }
@@ -603,7 +618,12 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Unified refresh function: fetch exchange prices -> fetch crypto prices -> fetch perpetuals data -> update frontend
   const refreshAllData = async () => {
-    if (!uid) return
+    console.log('[DataContext] refreshAllData called (periodic refresh)', { uid, timestamp: new Date().toISOString() })
+    
+    if (!uid) {
+      console.log('[DataContext] refreshAllData: No UID, returning early')
+      return
+    }
 
     // Get current state
     let currentItems: NetWorthItem[] = []
@@ -621,19 +641,41 @@ export function DataProvider({ children }: DataProviderProps) {
       return prev // No state change, just reading
     })
 
+    console.log('[DataContext] refreshAllData: Read current state', {
+      currentItemsCount: currentItems.length,
+      hasPerpetuals: currentItems.some(item => item.category === 'Perpetuals'),
+      perpetualsItemId: currentItems.find(item => item.category === 'Perpetuals')?.id,
+    })
+
     if (currentItems.length === 0) {
+      console.warn('[DataContext] refreshAllData: currentItems is empty, returning early (this may indicate items were already cleared)')
       return
     }
 
     try {
+      console.log('[DataContext] refreshAllData: Starting fetch (crypto prices, stock prices, perpetuals)')
+      
       // Step 1: Fetch exchange prices (USD→CHF rate) and crypto/stock prices
       const [cryptoData, stockPricesData] = await Promise.all([
         fetchCryptoPrices(currentItems),
         fetchStockPricesData(currentItems),
       ])
       
+      console.log('[DataContext] refreshAllData: Fetched crypto/stock prices, about to fetch perpetuals', {
+        currentItemsCount: currentItems.length,
+        apiKeysLoaded,
+        krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
+      })
+      
       // Step 2: Fetch perpetuals data (reads from WebSocket state for Kraken)
       const itemsWithPerpetuals = await fetchPerpetualsData(currentItems)
+      
+      console.log('[DataContext] refreshAllData: After fetchPerpetualsData', {
+        itemsWithPerpetualsCount: itemsWithPerpetuals.length,
+        hadPerpetualsBefore: currentItems.some(item => item.category === 'Perpetuals'),
+        hasPerpetualsAfter: itemsWithPerpetuals.some(item => item.category === 'Perpetuals'),
+        itemsWithPerpetualsCategories: itemsWithPerpetuals.map(item => item.category),
+      })
       
       // Step 3: Calculate totals
       const calculationResult = calculateTotals(
@@ -659,9 +701,24 @@ export function DataProvider({ children }: DataProviderProps) {
 
       // Step 5: Update frontend (single state update)
       setData((prev) => {
+        console.log('[DataContext] refreshAllData: Updating state', {
+          prevItemsCount: prev.netWorthItems.length,
+          newItemsCount: itemsWithPerpetuals.length,
+          willPreservePrev: prev.netWorthItems.length === 0,
+        })
+        
         if (prev.netWorthItems.length === 0) {
+          console.warn('[DataContext] refreshAllData: prev.netWorthItems is empty, preserving previous state (not updating)')
           return prev
         }
+        
+        if (itemsWithPerpetuals.length === 0) {
+          console.error('[DataContext] refreshAllData: WARNING - itemsWithPerpetuals is empty! This will clear all items!', {
+            prevItemsCount: prev.netWorthItems.length,
+            prevCategories: prev.netWorthItems.map(item => item.category),
+          })
+        }
+        
         return {
           ...prev,
           netWorthItems: itemsWithPerpetuals,
@@ -671,8 +728,13 @@ export function DataProvider({ children }: DataProviderProps) {
           calculationResult,
         }
       })
+      
+      console.log('[DataContext] refreshAllData: Completed successfully')
     } catch (err) {
-      console.error('Error in periodic refresh:', err)
+      console.error('[DataContext] Error in periodic refresh:', err, {
+        stack: err instanceof Error ? err.stack : undefined,
+        currentItemsCount: currentItems.length,
+      })
     }
   }
 
