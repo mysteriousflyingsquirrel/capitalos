@@ -20,8 +20,14 @@ interface WriteOptions {
 /**
  * Runtime guard: Check if payload looks like a full store dump
  */
-function isFullStoreDump(payload: any): boolean {
+function isFullStoreDump(payload: any, domain: string): boolean {
   if (!payload || typeof payload !== 'object') return false
+  
+  // Allow aggregate/summary documents - they are intentionally structured this way
+  const allowedAggregateDomains = ['netWorthSummary']
+  if (allowedAggregateDomains.includes(domain)) {
+    return false
+  }
   
   // Check for common full-store patterns
   const keys = Object.keys(payload)
@@ -100,7 +106,7 @@ export async function safeWrite<T = any>(
     }
     
     // Guard: No full store dumps
-    if (isFullStoreDump(data)) {
+    if (isFullStoreDump(data, domain)) {
       throw new Error(
         `[Repository] SAFETY VIOLATION: Full store dump detected. ` +
         `Domain: ${domain}, Origin: ${origin}. ` +

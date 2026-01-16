@@ -50,6 +50,7 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
   const [error, setError] = useState<Error | null>(null)
   const prevUidRef = useRef<string | null>(null)
   const initWatchdogRef = useRef<NodeJS.Timeout | null>(null)
+  const dataReadyCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
   
   // Get sync status hooks - must be called unconditionally
   const { setQuotaExceeded, setOnline } = useSyncStatus()
@@ -63,6 +64,12 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
     if (prevUid !== nextUid) {
       console.log('[AuthGate] User change detected:', { prevUid, nextUid })
       
+      // Clear data ready check interval for previous user
+      if (dataReadyCheckIntervalRef.current) {
+        clearInterval(dataReadyCheckIntervalRef.current)
+        dataReadyCheckIntervalRef.current = null
+      }
+      
       // Perform complete user context swap
       if (prevUid) {
         console.log('[AuthGate] Performing user context swap')
@@ -70,6 +77,8 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
       }
 
       prevUidRef.current = nextUid
+      // Don't reset hasInitialDataLoaded here - DataContext will reset it in its useEffect
+      // when uid changes, avoiding race conditions
     }
 
     if (!newUser) {
@@ -117,16 +126,51 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
 
       // Move to subscribing state
       setState(AuthGateState.SUBSCRIBING)
+      initializationInFlight = null
       
-      // Note: Actual subscriptions will be set up by DataContext/other contexts
-      // For now, we just mark as ready after a brief delay
-      // In a real implementation, this would wait for first snapshot
-      setTimeout(() => {
-        if (prevUidRef.current === newUser.uid) {
+      // Monitor for data load completion via sync status
+      // DataContext resets hasInitialDataLoaded to false in its useEffect when uid changes
+      // and sets it to true when loadAllData completes
+      // We just need to wait for it to become true
+      const maxChecks = 150 // 30 seconds max (150 * 200ms)
+      let checkCount = 0
+      
+      // Clear any existing check interval
+      if (dataReadyCheckIntervalRef.current) {
+        clearInterval(dataReadyCheckIntervalRef.current)
+        dataReadyCheckIntervalRef.current = null
+      }
+      
+      const checkDataReady = () => {
+        checkCount++
+        const syncStatus = (window as any).__CAPITALOS_SYNC_STATUS__
+        
+        // Check for data load completion
+        // DataContext manages hasInitialDataLoaded - it's false when loading starts,
+        // true when loading completes
+        if (syncStatus && syncStatus.hasInitialDataLoaded && prevUidRef.current === newUser.uid) {
+          if (dataReadyCheckIntervalRef.current) {
+            clearInterval(dataReadyCheckIntervalRef.current)
+            dataReadyCheckIntervalRef.current = null
+          }
           setState(AuthGateState.READY)
-          initializationInFlight = null
+        } else if (checkCount >= maxChecks) {
+          // Timeout: transition to READY anyway after 30 seconds
+          if (dataReadyCheckIntervalRef.current) {
+            clearInterval(dataReadyCheckIntervalRef.current)
+            dataReadyCheckIntervalRef.current = null
+          }
+          console.warn('[AuthGate] Data load check timeout, transitioning to READY')
+          if (prevUidRef.current === newUser.uid) {
+            setState(AuthGateState.READY)
+          }
         }
-      }, 100)
+      }
+      
+      // Start checking immediately - DataContext's useEffect will have already reset the flag
+      // by the time we reach SUBSCRIBING state, since React processes effects synchronously
+      // during the render phase
+      dataReadyCheckIntervalRef.current = setInterval(checkDataReady, 200)
 
     } catch (err) {
       initializationInFlight = null
@@ -134,6 +178,12 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
       if (initWatchdogRef.current) {
         clearTimeout(initWatchdogRef.current)
         initWatchdogRef.current = null
+      }
+      
+      // Clear data ready check interval on error
+      if (dataReadyCheckIntervalRef.current) {
+        clearInterval(dataReadyCheckIntervalRef.current)
+        dataReadyCheckIntervalRef.current = null
       }
 
       const error = err instanceof Error ? err : new Error(String(err))
@@ -155,6 +205,17 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
   useEffect(() => {
     let isMounted = true
     let unsubscribe: (() => void) | null = null
+    let listenerSetUp = false
+
+    const setupListener = () => {
+      if (listenerSetUp || !isMounted) return
+      listenerSetUp = true
+      unsubscribe = onAuthStateChanged(auth, async (user) => {
+        if (!isMounted) return
+        console.log('[AuthGate] Auth state changed:', user ? user.email : 'signed out')
+        await handleUserChange(user)
+      })
+    }
 
     const bootstrap = async () => {
       try {
@@ -165,15 +226,14 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
 
         if (redirectResult?.user) {
           console.log('[AuthGate] Redirect result received:', redirectResult.user.email)
+          listenerSetUp = true // Mark listener as set up since we handled redirect
           await handleUserChange(redirectResult.user)
+          // Still set up listener for future auth changes
+          setupListener()
         } else {
           // No redirect, set up auth state listener
           // The listener will fire immediately with current auth state
-          unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (!isMounted) return
-            console.log('[AuthGate] Auth state changed:', user ? user.email : 'signed out')
-            await handleUserChange(user)
-          })
+          setupListener()
         }
       } catch (err) {
         if (!isMounted) return
@@ -183,34 +243,24 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
         
         // Still set up listener for future auth changes
         // This will also fire immediately with current state
-        unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (!isMounted) return
-          console.log('[AuthGate] Auth state changed (after error):', user ? user.email : 'signed out')
-          await handleUserChange(user)
-        })
+        setupListener()
       }
     }
 
     // Set a timeout to ensure we don't stay in AUTH_LOADING forever
+    // Only set up listener if bootstrap hasn't already set it up
     const timeout = setTimeout(() => {
-      if (isMounted && state === AuthGateState.AUTH_LOADING) {
+      if (isMounted && state === AuthGateState.AUTH_LOADING && !listenerSetUp) {
         console.warn('[AuthGate] Bootstrap timeout, setting up auth listener anyway')
-        unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (!isMounted) return
-          console.log('[AuthGate] Auth state changed (timeout fallback):', user ? user.email : 'signed out')
-          await handleUserChange(user)
-        })
+        setupListener()
       }
     }, 3000) // 3 second timeout
 
     bootstrap().catch((err) => {
       console.error('[AuthGate] Bootstrap promise rejection:', err)
-      if (isMounted) {
+      if (isMounted && !listenerSetUp) {
         // Ensure we set up the listener even if bootstrap fails
-        unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (!isMounted) return
-          await handleUserChange(user)
-        })
+        setupListener()
       }
     })
 
@@ -222,6 +272,10 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
       }
       if (initWatchdogRef.current) {
         clearTimeout(initWatchdogRef.current)
+      }
+      if (dataReadyCheckIntervalRef.current) {
+        clearInterval(dataReadyCheckIntervalRef.current)
+        dataReadyCheckIntervalRef.current = null
       }
     }
   }, [])

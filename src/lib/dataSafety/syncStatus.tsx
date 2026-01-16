@@ -8,6 +8,7 @@ interface SyncStatus {
   lastSyncTime: number | null
   safeMode: boolean
   quotaExceeded: boolean
+  hasInitialDataLoaded: boolean
 }
 
 interface SyncStatusContextType extends SyncStatus {
@@ -19,6 +20,7 @@ interface SyncStatusContextType extends SyncStatus {
   setLastSyncTime: (time: number) => void
   setSafeMode: (safe: boolean) => void
   setQuotaExceeded: (exceeded: boolean) => void
+  setHasInitialDataLoaded: (loaded: boolean) => void
 }
 
 const SyncStatusContext = createContext<SyncStatusContextType | undefined>(undefined)
@@ -35,10 +37,11 @@ export function SyncStatusProvider({ children }: SyncStatusProviderProps) {
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null)
   const [safeMode, setSafeMode] = useState(false)
   const [quotaExceeded, setQuotaExceeded] = useState(false)
+  const [hasInitialDataLoaded, setHasInitialDataLoaded] = useState(false)
 
-  // Expose sync status globally for repository checks
+  // Expose sync status globally for repository checks and external access
   useEffect(() => {
-    const status: SyncStatus = {
+    const status: SyncStatus & { setHasInitialDataLoaded?: (loaded: boolean) => void } = {
       online,
       activeListeners,
       pendingWrites,
@@ -46,13 +49,15 @@ export function SyncStatusProvider({ children }: SyncStatusProviderProps) {
       lastSyncTime,
       safeMode,
       quotaExceeded,
+      hasInitialDataLoaded,
+      setHasInitialDataLoaded, // Expose setter for AuthGate to reset on user change
     }
     ;(window as any).__CAPITALOS_SYNC_STATUS__ = status
 
     return () => {
       delete (window as any).__CAPITALOS_SYNC_STATUS__
     }
-  }, [online, activeListeners, pendingWrites, lastError, lastSyncTime, safeMode, quotaExceeded])
+  }, [online, activeListeners, pendingWrites, lastError, lastSyncTime, safeMode, quotaExceeded, hasInitialDataLoaded, setHasInitialDataLoaded])
 
   // When quota is exceeded, enter safe mode
   useEffect(() => {
@@ -77,6 +82,7 @@ export function SyncStatusProvider({ children }: SyncStatusProviderProps) {
     lastSyncTime,
     safeMode,
     quotaExceeded,
+    hasInitialDataLoaded,
     setOnline,
     setActiveListeners,
     incrementPendingWrites,
@@ -85,6 +91,7 @@ export function SyncStatusProvider({ children }: SyncStatusProviderProps) {
     setLastSyncTime,
     setSafeMode,
     setQuotaExceeded,
+    setHasInitialDataLoaded,
   }
 
   return <SyncStatusContext.Provider value={value}>{children}</SyncStatusContext.Provider>

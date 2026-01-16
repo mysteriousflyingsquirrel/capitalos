@@ -18,7 +18,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 function ProtectedRoutes() {
   try {
     const { user, loading: authLoading, authGateState, error: authError } = useAuth()
-    const { loading: dataLoading, error: dataError } = useData()
+    const { loading: dataLoading, error: dataError, isInitialLoad } = useData()
 
     // Show AuthGate UI for error states
     if (authGateState === AuthGateState.ERROR_QUOTA_EXCEEDED ||
@@ -26,35 +26,15 @@ function ProtectedRoutes() {
       return <AuthGateUI />
     }
 
-    // Show loading during auth transitions
+    // Show loading during auth transitions OR initial data load
+    // Keep showing AuthGateUI during SUBSCRIBING until data is loaded
+    // This ensures a continuous loading experience without flicker
     if (authGateState && authGateState !== AuthGateState.READY && authGateState !== AuthGateState.SIGNED_OUT) {
       return <AuthGateUI />
     }
 
-    if (authLoading) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-bg-page">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-goldenrod mx-auto mb-4"></div>
-            <div className="text-text-primary">Loading...</div>
-          </div>
-        </div>
-      )
-    }
-
     if (!user) {
       return <Login />
-    }
-
-    if (dataLoading) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-bg-page">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-goldenrod mx-auto mb-4"></div>
-            <div className="text-text-primary">Loading data...</div>
-          </div>
-        </div>
-      )
     }
 
     if (dataError) {

@@ -1,10 +1,45 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { AuthGateState, useAuthGate } from '../lib/dataSafety/authGate'
 import { useSyncStatus } from '../lib/dataSafety/syncStatus'
+
+// 20 funny loading messages
+const FUNNY_LOADING_MESSAGES = [
+  'Taking a poop...',
+  'Feeding the cats...',
+  'Finding Nemo...',
+  'Counting money...',
+  'Brewing coffee...',
+  'Chasing butterflies...',
+  'Teaching AI to dance...',
+  'Polishing diamonds...',
+  'Herding cats...',
+  'Wrestling with pandas...',
+  'Baking cookies...',
+  'Training dragons...',
+  'Solving world hunger...',
+  'Petting unicorns...',
+  'Fighting crime...',
+  'Learning to fly...',
+  'Summoning spirits...',
+  'Building castles...',
+  'Taming wild horses...',
+  'Discovering Atlantis...',
+]
 
 export function AuthGateUI() {
   const { state, error, retry, signOut } = useAuthGate()
   const { safeMode, quotaExceeded, online } = useSyncStatus()
+  const [loadingMessage, setLoadingMessage] = useState<string>('')
+
+  // Pick a random message when loading state changes
+  useEffect(() => {
+    if (state === AuthGateState.AUTH_LOADING || 
+        state === AuthGateState.INITIALIZING_USER ||
+        state === AuthGateState.SUBSCRIBING) {
+      const randomIndex = Math.floor(Math.random() * FUNNY_LOADING_MESSAGES.length)
+      setLoadingMessage(FUNNY_LOADING_MESSAGES[randomIndex])
+    }
+  }, [state])
 
   // Show loading screen during auth transitions
   if (state === AuthGateState.AUTH_LOADING || 
@@ -15,9 +50,7 @@ export function AuthGateUI() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-goldenrod mx-auto mb-4"></div>
           <div className="text-text-primary text-lg mb-2">
-            {state === AuthGateState.AUTH_LOADING && 'Checking authentication...'}
-            {state === AuthGateState.INITIALIZING_USER && 'Initializing account...'}
-            {state === AuthGateState.SUBSCRIBING && 'Loading data...'}
+            {loadingMessage || 'Loading...'}
           </div>
           <div className="text-text-secondary text-sm">
             Please wait

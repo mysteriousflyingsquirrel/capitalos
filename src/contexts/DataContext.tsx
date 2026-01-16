@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useLayoutEffect, useRef, ReactNode } from 'react'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useCurrency } from './CurrencyContext'
 import { useApiKeys } from './ApiKeysContext'
+import { useSyncStatus } from '../lib/dataSafety/syncStatus'
 import {
   loadNetWorthItems,
   loadNetWorthTransactions,
@@ -37,6 +38,7 @@ interface DataContextType {
   data: AppData
   loading: boolean
   error: string | null
+  isInitialLoad: boolean // True only during the very first load, false for refreshes
   refreshData: () => Promise<void>
   refreshPrices: () => Promise<void>
   refreshPerpetuals: () => Promise<void>
@@ -60,6 +62,8 @@ export function DataProvider({ children }: DataProviderProps) {
   const { uid } = useAuth()
   const { convert } = useCurrency()
   const { rapidApiKey, krakenApiKey, krakenApiSecretKey } = useApiKeys()
+  const { setHasInitialDataLoaded } = useSyncStatus()
+  const prevUidRef = useRef<string | null>(null)
   
   const [data, setData] = useState<AppData>({
     netWorthItems: [],
@@ -79,6 +83,8 @@ export function DataProvider({ children }: DataProviderProps) {
   const krakenWsStateRef = useRef<KrakenWsState | null>(null)
   // Track if we're currently saving summary to avoid infinite loops
   const isSavingSummaryRef = useRef(false)
+  // Track if data has ever been loaded (to distinguish initial load from refreshes)
+  const hasLoadedDataRef = useRef(false)
 
   // Load all Firebase data
   const loadFirebaseData = async (): Promise<{
@@ -458,7 +464,10 @@ export function DataProvider({ children }: DataProviderProps) {
         calculationResult,
       })
       
+      hasLoadedDataRef.current = true
       setLoading(false)
+      // Signal to AuthGate that initial data load is complete
+      setHasInitialDataLoaded(true)
     } catch (err) {
       console.error('Error loading data:', err)
       setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -577,8 +586,25 @@ export function DataProvider({ children }: DataProviderProps) {
     await loadAllData()
   }
 
+  // Reset flag synchronously when uid changes (before regular useEffect runs)
+  // useLayoutEffect runs synchronously after DOM mutations, before paint
+  // This ensures AuthGate sees the correct state immediately when checking
+  useLayoutEffect(() => {
+    if (prevUidRef.current !== uid) {
+      prevUidRef.current = uid
+      hasLoadedDataRef.current = false
+      setHasInitialDataLoaded(false)
+    }
+  }, [uid, setHasInitialDataLoaded])
+
   // Initial load
   useEffect(() => {
+    if (!uid) {
+      setLoading(false)
+      return
+    }
+
+    // Start loading - flag was already reset synchronously in useLayoutEffect above
     loadAllData()
   }, [uid]) // Reload when uid changes
 
@@ -721,6 +747,7 @@ export function DataProvider({ children }: DataProviderProps) {
         data,
         loading,
         error,
+        isInitialLoad: loading && !hasLoadedDataRef.current,
         refreshData,
         refreshPrices,
         refreshPerpetuals,
