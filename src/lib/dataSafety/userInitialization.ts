@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import { safeWrite } from './repository'
 
@@ -7,8 +7,7 @@ import { safeWrite } from './repository'
  * 
  * Creates if missing:
  * - users/{uid} (with createdAt, lastLoginAt, schemaVersion)
- * - users/{uid}/settings/baseCurrency (default "CHF")
- * - users/{uid}/settings/apiKeys (default {})
+ * - users/{uid}/settings/user (with baseCurrency and apiKeys fields)
  * 
  * Never overwrites existing documents.
  */
@@ -37,26 +36,33 @@ export async function ensureUserInitialized(uid: string): Promise<void> {
       }, { origin: 'system', domain: 'user', merge: true })
     }
 
-    // Ensure settings/baseCurrency exists
-    const baseCurrencyRef = doc(db, `users/${uid}/settings/baseCurrency`)
-    const baseCurrencySnap = await getDoc(baseCurrencyRef)
+    // Ensure settings/user document exists with baseCurrency and apiKeys fields
+    const settingsRef = doc(db, `users/${uid}/settings/user`)
+    const settingsSnap = await getDoc(settingsRef)
     
-    if (!baseCurrencySnap.exists()) {
-      console.log(`[UserInitialization] Creating baseCurrency setting: ${uid}`)
-      await safeWrite(baseCurrencyRef, {
-        value: 'CHF',
+    if (!settingsSnap.exists()) {
+      console.log(`[UserInitialization] Creating settings/user document: ${uid}`)
+      await safeWrite(settingsRef, {
+        baseCurrency: 'CHF',
+        apiKeys: {},
       }, { origin: 'system', domain: 'settings', merge: true })
-    }
-
-    // Ensure settings/apiKeys exists
-    const apiKeysRef = doc(db, `users/${uid}/settings/apiKeys`)
-    const apiKeysSnap = await getDoc(apiKeysRef)
-    
-    if (!apiKeysSnap.exists()) {
-      console.log(`[UserInitialization] Creating apiKeys setting: ${uid}`)
-      await safeWrite(apiKeysRef, {
-        value: {},
-      }, { origin: 'system', domain: 'settings', merge: true })
+    } else {
+      // Ensure baseCurrency and apiKeys fields exist (idempotent - won't overwrite if they exist)
+      const settingsData = settingsSnap.data()
+      const updates: any = {}
+      
+      if (!settingsData?.baseCurrency) {
+        updates.baseCurrency = 'CHF'
+      }
+      
+      if (!settingsData?.apiKeys) {
+        updates.apiKeys = {}
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        console.log(`[UserInitialization] Adding missing fields to settings/user: ${uid}`, updates)
+        await safeWrite(settingsRef, updates, { origin: 'system', domain: 'settings', merge: true })
+      }
     }
 
     console.log(`[UserInitialization] User initialization complete: ${uid}`)

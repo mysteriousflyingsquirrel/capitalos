@@ -25,4 +25,3 @@ export async function fetchAsterPerpetualsData(uid: string): Promise<PerpetualsD
     return null
   }
 }
-
