@@ -1,7 +1,7 @@
 import React, { useState, useEffect, FormEvent } from 'react'
 import Heading from '../components/Heading'
 import { useCurrency } from '../contexts/CurrencyContext'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useApiKeys } from '../contexts/ApiKeysContext'
 import { useData } from '../contexts/DataContext'
 import type { CurrencyCode } from '../lib/currency'

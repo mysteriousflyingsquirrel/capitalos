@@ -3,7 +3,6 @@ import {
   doc, 
   getDoc, 
   getDocs, 
-  setDoc, 
   updateDoc,
   deleteDoc,
   writeBatch,
@@ -12,6 +11,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import type { NetWorthSummary } from '../lib/networth/types'
+import { safeWrite, safeDelete } from '../lib/dataSafety/repository'
 
 // Helper to get user-scoped collection path
 function getUserCollectionPath(uid: string, collectionName: string): string {
@@ -68,6 +68,9 @@ export async function saveDocuments<T extends { id: string }>(
 
     chunk.forEach((item) => {
       const docRef = doc(db, collectionPath, item.id)
+      // Note: batch.set doesn't support merge option
+      // We use setDoc which will create or overwrite
+      // This is acceptable for item-level writes where each item is independent
       batch.set(docRef, item)
     })
 
@@ -241,8 +244,7 @@ export async function saveUserSettings(
   // Check if document exists
   const docSnap = await getDoc(docRef)
   
-  if (docSnap.exists()) {
-    // Use updateDoc to preserve existing fields and handle deleteField() properly
+    // Always use updateDoc with merge to prevent overwrites
     const updateData: any = { ...settings }
     
     // Handle nested apiKeys object - if any key should be deleted, use deleteField()
@@ -261,27 +263,12 @@ export async function saveUserSettings(
       }
     }
     
-    await updateDoc(docRef, updateData)
-  } else {
-    // Document doesn't exist, use setDoc
-    // Remove any deleteField() values before setting
-    const setData: any = { ...settings }
-    if (setData.apiKeys) {
-      const apiKeysData: any = {}
-      Object.keys(setData.apiKeys).forEach((key) => {
-        const value = setData.apiKeys[key]
-        if (value !== deleteField() && value !== undefined) {
-          apiKeysData[key] = value
-        }
-      })
-      if (Object.keys(apiKeysData).length > 0) {
-        setData.apiKeys = apiKeysData
-      } else {
-        delete setData.apiKeys
-      }
-    }
-    await setDoc(docRef, setData)
-  }
+    // Use safe write wrapper
+    await safeWrite(docRef, updateData, { 
+      origin: 'user', 
+      domain: 'settings', 
+      merge: true 
+    })
 }
 
 export async function loadUserSettings(uid: string): Promise<UserSettings | null> {
@@ -312,6 +299,9 @@ export async function saveSnapshotsFirestore<T extends { date: string }>(
 
     chunk.forEach((snapshot) => {
       const docRef = doc(db, collectionPath, snapshot.date)
+      // Note: batch.set doesn't support merge option
+      // For snapshots, we use setDoc which will create or overwrite
+      // This is acceptable since snapshots are keyed by date
       batch.set(docRef, snapshot)
     })
 
@@ -332,7 +322,12 @@ export async function saveNetWorthSummaryFirestore(
   summary: NetWorthSummary
 ): Promise<void> {
   const docRef = doc(db, `users/${uid}/netWorthSummary/current`)
-  await setDoc(docRef, summary)
+  // Use safe write with merge to prevent overwrites
+  await safeWrite(docRef, summary, { 
+    origin: 'system', 
+    domain: 'netWorthSummary', 
+    merge: true 
+  })
 }
 
 /**
@@ -366,7 +361,10 @@ export async function clearAllUserData(uid: string): Promise<void> {
     (async () => {
       const settingsDocRef = doc(db, `users/${uid}/settings/user`)
       try {
-        await deleteDoc(settingsDocRef)
+        await safeDelete(settingsDocRef, { 
+          origin: 'system', 
+          domain: 'settings' 
+        })
       } catch (error) {
         // Ignore if document doesn't exist
         console.warn('Settings document does not exist or already deleted:', error)

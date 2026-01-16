@@ -3,7 +3,7 @@ import Heading from './Heading'
 import { getYearsWithCryptoActivity, generateCryptoTaxReport, type CryptoTaxReport } from '../services/cryptoTaxReportService'
 import { generateCryptoTaxReportPDF } from '../services/pdfService'
 import { useCurrency } from '../contexts/CurrencyContext'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { formatMoney, formatNumber } from '../lib/currency'
 import { formatDate } from '../lib/dateFormat'
 

@@ -7,66 +7,121 @@ import Analytics from './pages/Analytics'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
 import { CurrencyProvider } from './contexts/CurrencyContext'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { AuthGateProvider, AuthGateState } from './lib/dataSafety/authGate'
+import { AuthContextCompatProvider, useAuth } from './lib/dataSafety/authGateCompat'
 import { IncognitoProvider } from './contexts/IncognitoContext'
 import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { DataProvider, useData } from './contexts/DataContext'
+import { AuthGateUI, SyncStatusIndicator } from './components/AuthGateUI'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 function ProtectedRoutes() {
-  const { user, loading: authLoading } = useAuth()
-  const { loading: dataLoading, error: dataError } = useData()
+  try {
+    const { user, loading: authLoading, authGateState, error: authError } = useAuth()
+    const { loading: dataLoading, error: dataError } = useData()
 
-  if (authLoading) {
-    return null
-  }
+    // Show AuthGate UI for error states
+    if (authGateState === AuthGateState.ERROR_QUOTA_EXCEEDED ||
+        authGateState === AuthGateState.ERROR_FATAL) {
+      return <AuthGateUI />
+    }
 
-  if (!user) {
-    return <Login />
-  }
+    // Show loading during auth transitions
+    if (authGateState && authGateState !== AuthGateState.READY && authGateState !== AuthGateState.SIGNED_OUT) {
+      return <AuthGateUI />
+    }
 
-  if (dataLoading) {
-    return null
-  }
+    if (authLoading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-bg-page">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-goldenrod mx-auto mb-4"></div>
+            <div className="text-text-primary">Loading...</div>
+          </div>
+        </div>
+      )
+    }
 
-  if (dataError) {
+    if (!user) {
+      return <Login />
+    }
+
+    if (dataLoading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-bg-page">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-goldenrod mx-auto mb-4"></div>
+            <div className="text-text-primary">Loading data...</div>
+          </div>
+        </div>
+      )
+    }
+
+    if (dataError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-bg-page">
+          <div className="text-center">
+            <div className="text-red-400 mb-4">Error loading data</div>
+            <div className="text-text-secondary">{dataError}</div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/cashflow" element={<Cashflow />} />
+          <Route path="/net-worth" element={<NetWorth />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
+      </Layout>
+    )
+  } catch (error) {
+    console.error('[ProtectedRoutes] Error:', error)
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-page">
         <div className="text-center">
-          <div className="text-red-400 mb-4">Error loading data</div>
-          <div className="text-text-secondary">{dataError}</div>
+          <div className="text-red-400 mb-4">Application Error</div>
+          <div className="text-text-secondary text-sm mb-4">
+            {error instanceof Error ? error.message : String(error)}
+          </div>
+          <details className="text-left text-xs text-text-muted">
+            <summary className="cursor-pointer mb-2">Technical details</summary>
+            <pre className="bg-galaxy-dark p-2 rounded overflow-auto">
+              {error instanceof Error ? error.stack : String(error)}
+            </pre>
+          </details>
         </div>
       </div>
     )
   }
-
-  return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/cashflow" element={<Cashflow />} />
-        <Route path="/net-worth" element={<NetWorth />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/settings" element={<Settings />} />
-      </Routes>
-    </Layout>
-  )
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <CurrencyProvider>
-        <ApiKeysProvider>
-          <DataProvider>
-            <IncognitoProvider>
-              <Router>
-                <ProtectedRoutes />
-              </Router>
-            </IncognitoProvider>
-          </DataProvider>
-        </ApiKeysProvider>
-      </CurrencyProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthGateProvider>
+        <ErrorBoundary>
+          <AuthContextCompatProvider>
+            <CurrencyProvider>
+              <ApiKeysProvider>
+                <DataProvider>
+                  <IncognitoProvider>
+                    <Router>
+                      <ProtectedRoutes />
+                      <SyncStatusIndicator />
+                    </Router>
+                  </IncognitoProvider>
+                </DataProvider>
+              </ApiKeysProvider>
+            </CurrencyProvider>
+          </AuthContextCompatProvider>
+        </ErrorBoundary>
+      </AuthGateProvider>
+    </ErrorBoundary>
   )
 }
 

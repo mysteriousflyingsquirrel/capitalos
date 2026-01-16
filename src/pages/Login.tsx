@@ -1,22 +1,21 @@
 import React, { useState } from 'react'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../lib/dataSafety/authGateCompat'
 import Heading from '../components/Heading'
-import { isIosSafari } from '../utils/browserDetection'
 
 function Login() {
   const { signInWithGoogle } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isRedirecting, setIsRedirecting] = useState(false)
-  
-  // Detect if user is on iOS Safari
-  const isSafari = isIosSafari()
 
   const handleSignIn = async () => {
     setLoading(true)
     setError(null)
     
     try {
+      // Check if Safari (for redirect flow)
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent) && /iphone|ipad|ipod/i.test(navigator.userAgent)
+      
       if (isSafari) {
         // For Safari, show redirecting message
         setIsRedirecting(true)

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
-import { useAuth } from './AuthContext'
+import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useCurrency } from './CurrencyContext'
 import { useApiKeys } from './ApiKeysContext'
 import {

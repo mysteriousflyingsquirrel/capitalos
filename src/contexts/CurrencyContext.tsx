@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import type { CurrencyCode } from '../lib/currency'
 import { getExchangeRates, type ExchangeRates } from '../services/exchangeRateService'
 import { saveUserSettings, loadUserSettings } from '../services/firestoreService'
-import { useAuth } from './AuthContext'
+import { useAuth } from '../lib/dataSafety/authGateCompat'
 
 interface CurrencyContextType {
   baseCurrency: CurrencyCode

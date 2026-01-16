@@ -1,15 +1,14 @@
 /**
- * localStorage keys used as fallback when Firestore is unavailable.
- * Maintained for backwards compatibility with older versions.
+ * Get uid-scoped localStorage key
+ * Format: capitalos:${uid}:${collectionName}
  */
-const STORAGE_KEYS = {
-  NET_WORTH_ITEMS: 'capitalos_net_worth_items_v1',
-  NET_WORTH_TRANSACTIONS: 'capitalos_net_worth_transactions_v1',
-  CASHFLOW_INFLOW_ITEMS: 'capitalos_cashflow_inflow_items_v1',
-  CASHFLOW_OUTFLOW_ITEMS: 'capitalos_cashflow_outflow_items_v1',
-  CASHFLOW_ACCOUNTFLOW_MAPPINGS: 'capitalos_cashflow_accountflow_mappings_v1',
-  PLATFORMS: 'capitalos_platforms_v1',
-} as const
+function getStorageKey(uid: string | undefined, collectionName: string): string {
+  if (uid) {
+    return `capitalos:${uid}:${collectionName}`
+  }
+  // Fallback for backwards compatibility (will be cleared on next user switch)
+  return `capitalos_${collectionName}_v1`
+}
 
 function saveToStorage<T>(key: string, data: T): void {
   try {
@@ -57,9 +56,9 @@ export async function saveNetWorthItems<T extends { id: string }>(
 ): Promise<void> {
   if (uid) {
     await saveNetWorthItemsFirestore(uid, items)
-    saveToStorage(STORAGE_KEYS.NET_WORTH_ITEMS, items)
+    saveToStorage(getStorageKey(uid, 'netWorthItems'), items)
   } else {
-    saveToStorage(STORAGE_KEYS.NET_WORTH_ITEMS, items)
+    saveToStorage(getStorageKey(uid, 'netWorthItems'), items)
   }
 }
 
@@ -71,14 +70,14 @@ export async function loadNetWorthItems<T>(
     try {
       const items = await loadNetWorthItemsFirestore<T>(uid)
       if (items.length > 0) {
-        saveToStorage(STORAGE_KEYS.NET_WORTH_ITEMS, items)
+        saveToStorage(getStorageKey(uid, 'netWorthItems'), items)
         return items
       }
     } catch (error) {
       console.error('Failed to load from Firestore, falling back to localStorage:', error)
     }
   }
-  return loadFromStorage(STORAGE_KEYS.NET_WORTH_ITEMS, defaultValue)
+  return loadFromStorage(getStorageKey(uid, 'netWorthItems'), defaultValue)
 }
 
 export async function saveNetWorthTransactions<T extends { id: string }>(
@@ -87,9 +86,9 @@ export async function saveNetWorthTransactions<T extends { id: string }>(
 ): Promise<void> {
   if (uid) {
     await saveNetWorthTransactionsFirestore(uid, transactions)
-    saveToStorage(STORAGE_KEYS.NET_WORTH_TRANSACTIONS, transactions)
+    saveToStorage(getStorageKey(uid, 'netWorthTransactions'), transactions)
   } else {
-    saveToStorage(STORAGE_KEYS.NET_WORTH_TRANSACTIONS, transactions)
+    saveToStorage(getStorageKey(uid, 'netWorthTransactions'), transactions)
   }
 }
 
@@ -101,14 +100,14 @@ export async function loadNetWorthTransactions<T>(
     try {
       const transactions = await loadNetWorthTransactionsFirestore<T>(uid)
       if (transactions.length > 0) {
-        saveToStorage(STORAGE_KEYS.NET_WORTH_TRANSACTIONS, transactions)
+        saveToStorage(getStorageKey(uid, 'netWorthTransactions'), transactions)
         return transactions
       }
     } catch (error) {
       console.error('Failed to load from Firestore, falling back to localStorage:', error)
     }
   }
-  return loadFromStorage(STORAGE_KEYS.NET_WORTH_TRANSACTIONS, defaultValue)
+  return loadFromStorage(getStorageKey(uid, 'netWorthTransactions'), defaultValue)
 }
 
 export async function saveCashflowInflowItems<T extends { id: string }>(
@@ -117,9 +116,9 @@ export async function saveCashflowInflowItems<T extends { id: string }>(
 ): Promise<void> {
   if (uid) {
     await saveCashflowInflowItemsFirestore(uid, items)
-    saveToStorage(STORAGE_KEYS.CASHFLOW_INFLOW_ITEMS, items)
+    saveToStorage(getStorageKey(uid, 'cashflowInflowItems'), items)
   } else {
-    saveToStorage(STORAGE_KEYS.CASHFLOW_INFLOW_ITEMS, items)
+    saveToStorage(getStorageKey(uid, 'cashflowInflowItems'), items)
   }
 }
 
@@ -131,14 +130,14 @@ export async function loadCashflowInflowItems<T>(
     try {
       const items = await loadCashflowInflowItemsFirestore<T>(uid)
       if (items.length > 0) {
-        saveToStorage(STORAGE_KEYS.CASHFLOW_INFLOW_ITEMS, items)
+        saveToStorage(getStorageKey(uid, 'cashflowInflowItems'), items)
         return items
       }
     } catch (error) {
       console.error('Failed to load from Firestore, falling back to localStorage:', error)
     }
   }
-  return loadFromStorage(STORAGE_KEYS.CASHFLOW_INFLOW_ITEMS, defaultValue)
+  return loadFromStorage(getStorageKey(uid, 'cashflowInflowItems'), defaultValue)
 }
 
 export async function saveCashflowOutflowItems<T extends { id: string }>(
@@ -147,9 +146,9 @@ export async function saveCashflowOutflowItems<T extends { id: string }>(
 ): Promise<void> {
   if (uid) {
     await saveCashflowOutflowItemsFirestore(uid, items)
-    saveToStorage(STORAGE_KEYS.CASHFLOW_OUTFLOW_ITEMS, items)
+    saveToStorage(getStorageKey(uid, 'cashflowOutflowItems'), items)
   } else {
-    saveToStorage(STORAGE_KEYS.CASHFLOW_OUTFLOW_ITEMS, items)
+    saveToStorage(getStorageKey(uid, 'cashflowOutflowItems'), items)
   }
 }
 
@@ -161,14 +160,14 @@ export async function loadCashflowOutflowItems<T>(
     try {
       const items = await loadCashflowOutflowItemsFirestore<T>(uid)
       if (items.length > 0) {
-        saveToStorage(STORAGE_KEYS.CASHFLOW_OUTFLOW_ITEMS, items)
+        saveToStorage(getStorageKey(uid, 'cashflowOutflowItems'), items)
         return items
       }
     } catch (error) {
       console.error('Failed to load from Firestore, falling back to localStorage:', error)
     }
   }
-  return loadFromStorage(STORAGE_KEYS.CASHFLOW_OUTFLOW_ITEMS, defaultValue)
+  return loadFromStorage(getStorageKey(uid, 'cashflowOutflowItems'), defaultValue)
 }
 
 export async function saveCashflowAccountflowMappings<T extends { id: string }>(
@@ -177,9 +176,9 @@ export async function saveCashflowAccountflowMappings<T extends { id: string }>(
 ): Promise<void> {
   if (uid) {
     await saveCashflowAccountflowMappingsFirestore(uid, mappings)
-    saveToStorage(STORAGE_KEYS.CASHFLOW_ACCOUNTFLOW_MAPPINGS, mappings)
+    saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), mappings)
   } else {
-    saveToStorage(STORAGE_KEYS.CASHFLOW_ACCOUNTFLOW_MAPPINGS, mappings)
+    saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), mappings)
   }
 }
 
@@ -191,14 +190,14 @@ export async function loadCashflowAccountflowMappings<T>(
     try {
       const mappings = await loadCashflowAccountflowMappingsFirestore<T>(uid)
       if (mappings.length > 0) {
-        saveToStorage(STORAGE_KEYS.CASHFLOW_ACCOUNTFLOW_MAPPINGS, mappings)
+        saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), mappings)
         return mappings
       }
     } catch (error) {
       console.error('Failed to load from Firestore, falling back to localStorage:', error)
     }
   }
-  return loadFromStorage(STORAGE_KEYS.CASHFLOW_ACCOUNTFLOW_MAPPINGS, defaultValue)
+  return loadFromStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), defaultValue)
 }
 
 export interface Platform {
@@ -216,9 +215,9 @@ export async function savePlatforms(
 ): Promise<void> {
   if (uid) {
     await savePlatformsFirestore(uid, platforms)
-    saveToStorage(STORAGE_KEYS.PLATFORMS, platforms)
+    saveToStorage(getStorageKey(uid, 'platforms'), platforms)
   } else {
-    saveToStorage(STORAGE_KEYS.PLATFORMS, platforms)
+    saveToStorage(getStorageKey(uid, 'platforms'), platforms)
   }
 }
 
@@ -230,12 +229,12 @@ export async function loadPlatforms(
     try {
       const platforms = await loadPlatformsFirestore(uid)
       if (platforms.length > 0) {
-        saveToStorage(STORAGE_KEYS.PLATFORMS, platforms)
+        saveToStorage(getStorageKey(uid, 'platforms'), platforms)
         return platforms
       }
     } catch (error) {
       console.error('Failed to load from Firestore, falling back to localStorage:', error)
     }
   }
-  return loadFromStorage(STORAGE_KEYS.PLATFORMS, defaultValue)
+  return loadFromStorage(getStorageKey(uid, 'platforms'), defaultValue)
 }

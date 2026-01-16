@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { saveUserSettings, loadUserSettings, type UserSettings } from '../services/firestoreService'
-import { useAuth } from './AuthContext'
+import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../config/firebase'
 

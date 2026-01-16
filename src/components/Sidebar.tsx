@@ -1,6 +1,8 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../lib/dataSafety/authGateCompat'
+import { useSyncStatus } from '../lib/dataSafety/syncStatus'
+import { AuthGateState } from '../lib/dataSafety/authGate'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { IncognitoToggle } from './IncognitoToggle'
 import logoIcon from '../icons/capitalos_logo.png'
@@ -43,7 +45,14 @@ function Sidebar() {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [toggleIncognito])
-  const { signOut, email } = useAuth()
+  const { signOut, email, authGateState } = useAuth()
+  const { online, activeListeners, safeMode, quotaExceeded, pendingWrites, lastSyncTime } = useSyncStatus()
+
+  // Determine if syncing
+  const isSyncing = 
+    authGateState === AuthGateState.INITIALIZING_USER ||
+    authGateState === AuthGateState.SUBSCRIBING ||
+    pendingWrites > 0
 
   return (
     <>
@@ -174,6 +183,43 @@ function Sidebar() {
 
         {/* User info and sign out */}
         <div className="px-4 py-4 border-t border-border-subtle">
+          {/* Sync Status */}
+          <div className="mb-3 px-3 py-2 bg-bg-surface-2 rounded-input">
+            <div className="flex items-center gap-2">
+              {isSyncing ? (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                  <span className="text-text-secondary text-xs">Syncing...</span>
+                </>
+              ) : !online ? (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
+                  <span className="text-text-secondary text-xs">Offline</span>
+                </>
+              ) : safeMode || quotaExceeded ? (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                  <span className="text-text-secondary text-xs">Safe Mode</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span className="text-text-secondary text-xs">Synced</span>
+                </>
+              )}
+            </div>
+            {activeListeners > 0 && !isSyncing && (
+              <div className="text-text-muted text-[10px] mt-1">
+                {activeListeners} listener{activeListeners !== 1 ? 's' : ''}
+              </div>
+            )}
+            {lastSyncTime && !isSyncing && (
+              <div className="text-text-muted text-[10px] mt-1">
+                {new Date(lastSyncTime).toLocaleTimeString()}
+              </div>
+            )}
+          </div>
+          
           {email && (
             <div className="mb-3 px-3 py-2 text-text-muted text-xs truncate">
               {email}

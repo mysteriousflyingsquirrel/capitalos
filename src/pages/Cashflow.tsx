@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, FormEvent } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { formatMoney, formatNumber, type CurrencyCode } from '../lib/currency'
 import {

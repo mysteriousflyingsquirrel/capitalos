@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useData } from '../contexts/DataContext'
