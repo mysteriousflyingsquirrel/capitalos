@@ -14,10 +14,14 @@ import {
   type Platform,
 } from './storageService'
 import { clearAllUserData } from './firestoreService'
-import { loadUserSettings, saveBaseCurrency } from '../lib/dataSafety/userSettingsRepo'
+import { loadUserSettings, saveBaseCurrency, saveApiKeys, type ApiKeys } from '../lib/dataSafety/userSettingsRepo'
 import { loadSnapshots, saveSnapshots, type NetWorthSnapshot } from './snapshotService'
+import { doc, setDoc } from 'firebase/firestore'
+import { db } from '../config/firebase'
+import { safeWrite } from '../lib/dataSafety/repository'
 
-const BACKUP_SCHEMA_VERSION = '1.0.0'
+// Schema version 2.0.0 - matches canonical Firestore structure
+const BACKUP_SCHEMA_VERSION = '2.0.0'
 
 export interface BackupData {
   schemaVersion: string
@@ -30,14 +34,17 @@ export interface BackupData {
     cashflowOutflowItems: unknown[]
     cashflowAccountflowMappings: unknown[]
     platforms: unknown[]
-    settings: { baseCurrency: string } | null
+    settings: {
+      baseCurrency?: string
+      apiKeys?: ApiKeys
+    } | null
     snapshots: unknown[]
   }
 }
 
-
 /**
  * Creates a backup object from all user data in Firestore
+ * Uses canonical Firestore paths
  */
 export async function createBackup(uid: string): Promise<BackupData> {
   const [
@@ -60,6 +67,14 @@ export async function createBackup(uid: string): Promise<BackupData> {
     loadSnapshots(uid),
   ])
 
+  // Map settings to export format (canonical structure)
+  const exportSettings = settings
+    ? {
+        baseCurrency: settings.baseCurrency || undefined,
+        apiKeys: settings.apiKeys || undefined,
+      }
+    : null
+
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     userId: uid,
@@ -71,15 +86,15 @@ export async function createBackup(uid: string): Promise<BackupData> {
       cashflowOutflowItems,
       cashflowAccountflowMappings,
       platforms,
-      settings: settings && settings.baseCurrency ? { baseCurrency: settings.baseCurrency } : null,
+      settings: exportSettings,
       snapshots,
     },
   }
 }
 
-
 /**
  * Validates a backup object structure
+ * Supports both v1.0.0 and v2.0.0 schemas
  */
 export function validateBackup(backup: unknown): backup is BackupData {
   if (!backup || typeof backup !== 'object') {
@@ -123,9 +138,11 @@ export function validateBackup(backup: unknown): backup is BackupData {
 
   // settings is optional for backward compatibility
   if (data.settings !== undefined && data.settings !== null) {
-    if (typeof data.settings !== 'object' || !('baseCurrency' in data.settings)) {
+    if (typeof data.settings !== 'object') {
       return false
     }
+    // v1.0.0 only had baseCurrency, v2.0.0 has baseCurrency and apiKeys
+    // Both are valid
   }
 
   // snapshots is optional for backward compatibility
@@ -137,54 +154,229 @@ export function validateBackup(backup: unknown): backup is BackupData {
 }
 
 /**
+ * Maps legacy backup format to canonical format
+ * Handles v1.0.0 and other legacy structures
+ */
+function mapLegacyBackup(backup: any): BackupData {
+  const data = backup.data || {}
+  
+  // Map legacy settings paths to canonical structure
+  let settings: BackupData['data']['settings'] = null
+  
+  if (data.settings) {
+    // v1.0.0 format: { baseCurrency: string }
+    settings = {
+      baseCurrency: data.settings.baseCurrency,
+      // apiKeys not in v1.0.0, will be undefined
+    }
+  } else {
+    // Check for legacy paths
+    if (data.apiKeys || (data as any).settings?.apiKeys) {
+      settings = {
+        baseCurrency: (data as any).baseCurrency || (data as any).settings?.baseCurrency,
+        apiKeys: data.apiKeys || (data as any).settings?.apiKeys,
+      }
+    } else if ((data as any).baseCurrency) {
+      settings = {
+        baseCurrency: (data as any).baseCurrency,
+      }
+    }
+  }
+
+  return {
+    schemaVersion: backup.schemaVersion || '1.0.0',
+    userId: backup.userId || null,
+    exportedAt: backup.exportedAt || new Date().toISOString(),
+    data: {
+      netWorthItems: data.netWorthItems || [],
+      netWorthTransactions: data.netWorthTransactions || [],
+      cashflowInflowItems: data.cashflowInflowItems || [],
+      cashflowOutflowItems: data.cashflowOutflowItems || [],
+      cashflowAccountflowMappings: data.cashflowAccountflowMappings || [],
+      platforms: data.platforms || [],
+      settings,
+      snapshots: data.snapshots || [],
+    },
+  }
+}
+
+/**
  * Restores data from a backup object to Firestore
+ * 
+ * @param backup - Backup data to restore
+ * @param currentUid - Current user ID
+ * @param options - Import options
+ * @param options.mode - 'merge' (default) or 'replace'
+ * @param options.includeSettings - Whether to import settings (default: true)
  */
 export async function restoreBackup(
   backup: BackupData,
   currentUid: string,
-  options: { clearExisting: boolean } = { clearExisting: true }
+  options: {
+    mode?: 'merge' | 'replace'
+    includeSettings?: boolean
+  } = {}
 ): Promise<void> {
+  // Check if offline
+  if (!navigator.onLine) {
+    throw new Error('Cannot import data while offline. Please check your internet connection and try again.')
+  }
+
   // Validate backup
   if (!validateBackup(backup)) {
-    throw new Error('Invalid backup format')
+    throw new Error('Invalid backup file format. Please ensure the file is a valid Capitalos backup.')
   }
+
+  // Map legacy format if needed
+  const normalizedBackup = backup.schemaVersion === '1.0.0' 
+    ? mapLegacyBackup(backup)
+    : backup
+
+  const { mode = 'merge', includeSettings = true } = options
 
   if (backup.userId && backup.userId !== currentUid) {
     console.warn(
-      `Backup was exported by user ${backup.userId}, but restoring to user ${currentUid}`
+      `[BackupService] Backup was exported by user ${backup.userId}, but restoring to user ${currentUid}`
     )
   }
 
-  if (options.clearExisting) {
-    await clearAllUserData(currentUid)
+  try {
+    // REPLACE mode: Clear existing data first
+    if (mode === 'replace') {
+      await clearAllUserData(currentUid)
+    }
+
+    // Import collections (merge or replace)
+    const collectionPromises: Promise<void>[] = []
+
+    // Helper to batch write items with merge
+    // Note: writeBatch.set() doesn't support merge option, so we use setDoc in parallel
+    const batchWriteCollection = async <T extends { id: string }>(
+      items: T[],
+      collectionName: string
+    ): Promise<void> => {
+      if (items.length === 0) return
+
+      const BATCH_SIZE = 500
+      const collectionPath = `users/${currentUid}/${collectionName}`
+
+      for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        const chunk = items.slice(i, i + BATCH_SIZE)
+        
+        // Use Promise.all with setDoc for merge support
+        await Promise.all(
+          chunk.map(async (item) => {
+            if (!item.id) {
+              console.warn(`[BackupService] Skipping item without ID in ${collectionName}:`, item)
+              return
+            }
+            const docRef = doc(db, collectionPath, item.id)
+            // Use setDoc with merge to upsert (create or update)
+            await setDoc(docRef, item, { merge: true })
+          })
+        )
+      }
+    }
+
+    // Import all collections in parallel
+    collectionPromises.push(
+      batchWriteCollection(normalizedBackup.data.netWorthItems as { id: string }[], 'netWorthItems'),
+      batchWriteCollection(
+        normalizedBackup.data.netWorthTransactions as { id: string }[],
+        'netWorthTransactions'
+      ),
+      batchWriteCollection(
+        normalizedBackup.data.cashflowInflowItems as { id: string }[],
+        'cashflowInflowItems'
+      ),
+      batchWriteCollection(
+        normalizedBackup.data.cashflowOutflowItems as { id: string }[],
+        'cashflowOutflowItems'
+      ),
+      batchWriteCollection(
+        normalizedBackup.data.cashflowAccountflowMappings as { id: string }[],
+        'cashflowAccountflowMappings'
+      ),
+      batchWriteCollection(
+        (normalizedBackup.data.platforms || []) as { id: string }[],
+        'platforms'
+      ),
+      batchWriteCollection(
+        (normalizedBackup.data.snapshots || []) as { id: string }[],
+        'snapshots'
+      ),
+    )
+
+    // Import settings (canonical path: users/{uid}/settings/user)
+    if (includeSettings && normalizedBackup.data.settings) {
+      const settings = normalizedBackup.data.settings
+      const settingsDocRef = doc(db, 'users', currentUid, 'settings', 'user')
+
+      const settingsData: any = {}
+
+      if (settings.baseCurrency) {
+        settingsData.baseCurrency = settings.baseCurrency
+      }
+
+      if (settings.apiKeys) {
+        settingsData.apiKeys = settings.apiKeys
+      }
+
+      if (Object.keys(settingsData).length > 0) {
+        // Use safeWrite with merge to preserve existing fields
+        collectionPromises.push(
+          safeWrite(settingsDocRef, settingsData, {
+            origin: 'user',
+            domain: 'settings',
+            merge: true,
+          })
+        )
+      }
+    }
+
+    // Wait for all imports to complete
+    await Promise.all(collectionPromises)
+
+    if (import.meta.env.DEV) {
+      console.log('[BackupService] Import completed successfully:', {
+        mode,
+        includeSettings,
+        collectionsImported: [
+          'netWorthItems',
+          'netWorthTransactions',
+          'cashflowInflowItems',
+          'cashflowOutflowItems',
+          'cashflowAccountflowMappings',
+          'platforms',
+          'snapshots',
+        ],
+      })
+    }
+  } catch (error: any) {
+    // Handle specific Firestore errors
+    if (error?.code === 'resource-exhausted' || error?.message?.includes('quota')) {
+      throw new Error(
+        'Firestore quota exceeded. Please try again later or upgrade your Firebase plan.'
+      )
+    }
+
+    if (error?.code === 'permission-denied') {
+      throw new Error(
+        'Permission denied. Please ensure you are signed in and have access to import data.'
+      )
+    }
+
+    if (error?.code === 'unavailable' || error?.message?.includes('network')) {
+      throw new Error(
+        'Network error. Please check your internet connection and try again.'
+      )
+    }
+
+    // Re-throw with user-friendly message
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+    throw new Error(`Failed to import data: ${errorMessage}`)
   }
-
-  await Promise.all([
-    saveNetWorthItems(backup.data.netWorthItems as { id: string }[], currentUid),
-    saveNetWorthTransactions(
-      backup.data.netWorthTransactions as { id: string }[],
-      currentUid
-    ),
-    saveCashflowInflowItems(
-      backup.data.cashflowInflowItems as { id: string }[],
-      currentUid
-    ),
-    saveCashflowOutflowItems(
-      backup.data.cashflowOutflowItems as { id: string }[],
-      currentUid
-    ),
-    saveCashflowAccountflowMappings(
-      backup.data.cashflowAccountflowMappings as { id: string }[],
-      currentUid
-    ),
-    savePlatforms((backup.data.platforms as Platform[]) || [], currentUid),
-    backup.data.settings && backup.data.settings.baseCurrency
-      ? saveBaseCurrency(currentUid, backup.data.settings.baseCurrency)
-      : Promise.resolve(),
-    saveSnapshots((backup.data.snapshots as NetWorthSnapshot[]) || [], currentUid),
-  ])
 }
-
 
 /**
  * Downloads a backup as a JSON file
@@ -207,9 +399,9 @@ export function downloadBackup(backup: BackupData): void {
   URL.revokeObjectURL(url)
 }
 
-
 /**
  * Reads a backup file from a File object
+ * Validates and normalizes the backup format
  */
 export async function readBackupFile(file: File): Promise<BackupData> {
   return new Promise((resolve, reject) => {
@@ -217,11 +409,19 @@ export async function readBackupFile(file: File): Promise<BackupData> {
     reader.onload = (event) => {
       try {
         const jsonData = JSON.parse(event.target?.result as string)
-        if (validateBackup(jsonData)) {
-          resolve(jsonData as BackupData)
-        } else {
-          reject(new Error('Invalid backup file format'))
+        
+        // Validate backup
+        if (!validateBackup(jsonData)) {
+          reject(new Error('Invalid backup file format. Please ensure the file is a valid Capitalos backup.'))
+          return
         }
+
+        // Normalize legacy formats
+        const normalized = jsonData.schemaVersion === '1.0.0'
+          ? mapLegacyBackup(jsonData)
+          : jsonData
+
+        resolve(normalized as BackupData)
       } catch (error) {
         reject(new Error('Failed to parse JSON file: ' + (error as Error).message))
       }
@@ -232,5 +432,3 @@ export async function readBackupFile(file: File): Promise<BackupData> {
     reader.readAsText(file)
   })
 }
-
-

@@ -140,22 +140,43 @@ function Settings() {
         // Read and validate backup
         const backup = await readBackupFile(file)
 
-        // Show confirmation dialog
-        const confirmed = window.confirm(
-          'Importing this backup will overwrite all your current data. This action cannot be undone.\n\n' +
+        // Show mode selection dialog
+        const modeChoice = window.confirm(
+          'Choose import mode:\n\n' +
+          'OK = Merge (recommended)\n' +
+          '- Adds new items\n' +
+          '- Updates existing items by ID\n' +
+          '- Keeps items not in backup\n\n' +
+          'Cancel = Replace\n' +
+          '- Deletes all existing data\n' +
+          '- Imports only backup data\n' +
+          '- This action cannot be undone\n\n' +
           `Backup exported: ${new Date(backup.exportedAt).toLocaleString()}\n` +
           (backup.userId ? `Original user: ${backup.userId}\n` : '') +
-          `Current user: ${uid}\n\n` +
-          'Do you want to continue?'
+          `Current user: ${uid}`
         )
 
-        if (!confirmed) {
-          setImportLoading(false)
-          return
+        const mode = modeChoice ? 'merge' : 'replace'
+
+        // Additional confirmation for replace mode
+        if (mode === 'replace') {
+          const confirmed = window.confirm(
+            '⚠️ WARNING: Replace mode will DELETE all your current data!\n\n' +
+            'This action cannot be undone.\n\n' +
+            'Are you absolutely sure?'
+          )
+
+          if (!confirmed) {
+            setImportLoading(false)
+            return
+          }
         }
 
-        // Restore backup
-        await restoreBackup(backup, uid, { clearExisting: true })
+        // Restore backup with selected mode
+        await restoreBackup(backup, uid, { 
+          mode,
+          includeSettings: true,
+        })
 
         setImportSuccess(true)
         setTimeout(() => setImportSuccess(false), 3000)
