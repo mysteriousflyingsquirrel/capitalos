@@ -12,6 +12,7 @@ import {
 import { db } from '../config/firebase'
 import type { NetWorthSummary } from '../lib/networth/types'
 import { safeWrite, safeDelete } from '../lib/dataSafety/repository'
+import { safeUpsertDoc, safeUpdateDoc, safeDeleteDoc } from '../lib/firestoreSafeWrite'
 
 // Helper to get user-scoped collection path
 function getUserCollectionPath(uid: string, collectionName: string): string {
@@ -19,14 +20,36 @@ function getUserCollectionPath(uid: string, collectionName: string): string {
 }
 
 /**
- * Saves multiple documents to Firestore in batches.
- * Firestore has a limit of 500 operations per batch, so large arrays are chunked.
+ * ⚠️ DEPRECATED: saveDocuments performs bulk overwrites
+ * 
+ * This function is kept only for Import/Reset flows where bulk overwrite is intentional.
+ * For normal operations, use per-document upserts via safeUpsertDoc.
+ * 
+ * @deprecated Use per-document upserts instead
  */
 export async function saveDocuments<T extends { id: string }>(
   uid: string,
   collectionName: string,
-  items: T[]
+  items: T[],
+  options: {
+    allowBulkOverwrite?: boolean // Must be explicitly true to use this function
+  } = {}
 ): Promise<void> {
+  if (!options.allowBulkOverwrite) {
+    throw new Error(
+      `[FirestoreService] saveDocuments is deprecated and performs bulk overwrites. ` +
+      `Use per-document upserts instead. If you need bulk overwrite (e.g., Import/Reset), ` +
+      `set allowBulkOverwrite: true.`
+    )
+  }
+
+  if (import.meta.env.DEV) {
+    console.warn('[FirestoreService] Using deprecated saveDocuments with bulk overwrite:', {
+      collectionName,
+      itemCount: items.length,
+    })
+  }
+
   const collectionPath = getUserCollectionPath(uid, collectionName)
   const BATCH_SIZE = 500
 
@@ -69,8 +92,7 @@ export async function saveDocuments<T extends { id: string }>(
     chunk.forEach((item) => {
       const docRef = doc(db, collectionPath, item.id)
       // Note: batch.set doesn't support merge option
-      // We use setDoc which will create or overwrite
-      // This is acceptable for item-level writes where each item is independent
+      // This is intentional for bulk overwrite mode (Import/Reset only)
       batch.set(docRef, item)
     })
 
@@ -110,6 +132,8 @@ export async function loadDocuments<T>(
 /**
  * Deletes all documents in a Firestore collection.
  * Firestore has a limit of 500 operations per batch, so large deletions are chunked.
+ * 
+ * ⚠️ Only use for explicit reset/clear operations, not for normal sync.
  */
 export async function deleteAllDocuments(
   uid: string,
@@ -136,48 +160,256 @@ export async function deleteAllDocuments(
   }
 }
 
+/**
+ * Saves a single net worth item (per-document upsert with conflict detection)
+ * 
+ * Use this for individual item updates (add, edit).
+ * Never use for bulk saves - that causes "last write wins" conflicts.
+ */
+export async function saveNetWorthItem<T extends { id: string }>(
+  uid: string,
+  item: T,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  // Filter out Perpetuals items - they're created dynamically, not stored in Firebase
+  if ((item as any).category === 'Perpetuals') {
+    return { success: true } // Skip Perpetuals items
+  }
+
+  const docRef = doc(db, `users/${uid}/netWorthItems/${item.id}`)
+  return await safeUpsertDoc(docRef, item, options)
+}
+
+/**
+ * Deletes a single net worth item (with conflict detection)
+ */
+export async function deleteNetWorthItem(
+  uid: string,
+  itemId: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/netWorthItems/${itemId}`)
+  return await safeDeleteDoc(docRef, options)
+}
+
+/**
+ * Saves a single transaction (per-document upsert with conflict detection)
+ * 
+ * Use this for individual transaction updates (add, edit).
+ * Never use for bulk saves - that causes "last write wins" conflicts.
+ */
+export async function saveNetWorthTransaction<T extends { id: string }>(
+  uid: string,
+  transaction: T,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/netWorthTransactions/${transaction.id}`)
+  return await safeUpsertDoc(docRef, transaction, options)
+}
+
+/**
+ * Deletes a single transaction (with conflict detection)
+ */
+export async function deleteNetWorthTransaction(
+  uid: string,
+  transactionId: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/netWorthTransactions/${transactionId}`)
+  return await safeDeleteDoc(docRef, options)
+}
+
+/**
+ * ⚠️ DEPRECATED: saveNetWorthItems performs bulk overwrites
+ * 
+ * This function is kept only for Import/Reset flows.
+ * For normal operations, use saveNetWorthItem for individual items.
+ * 
+ * @deprecated Use per-document upserts instead
+ */
 export async function saveNetWorthItems<T extends { id: string }>(
   uid: string,
-  items: T[]
+  items: T[],
+  options: {
+    allowBulkOverwrite?: boolean
+  } = {}
 ): Promise<void> {
+  if (!options.allowBulkOverwrite) {
+    if (import.meta.env.DEV) {
+      console.error('[FirestoreService] saveNetWorthItems called without allowBulkOverwrite. This causes "last write wins" conflicts!', {
+        itemCount: items.length,
+        stack: new Error().stack,
+      })
+    }
+    throw new Error(
+      `[FirestoreService] saveNetWorthItems performs bulk overwrites and causes conflicts. ` +
+      `Use saveNetWorthItem for individual items. If you need bulk overwrite (Import/Reset), ` +
+      `set allowBulkOverwrite: true.`
+    )
+  }
+
   // Filter out Perpetuals items - they're created dynamically, not stored in Firebase
   const itemsToSave = items.filter(item => (item as any).category !== 'Perpetuals')
-  await saveDocuments(uid, 'netWorthItems', itemsToSave)
+  await saveDocuments(uid, 'netWorthItems', itemsToSave, { allowBulkOverwrite: true })
 }
 
 export async function loadNetWorthItems<T>(uid: string): Promise<T[]> {
   const items = await loadDocuments<T>(uid, 'netWorthItems')
-  // Filter out any Perpetuals items that might have been saved before (legacy data)
-  return items.filter(item => (item as any).category !== 'Perpetuals')
+  return items
 }
 
+/**
+ * ⚠️ DEPRECATED: saveNetWorthTransactions performs bulk overwrites
+ * 
+ * This function is kept only for Import/Reset flows.
+ * For normal operations, use saveNetWorthTransaction for individual transactions.
+ * 
+ * @deprecated Use per-document upserts instead
+ */
 export async function saveNetWorthTransactions<T extends { id: string }>(
   uid: string,
-  transactions: T[]
+  transactions: T[],
+  options: {
+    allowBulkOverwrite?: boolean
+  } = {}
 ): Promise<void> {
-  await saveDocuments(uid, 'netWorthTransactions', transactions)
+  if (!options.allowBulkOverwrite) {
+    if (import.meta.env.DEV) {
+      console.error('[FirestoreService] saveNetWorthTransactions called without allowBulkOverwrite. This causes "last write wins" conflicts!', {
+        transactionCount: transactions.length,
+        stack: new Error().stack,
+      })
+    }
+    throw new Error(
+      `[FirestoreService] saveNetWorthTransactions performs bulk overwrites and causes conflicts. ` +
+      `Use saveNetWorthTransaction for individual transactions. If you need bulk overwrite (Import/Reset), ` +
+      `set allowBulkOverwrite: true.`
+    )
+  }
+
+  await saveDocuments(uid, 'netWorthTransactions', transactions, { allowBulkOverwrite: true })
 }
 
 export async function loadNetWorthTransactions<T>(uid: string): Promise<T[]> {
-  return loadDocuments<T>(uid, 'netWorthTransactions')
+  const transactions = await loadDocuments<T>(uid, 'netWorthTransactions')
+  return transactions
 }
 
+// Similar functions for cashflow items (per-document upserts)
+export async function saveCashflowInflowItem<T extends { id: string }>(
+  uid: string,
+  item: T,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/cashflowInflowItems/${item.id}`)
+  return await safeUpsertDoc(docRef, item, options)
+}
+
+export async function deleteCashflowInflowItem(
+  uid: string,
+  itemId: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/cashflowInflowItems/${itemId}`)
+  return await safeDeleteDoc(docRef, options)
+}
+
+/**
+ * ⚠️ DEPRECATED: saveCashflowInflowItems performs bulk overwrites
+ */
 export async function saveCashflowInflowItems<T extends { id: string }>(
   uid: string,
-  items: T[]
+  items: T[],
+  options: {
+    allowBulkOverwrite?: boolean
+  } = {}
 ): Promise<void> {
-  await saveDocuments(uid, 'cashflowInflowItems', items)
+  if (!options.allowBulkOverwrite) {
+    if (import.meta.env.DEV) {
+      console.error('[FirestoreService] saveCashflowInflowItems called without allowBulkOverwrite. This causes "last write wins" conflicts!', {
+        itemCount: items.length,
+        stack: new Error().stack,
+      })
+    }
+    throw new Error(
+      `[FirestoreService] saveCashflowInflowItems performs bulk overwrites and causes conflicts. ` +
+      `Use saveCashflowInflowItem for individual items. If you need bulk overwrite (Import/Reset), ` +
+      `set allowBulkOverwrite: true.`
+    )
+  }
+  await saveDocuments(uid, 'cashflowInflowItems', items, { allowBulkOverwrite: true })
 }
 
 export async function loadCashflowInflowItems<T>(uid: string): Promise<T[]> {
   return loadDocuments<T>(uid, 'cashflowInflowItems')
 }
 
+export async function saveCashflowOutflowItem<T extends { id: string }>(
+  uid: string,
+  item: T,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/cashflowOutflowItems/${item.id}`)
+  return await safeUpsertDoc(docRef, item, options)
+}
+
+export async function deleteCashflowOutflowItem(
+  uid: string,
+  itemId: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/cashflowOutflowItems/${itemId}`)
+  return await safeDeleteDoc(docRef, options)
+}
+
+/**
+ * ⚠️ DEPRECATED: saveCashflowOutflowItems performs bulk overwrites
+ */
 export async function saveCashflowOutflowItems<T extends { id: string }>(
   uid: string,
-  items: T[]
+  items: T[],
+  options: {
+    allowBulkOverwrite?: boolean
+  } = {}
 ): Promise<void> {
-  await saveDocuments(uid, 'cashflowOutflowItems', items)
+  if (!options.allowBulkOverwrite) {
+    if (import.meta.env.DEV) {
+      console.error('[FirestoreService] saveCashflowOutflowItems called without allowBulkOverwrite. This causes "last write wins" conflicts!', {
+        itemCount: items.length,
+        stack: new Error().stack,
+      })
+    }
+    throw new Error(
+      `[FirestoreService] saveCashflowOutflowItems performs bulk overwrites and causes conflicts. ` +
+      `Use saveCashflowOutflowItem for individual items. If you need bulk overwrite (Import/Reset), ` +
+      `set allowBulkOverwrite: true.`
+    )
+  }
+  await saveDocuments(uid, 'cashflowOutflowItems', items, { allowBulkOverwrite: true })
 }
 
 export async function loadCashflowOutflowItems<T>(uid: string): Promise<T[]> {
@@ -186,9 +418,18 @@ export async function loadCashflowOutflowItems<T>(uid: string): Promise<T[]> {
 
 export async function saveCashflowAccountflowMappings<T extends { id: string }>(
   uid: string,
-  mappings: T[]
+  mappings: T[],
+  options: {
+    allowBulkOverwrite?: boolean
+  } = {}
 ): Promise<void> {
-  await saveDocuments(uid, 'cashflowAccountflowMappings', mappings)
+  if (!options.allowBulkOverwrite) {
+    throw new Error(
+      `[FirestoreService] saveCashflowAccountflowMappings performs bulk overwrites. ` +
+      `If you need bulk overwrite (Import/Reset), set allowBulkOverwrite: true.`
+    )
+  }
+  await saveDocuments(uid, 'cashflowAccountflowMappings', mappings, { allowBulkOverwrite: true })
 }
 
 export async function loadCashflowAccountflowMappings<T>(uid: string): Promise<T[]> {
@@ -199,18 +440,27 @@ export interface Platform {
   id: string
   name: string
   order: number
-  /** Whether this platform is the default for Analytics page */
   isDefault?: boolean
-  /** Safety buffer for Analytics page (per platform) */
-  safetyBuffer?: number
-}
-
-export async function savePlatforms(uid: string, platforms: Platform[]): Promise<void> {
-  await saveDocuments(uid, 'platforms', platforms)
 }
 
 export async function loadPlatforms(uid: string): Promise<Platform[]> {
   return loadDocuments<Platform>(uid, 'platforms')
+}
+
+export async function savePlatforms(
+  uid: string,
+  platforms: Platform[],
+  options: {
+    allowBulkOverwrite?: boolean
+  } = {}
+): Promise<void> {
+  if (!options.allowBulkOverwrite) {
+    throw new Error(
+      `[FirestoreService] savePlatforms performs bulk overwrites. ` +
+      `If you need bulk overwrite (Import/Reset), set allowBulkOverwrite: true.`
+    )
+  }
+  await saveDocuments(uid, 'platforms', platforms, { allowBulkOverwrite: true })
 }
 
 export interface UserSettings {
@@ -332,6 +582,8 @@ export async function loadNetWorthSummaryFirestore(uid: string): Promise<NetWort
 
 /**
  * Deletes all user data from Firestore, including collections and settings document.
+ * 
+ * ⚠️ Only use for explicit reset/clear operations.
  */
 export async function clearAllUserData(uid: string): Promise<void> {
   const collections = [
@@ -360,4 +612,3 @@ export async function clearAllUserData(uid: string): Promise<void> {
     })(),
   ])
 }
-

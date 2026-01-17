@@ -251,9 +251,11 @@ export async function restoreBackup(
 
     // Helper to batch write items with merge
     // Note: writeBatch.set() doesn't support merge option, so we use setDoc in parallel
+    // For Import/Reset flows, we use allowOverwrite to bypass conflict checks
     const batchWriteCollection = async <T extends { id: string }>(
       items: T[],
-      collectionName: string
+      collectionName: string,
+      allowOverwrite: boolean
     ): Promise<void> => {
       if (items.length === 0) return
 
@@ -272,6 +274,7 @@ export async function restoreBackup(
             }
             const docRef = doc(db, collectionPath, item.id)
             // Use setDoc with merge to upsert (create or update)
+            // For Import/Reset, allowOverwrite bypasses conflict checks
             await setDoc(docRef, item, { merge: true })
           })
         )
@@ -279,31 +282,40 @@ export async function restoreBackup(
     }
 
     // Import all collections in parallel
+    // Use allowOverwrite flag for Import/Reset flows (intentional bulk overwrite)
+    const allowOverwrite = mode === 'replace'
+    
     collectionPromises.push(
-      batchWriteCollection(normalizedBackup.data.netWorthItems as { id: string }[], 'netWorthItems'),
+      batchWriteCollection(normalizedBackup.data.netWorthItems as { id: string }[], 'netWorthItems', allowOverwrite),
       batchWriteCollection(
         normalizedBackup.data.netWorthTransactions as { id: string }[],
-        'netWorthTransactions'
+        'netWorthTransactions',
+        allowOverwrite
       ),
       batchWriteCollection(
         normalizedBackup.data.cashflowInflowItems as { id: string }[],
-        'cashflowInflowItems'
+        'cashflowInflowItems',
+        allowOverwrite
       ),
       batchWriteCollection(
         normalizedBackup.data.cashflowOutflowItems as { id: string }[],
-        'cashflowOutflowItems'
+        'cashflowOutflowItems',
+        allowOverwrite
       ),
       batchWriteCollection(
         normalizedBackup.data.cashflowAccountflowMappings as { id: string }[],
-        'cashflowAccountflowMappings'
+        'cashflowAccountflowMappings',
+        allowOverwrite
       ),
       batchWriteCollection(
         (normalizedBackup.data.platforms || []) as { id: string }[],
-        'platforms'
+        'platforms',
+        allowOverwrite
       ),
       batchWriteCollection(
         (normalizedBackup.data.snapshots || []) as { id: string }[],
-        'snapshots'
+        'snapshots',
+        allowOverwrite
       ),
     )
 

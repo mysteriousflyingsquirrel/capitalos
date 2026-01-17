@@ -14,9 +14,11 @@ import { useData } from '../contexts/DataContext'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
 import {
-  saveNetWorthItems,
+  saveNetWorthItem,
+  deleteNetWorthItem,
   loadNetWorthItems,
-  saveNetWorthTransactions,
+  saveNetWorthTransaction,
+  deleteNetWorthTransaction,
   loadNetWorthTransactions,
   loadPlatforms,
   type Platform,
@@ -937,15 +939,9 @@ function NetWorth() {
 
   // Perpetuals data is refreshed by DataContext, no need to refresh here
 
-  // Save to Firestore whenever data changes
-  useEffect(() => {
-    if (uid && !dataLoading) {
-      saveNetWorthItems(netWorthItems, uid).catch((error) => {
-        console.error('Failed to save net worth items:', error)
-      })
-    }
-  }, [netWorthItems, uid, dataLoading])
-
+  // ⚠️ REMOVED: Auto-save useEffect hooks
+  // These caused "last write wins" conflicts when Device B synced stale data.
+  // Now we only save on explicit user actions (add, edit, delete) using per-document saves.
 
   // Helper function to remove undefined values from an object (Firestore doesn't allow undefined)
   const removeUndefined = <T extends Record<string, any>>(obj: T): Partial<T> => {
@@ -957,24 +953,6 @@ function NetWorth() {
     })
     return cleaned
   }
-
-  useEffect(() => {
-    // Skip if we're manually saving to avoid race conditions
-    if (isManuallySaving.current) {
-      console.log('Skipping useEffect save - manual save in progress')
-      return
-    }
-    if (uid && !dataLoading) {
-      console.log('useEffect: Saving transactions (count:', transactions.length, ')')
-      // Clean all transactions before saving (remove undefined values)
-      const cleanedTransactions = transactions
-        .filter(tx => tx.id) // Ensure id exists
-        .map(tx => removeUndefined(tx) as NetWorthTransaction)
-      saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
-        console.error('Failed to save transactions:', error)
-      })
-    }
-  }, [transactions, uid, dataLoading])
 
   // Fetch crypto prices and USD→CHF rate for all crypto items
   const fetchAllCryptoPrices = async (showLoading = false) => {
@@ -1129,7 +1107,7 @@ function NetWorth() {
   )
 
 
-  const handleAddItem = (
+  const handleAddItem = async (
     category: NetWorthCategory,
     data: { name: string; currency: string; platform: string; monthlyDepreciationChf?: number }
   ) => {
@@ -1147,19 +1125,32 @@ function NetWorth() {
       ...(data.monthlyDepreciationChf !== undefined && { monthlyDepreciationChf: data.monthlyDepreciationChf }),
     }
 
+    // Update local state immediately (optimistic update)
     setNetWorthItems((prev) => [...prev, newItem])
+    
+    // Save to Firestore (per-document upsert with conflict detection)
+    if (uid) {
+      const cleanedItem = removeUndefined(newItem) as NetWorthItem
+      const result = await saveNetWorthItem(cleanedItem, uid)
+      if (!result.success) {
+        console.error('[NetWorth] Failed to save new item:', result.reason)
+        // Optionally revert optimistic update on error
+        // For now, we keep it and let the user retry
+      }
+    }
+    
     // Don't close the modal here - let the modal close itself after transaction is saved
     
     // Return the item ID so it can be used for creating the transaction
     return id
   }
   
-  const handleAddItemWithTransaction = (
+  const handleAddItemWithTransaction = async (
     category: NetWorthCategory,
     data: { name: string; currency: string; platform: string },
     transactionData?: Omit<NetWorthTransaction, 'id' | 'itemId'>
   ) => {
-    const itemId = handleAddItem(category, data)
+    const itemId = await handleAddItem(category, data)
     
     // If transaction data is provided, create the transaction
     if (transactionData && itemId) {
@@ -1174,18 +1165,17 @@ function NetWorth() {
         ...transactionData,
       }
       
-      setTransactions((prev) => {
-        const updated = [...prev, newTransaction]
-        // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
-        if (uid) {
-          // Clean all transactions before saving (remove undefined values)
-          const cleanedTransactions = updated.map(tx => removeUndefined(tx) as NetWorthTransaction)
-          saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
-            console.error('Failed to save transaction when adding item:', error)
-          })
+      // Update local state immediately (optimistic update)
+      setTransactions((prev) => [...prev, newTransaction])
+      
+      // Save to Firestore (per-document upsert with conflict detection)
+      if (uid) {
+        const cleanedTransaction = removeUndefined(newTransaction) as NetWorthTransaction
+        const result = await saveNetWorthTransaction(cleanedTransaction, uid)
+        if (!result.success) {
+          console.error('[NetWorth] Failed to save new transaction:', result.reason)
         }
-        return updated
-      })
+      }
     }
   }
 
@@ -1193,7 +1183,7 @@ function NetWorth() {
     setTransactionItemId(itemId)
   }
 
-  const handleSaveTransaction = (transaction: Omit<NetWorthTransaction, 'id'>) => {
+  const handleSaveTransaction = async (transaction: Omit<NetWorthTransaction, 'id'>) => {
     const id =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
@@ -1205,38 +1195,24 @@ function NetWorth() {
     }
 
     // Remove undefined values before saving (Firestore doesn't allow undefined)
-    const cleanedTransaction = removeUndefined(newTransaction)
+    const cleanedTransaction = removeUndefined(newTransaction) as NetWorthTransaction
 
-    console.log('Saving transaction:', cleanedTransaction)
-    console.log('UID:', uid)
+    if (import.meta.env.DEV) {
+      console.log('[NetWorth] Saving transaction:', cleanedTransaction)
+    }
 
-    // Update state (keep original with undefined for local state)
-    isManuallySaving.current = true
-    setTransactions((prev) => {
-      const updated = [...prev, newTransaction]
-      // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
-      if (uid) {
-        // Clean all transactions before saving (remove undefined values)
-        const cleanedTransactions = updated
-          .filter(tx => tx.id) // Ensure id exists
-          .map(tx => removeUndefined(tx) as NetWorthTransaction)
-        console.log('Calling saveNetWorthTransactions with', cleanedTransactions.length, 'transactions')
-        saveNetWorthTransactions(cleanedTransactions, uid)
-          .then(() => {
-            console.log('Successfully saved transactions to Firestore')
-            isManuallySaving.current = false
-          })
-          .catch((error) => {
-            console.error('Failed to save transaction:', error)
-            console.error('Error details:', error.message, error.stack)
-            isManuallySaving.current = false
-          })
-      } else {
-        console.warn('Cannot save transaction: uid is not available')
-        isManuallySaving.current = false
+    // Update local state immediately (optimistic update)
+    setTransactions((prev) => [...prev, newTransaction])
+    
+    // Save to Firestore (per-document upsert with conflict detection)
+    if (uid) {
+      const result = await saveNetWorthTransaction(cleanedTransaction, uid)
+      if (!result.success) {
+        console.error('[NetWorth] Failed to save transaction:', result.reason)
+        // Optionally revert optimistic update on error
+        // For now, we keep it and let the user retry
       }
-      return updated
-    })
+    }
     
     // Only clear transactionItemId if we're in the Add Transaction modal context
     // (not when called from Add Item modal)
@@ -1250,56 +1226,105 @@ function NetWorth() {
     setShowTransactionsItemId(null) // Close the transactions modal
   }
 
-  const handleUpdateTransaction = (transactionId: string, transaction: Omit<NetWorthTransaction, 'id'>) => {
-      setTransactions((prev) => {
-        const updated = prev.map((tx) => (tx.id === transactionId ? { ...tx, ...transaction } : tx))
-        // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
-        if (uid) {
-          // Clean all transactions before saving (remove undefined values)
-          const cleanedTransactions = updated.map(tx => removeUndefined(tx) as NetWorthTransaction)
-          saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
-            console.error('Failed to save updated transaction:', error)
-          })
-        }
-        return updated
+  const handleUpdateTransaction = async (transactionId: string, transaction: Omit<NetWorthTransaction, 'id'>) => {
+    // Find the existing transaction to get its updatedAt timestamp for conflict detection
+    const existingTransaction = transactions.find(tx => tx.id === transactionId)
+    const clientUpdatedAt = existingTransaction?.updatedAt 
+      ? new Date((existingTransaction.updatedAt as any).toMillis?.() || existingTransaction.updatedAt)
+      : null
+
+    // Update local state immediately (optimistic update)
+    setTransactions((prev) => {
+      return prev.map((tx) => (tx.id === transactionId ? { ...tx, ...transaction } : tx))
+    })
+    
+    // Save to Firestore (per-document upsert with conflict detection)
+    if (uid) {
+      const updatedTransaction: NetWorthTransaction = {
+        id: transactionId,
+        ...transaction,
+      }
+      const cleanedTransaction = removeUndefined(updatedTransaction) as NetWorthTransaction
+      const result = await saveNetWorthTransaction(cleanedTransaction, uid, {
+        clientUpdatedAt,
       })
+      if (!result.success) {
+        console.error('[NetWorth] Failed to save updated transaction:', result.reason)
+        // Optionally revert optimistic update on error
+        // For now, we keep it and let the user retry
+      }
+    }
+    
     setEditingTransactionId(null)
   }
 
-  const handleDeleteTransaction = (transactionId: string) => {
-    setTransactions((prev) => {
-      const updated = prev.filter((tx) => tx.id !== transactionId)
-      // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
-      if (uid) {
-        // Clean all transactions before saving (remove undefined values)
-        const cleanedTransactions = updated.map(tx => removeUndefined(tx) as NetWorthTransaction)
-        saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
-          console.error('Failed to save after deleting transaction:', error)
-        })
+  const handleDeleteTransaction = async (transactionId: string) => {
+    // Find the existing transaction to get its updatedAt timestamp for conflict detection
+    const existingTransaction = transactions.find(tx => tx.id === transactionId)
+    const clientUpdatedAt = existingTransaction?.updatedAt 
+      ? new Date((existingTransaction.updatedAt as any).toMillis?.() || existingTransaction.updatedAt)
+      : null
+
+    // Update local state immediately (optimistic update)
+    setTransactions((prev) => prev.filter((tx) => tx.id !== transactionId))
+    
+    // Delete from Firestore (with conflict detection)
+    if (uid) {
+      const result = await deleteNetWorthTransaction(transactionId, uid, {
+        clientUpdatedAt,
+      })
+      if (!result.success) {
+        console.error('[NetWorth] Failed to delete transaction:', result.reason)
+        // Optionally revert optimistic update on error
+        // For now, we keep it and let the user retry
       }
-      return updated
-    })
+    }
   }
 
   const handleShowMenu = (itemId: string, buttonElement: HTMLButtonElement) => {
     // This function is kept for interface compatibility but ItemMenu manages its own menu now
   }
 
-  const handleRemoveItem = (itemId: string) => {
+  const handleRemoveItem = async (itemId: string) => {
     if (window.confirm('Are you sure you want to remove this item? All associated transactions will also be removed.')) {
+      // Find the existing item to get its updatedAt timestamp for conflict detection
+      const existingItem = netWorthItems.find(item => item.id === itemId)
+      const clientUpdatedAt = existingItem?.updatedAt 
+        ? new Date((existingItem.updatedAt as any).toMillis?.() || existingItem.updatedAt)
+        : null
+
+      // Find all transactions for this item
+      const transactionsToDelete = transactions.filter(tx => tx.itemId === itemId)
+
+      // Update local state immediately (optimistic update)
       setNetWorthItems((prev) => prev.filter(i => i.id !== itemId))
-      setTransactions((prev) => {
-        const updated = prev.filter(tx => tx.itemId !== itemId)
-        // Immediately save to Firestore (dataLoading check not needed here as user action implies data is loaded)
-        if (uid) {
-          // Clean all transactions before saving (remove undefined values)
-          const cleanedTransactions = updated.map(tx => removeUndefined(tx) as NetWorthTransaction)
-          saveNetWorthTransactions(cleanedTransactions, uid).catch((error) => {
-            console.error('Failed to save after removing item:', error)
-          })
+      setTransactions((prev) => prev.filter(tx => tx.itemId !== itemId))
+      
+      // Delete from Firestore (per-document deletes with conflict detection)
+      if (uid) {
+        // Delete the item
+        const itemResult = await deleteNetWorthItem(itemId, uid, {
+          clientUpdatedAt,
+        })
+        if (!itemResult.success) {
+          console.error('[NetWorth] Failed to delete item:', itemResult.reason)
         }
-        return updated
-      })
+
+        // Delete all associated transactions
+        await Promise.all(
+          transactionsToDelete.map(async (tx) => {
+            const txClientUpdatedAt = tx.updatedAt 
+              ? new Date((tx.updatedAt as any).toMillis?.() || tx.updatedAt)
+              : null
+            const result = await deleteNetWorthTransaction(tx.id, uid, {
+              clientUpdatedAt: txClientUpdatedAt,
+            })
+            if (!result.success) {
+              console.error(`[NetWorth] Failed to delete transaction ${tx.id}:`, result.reason)
+            }
+          })
+        )
+      }
     }
   }
 
@@ -1311,7 +1336,14 @@ function NetWorth() {
     setEditingItemId(itemId)
   }
 
-  const handleSaveEditItem = (itemId: string, newName: string, currency: string, platform: string, monthlyDepreciationChf?: number) => {
+  const handleSaveEditItem = async (itemId: string, newName: string, currency: string, platform: string, monthlyDepreciationChf?: number) => {
+    // Find the existing item to get its updatedAt timestamp for conflict detection
+    const existingItem = netWorthItems.find(item => item.id === itemId)
+    const clientUpdatedAt = existingItem?.updatedAt 
+      ? new Date((existingItem.updatedAt as any).toMillis?.() || existingItem.updatedAt)
+      : null
+
+    // Update local state immediately (optimistic update)
     setNetWorthItems((prev) =>
       prev.map((item) => 
         item.id === itemId 
@@ -1325,6 +1357,27 @@ function NetWorth() {
           : item
       )
     )
+    
+    // Save to Firestore (per-document upsert with conflict detection)
+    if (uid && existingItem) {
+      const updatedItem: NetWorthItem = {
+        ...existingItem,
+        name: newName.trim(),
+        currency,
+        platform,
+        ...(monthlyDepreciationChf !== undefined && { monthlyDepreciationChf }),
+      }
+      const cleanedItem = removeUndefined(updatedItem) as NetWorthItem
+      const result = await saveNetWorthItem(cleanedItem, uid, {
+        clientUpdatedAt,
+      })
+      if (!result.success) {
+        console.error('[NetWorth] Failed to save edited item:', result.reason)
+        // Optionally revert optimistic update on error
+        // For now, we keep it and let the user retry
+      }
+    }
+    
     setEditingItemId(null)
   }
 

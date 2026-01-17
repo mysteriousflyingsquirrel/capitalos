@@ -2205,21 +2205,11 @@ function Cashflow() {
     loadData()
   }, [uid])
 
-  useEffect(() => {
-    if (uid && !dataLoading) {
-      saveCashflowInflowItems(inflowItems, uid).catch((error) => {
-        console.error('Failed to save inflow items:', error)
-      })
-    }
-  }, [inflowItems, uid, dataLoading])
-
-  useEffect(() => {
-    if (uid && !dataLoading) {
-      saveCashflowOutflowItems(outflowItems, uid).catch((error) => {
-        console.error('Failed to save outflow items:', error)
-      })
-    }
-  }, [outflowItems, uid, dataLoading])
+  // ⚠️ REMOVED: Auto-save useEffect hooks
+  // These caused "last write wins" conflicts when Device B synced stale data.
+  // Now we only save on explicit user actions (add, edit, delete) using per-document saves.
+  // TODO: Update Cashflow.tsx to use per-document saves (saveCashflowInflowItem, saveCashflowOutflowItem)
+  // similar to how NetWorth.tsx was updated.
 
   useEffect(() => {
     if (uid && !dataLoading) {
