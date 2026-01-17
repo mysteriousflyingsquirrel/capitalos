@@ -65,13 +65,9 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         // New uid, reset loading state
         setApiKeysLoaded(false)
         setIsLoading(true)
-      } else if (!uidChanged && haveLoadedForThisUid) {
-        // Same uid, keys already loaded - don't reload, keep apiKeysLoaded as true
-        console.log('[ApiKeysContext] Keys already loaded for this uid, skipping reload')
-        return
       }
-      
-      // If we get here, either uid changed (and we're loading) or it's the first load
+      // Always reload keys from Firestore to ensure state matches (even if uid hasn't changed)
+      // This prevents the issue where React state resets to null after remount but ref says loaded
 
       try {
         const settings = await loadUserSettings(uid)
