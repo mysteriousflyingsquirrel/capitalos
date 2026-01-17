@@ -1,8 +1,27 @@
 import type { PerpetualsData } from '../pages/NetWorth'
 
-export async function fetchAsterPerpetualsData(uid: string): Promise<PerpetualsData | null> {
+export async function fetchAsterPerpetualsData(args: {
+  uid: string
+  apiKey: string
+  apiSecret: string | null
+}): Promise<PerpetualsData | null> {
+  // Return null if keys are missing
+  if (!args.apiKey || !args.apiSecret) {
+    return null
+  }
+
   try {
-    const response = await fetch(`/api/perpetuals/aster?uid=${encodeURIComponent(uid)}`)
+    const response = await fetch(`/api/perpetuals/aster`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        uid: args.uid,
+        apiKey: args.apiKey,
+        apiSecret: args.apiSecret,
+      }),
+    })
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))

@@ -424,34 +424,28 @@ async function fetchHyperliquidPerpetualsData(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed. Use GET.' })
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed. Use POST.' })
   }
 
   try {
     initializeAdmin()
 
-    const uid = req.query?.uid as string
+    // Get wallet address from request body (passed from client)
+    const { uid, walletAddress } = req.body as {
+      uid?: string
+      walletAddress?: string
+    }
 
     if (!uid || typeof uid !== 'string') {
       return res.status(400).json({ 
-        error: 'User ID (uid) is required. Provide it as a query parameter ?uid=your-user-id' 
+        error: 'User ID (uid) is required in request body' 
       })
     }
 
-    const db = admin.firestore()
-    const settingsDoc = await db.collection(`users/${uid}/settings`).doc('user').get()
-    
-    if (!settingsDoc.exists) {
-      return res.status(404).json({ error: 'User settings not found' })
-    }
-
-    const settings = settingsDoc.data()
-    const walletAddress = settings?.apiKeys?.hyperliquidWalletAddress
-
     if (!walletAddress) {
       return res.status(400).json({ 
-        error: 'Hyperliquid wallet address not configured. Please configure Wallet Address in Settings.' 
+        error: 'Hyperliquid wallet address is required in request body' 
       })
     }
 

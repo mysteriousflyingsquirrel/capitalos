@@ -268,35 +268,29 @@ async function fetchAsterPerpetualsData(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed. Use GET.' })
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed. Use POST.' })
   }
 
   try {
     initializeAdmin()
 
-    const uid = req.query?.uid as string
+    // Get keys from request body (passed from client)
+    const { uid, apiKey, apiSecret } = req.body as {
+      uid?: string
+      apiKey?: string
+      apiSecret?: string
+    }
 
     if (!uid || typeof uid !== 'string') {
       return res.status(400).json({ 
-        error: 'User ID (uid) is required. Provide it as a query parameter ?uid=your-user-id' 
+        error: 'User ID (uid) is required in request body' 
       })
     }
 
-    const db = admin.firestore()
-    const settingsDoc = await db.collection(`users/${uid}/settings`).doc('user').get()
-    
-    if (!settingsDoc.exists) {
-      return res.status(404).json({ error: 'User settings not found' })
-    }
-
-    const settings = settingsDoc.data()
-    const apiKey = settings?.apiKeys?.asterApiKey
-    const apiSecret = settings?.apiKeys?.asterApiSecretKey
-
     if (!apiKey || !apiSecret) {
       return res.status(400).json({ 
-        error: 'Aster API credentials not configured. Please configure API Key and Secret Key in Settings.' 
+        error: 'Aster API credentials (apiKey and apiSecret) are required in request body' 
       })
     }
 

@@ -244,22 +244,21 @@ export function DataProvider({ children }: DataProviderProps) {
       console.log('[DataContext] fetchPerpetualsData: Fetching Aster, Hyperliquid, and Kraken data...')
       
       // Fetch Aster and Hyperliquid data (Kraken uses WebSocket only)
-      // Only fetch if keys are available (services will return null if keys are missing)
+      // Pass keys explicitly - services will return null if keys are missing
       const fetchPromises: Promise<PerpetualsData | null>[] = []
       
-      // Only fetch Aster if key is available
-      if (asterApiKey && asterApiSecretKey) {
-        fetchPromises.push(fetchAsterPerpetualsData(uid))
-      } else {
-        fetchPromises.push(Promise.resolve(null))
-      }
+      // Fetch Aster - pass keys explicitly
+      fetchPromises.push(fetchAsterPerpetualsData({
+        uid,
+        apiKey: asterApiKey || '',
+        apiSecret: asterApiSecretKey || null,
+      }))
       
-      // Only fetch Hyperliquid if wallet address is available
-      if (hyperliquidWalletAddress) {
-        fetchPromises.push(fetchHyperliquidPerpetualsData(uid))
-      } else {
-        fetchPromises.push(Promise.resolve(null))
-      }
+      // Fetch Hyperliquid - pass wallet address explicitly
+      fetchPromises.push(fetchHyperliquidPerpetualsData({
+        uid,
+        walletAddress: hyperliquidWalletAddress || '',
+      }))
       
       const [asterData, hyperliquidData] = await Promise.all(fetchPromises)
       
