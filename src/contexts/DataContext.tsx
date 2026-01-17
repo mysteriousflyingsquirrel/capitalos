@@ -797,7 +797,7 @@ export function DataProvider({ children }: DataProviderProps) {
 
     const interval = setInterval(() => {
       refreshAllData()
-    }, 1 * 20 * 1000) // 5 minutes
+    }, 5 * 60 * 1000) // 5 minutes
 
     return () => clearInterval(interval)
   }, [uid, loading])
