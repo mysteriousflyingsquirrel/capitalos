@@ -1,8 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
-import { saveUserSettings, loadUserSettings, type UserSettings } from '../services/firestoreService'
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useRef, ReactNode } from 'react'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
-import { deleteField, doc, updateDoc } from 'firebase/firestore'
-import { db } from '../config/firebase'
+import { deleteField } from 'firebase/firestore'
+import { 
+  loadUserSettings, 
+  saveApiKeys, 
+  type ApiKeys 
+} from '../lib/dataSafety/userSettingsRepo'
 
 // Refs to store keys persistently (survive remounts)
 interface ApiKeysRefs {
@@ -78,16 +81,40 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     if (updates.krakenApiSecretKey !== undefined) setKrakenApiSecretKeyState(updates.krakenApiSecretKey)
   }
 
-  // Load API keys from Firestore on mount
-  useEffect(() => {
-    const loadApiKeys = async () => {
-      // Check if uid changed - if so, reset apiKeysLoaded for new user
-      const uidChanged = prevUidRef.current !== uid
-      const haveLoadedForThisUid = keysLoadedForUidRef.current === uid
-      
-      // Update prevUidRef
+  // Auth boundary reset: Clear all state synchronously when uid changes
+  useLayoutEffect(() => {
+    if (prevUidRef.current !== uid) {
+      const prevUid = prevUidRef.current
       prevUidRef.current = uid
       
+      // Clear all in-memory state
+      updateKeys({
+        rapidApiKey: null,
+        asterApiKey: null,
+        asterApiSecretKey: null,
+        hyperliquidWalletAddress: null,
+        krakenApiKey: null,
+        krakenApiSecretKey: null,
+      })
+      
+      // Reset loaded flags
+      setApiKeysLoaded(false)
+      setIsLoading(true)
+      keysLoadedForUidRef.current = null
+      
+      if (import.meta.env.DEV) {
+        console.log('[ApiKeysContext] Auth boundary reset:', {
+          prevUid,
+          newUid: uid,
+          cleared: true,
+        })
+      }
+    }
+  }, [uid])
+
+  // Load API keys from Firestore using UserSettingsRepository
+  useEffect(() => {
+    const loadApiKeys = async () => {
       if (!uid) {
         setIsLoading(false)
         // Mark as loaded even if no UID (to unblock DataContext)
@@ -95,17 +122,33 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         return
       }
       
-      // Only reset apiKeysLoaded to false if uid changed and we haven't loaded keys for the new uid yet
-      if (uidChanged && !haveLoadedForThisUid) {
-        // New uid, reset loading state
-        setApiKeysLoaded(false)
-        setIsLoading(true)
+      // Check if we've already loaded keys for this uid
+      const haveLoadedForThisUid = keysLoadedForUidRef.current === uid
+      
+      if (import.meta.env.DEV) {
+        console.log('[ApiKeysContext] Loading API keys:', {
+          uid,
+          haveLoadedForThisUid,
+          path: `users/${uid}/settings/user`,
+        })
       }
-      // Always reload keys from Firestore to ensure state matches (even if uid hasn't changed)
-      // This prevents the issue where React state resets to null after remount but ref says loaded
 
       try {
         const settings = await loadUserSettings(uid)
+        
+        if (import.meta.env.DEV) {
+          console.log('[ApiKeysContext] Settings loaded:', {
+            hasSettings: !!settings,
+            hasApiKeys: !!settings?.apiKeys,
+            apiKeysKeys: settings?.apiKeys ? Object.keys(settings.apiKeys) : [],
+            hasAsterKey: !!settings?.apiKeys?.asterApiKey,
+            hasAsterSecret: !!settings?.apiKeys?.asterApiSecretKey,
+            hasHyperliquidKey: !!settings?.apiKeys?.hyperliquidWalletAddress,
+            hasKrakenKey: !!settings?.apiKeys?.krakenApiKey,
+            hasKrakenSecret: !!settings?.apiKeys?.krakenApiSecretKey,
+          })
+        }
+        
         if (settings?.apiKeys) {
           // Load RapidAPI key from settings, or fallback to env variable
           const rapidKey = settings.apiKeys.rapidApiKey || import.meta.env.VITE_RAPIDAPI_KEY || null
@@ -134,13 +177,25 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           })
         }
       } catch (error) {
-        console.error('Error loading API keys:', error)
+        console.error('[ApiKeysContext] Error loading API keys:', error)
+        // On error, still mark as loaded (to unblock DataContext)
+        // Keys will be null, which is acceptable
       } finally {
         setIsLoading(false)
         // Mark keys as loaded after Firestore read completes (even if no keys found)
         setApiKeysLoaded(true)
         // Track that keys were loaded for this uid
         keysLoadedForUidRef.current = uid
+        
+        if (import.meta.env.DEV) {
+          console.log('[ApiKeysContext] API keys loading complete:', {
+            uid,
+            apiKeysLoaded: true,
+            hasAsterKey: !!keysRef.current.asterApiKey,
+            hasAsterSecret: !!keysRef.current.asterApiSecretKey,
+            hasHyperliquidKey: !!keysRef.current.hyperliquidWalletAddress,
+          })
+        }
       }
     }
 
@@ -148,7 +203,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]) // Only depend on uid - apiKeysLoaded is managed internally
 
-  // Save RapidAPI key to Firestore
+  // Save RapidAPI key using UserSettingsRepository
   const setRapidApiKey = async (key: string) => {
     if (!uid) {
       console.error('Cannot save API key: user not authenticated')
@@ -157,34 +212,21 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
 
     try {
       const trimmedKey = key.trim()
-      const docRef = doc(db, `users/${uid}/settings/user`)
       
       if (trimmedKey) {
-        // Key has value - load existing settings and update
-        const existingSettings = await loadUserSettings(uid) || {}
-        const updatedSettings: UserSettings = {
-          ...existingSettings,
-          apiKeys: {
-            ...existingSettings.apiKeys,
-            rapidApiKey: trimmedKey,
-          },
-        }
-        await saveUserSettings(uid, updatedSettings)
+        await saveApiKeys(uid, { rapidApiKey: trimmedKey })
       } else {
-        // Key is empty - use updateDoc with deleteField() to remove it
-        await updateDoc(docRef, {
-          'apiKeys.rapidApiKey': deleteField(),
-        })
+        await saveApiKeys(uid, { rapidApiKey: deleteField() })
       }
       
       updateKeys({ rapidApiKey: trimmedKey || null })
     } catch (error) {
-      console.error('Error saving API key:', error)
+      console.error('[ApiKeysContext] Error saving API key:', error)
       throw error
     }
   }
 
-  // Save Aster API key to Firestore
+  // Save Aster API key using UserSettingsRepository
   const setAsterApiKey = async (key: string) => {
     if (!uid) {
       console.error('Cannot save API key: user not authenticated')
@@ -193,34 +235,21 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
 
     try {
       const trimmedKey = key.trim()
-      const docRef = doc(db, `users/${uid}/settings/user`)
       
       if (trimmedKey) {
-        // Key has value - load existing settings and update
-        const existingSettings = await loadUserSettings(uid) || {}
-        const updatedSettings: UserSettings = {
-          ...existingSettings,
-          apiKeys: {
-            ...existingSettings.apiKeys,
-            asterApiKey: trimmedKey,
-          },
-        }
-        await saveUserSettings(uid, updatedSettings)
+        await saveApiKeys(uid, { asterApiKey: trimmedKey })
       } else {
-        // Key is empty - use updateDoc with deleteField() to remove it
-        await updateDoc(docRef, {
-          'apiKeys.asterApiKey': deleteField(),
-        })
+        await saveApiKeys(uid, { asterApiKey: deleteField() })
       }
       
       updateKeys({ asterApiKey: trimmedKey || null })
     } catch (error) {
-      console.error('Error saving API key:', error)
+      console.error('[ApiKeysContext] Error saving API key:', error)
       throw error
     }
   }
 
-  // Save Aster API Secret key to Firestore
+  // Save Aster API Secret key using UserSettingsRepository
   const setAsterApiSecretKey = async (key: string) => {
     if (!uid) {
       console.error('Cannot save API key: user not authenticated')
@@ -229,34 +258,21 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
 
     try {
       const trimmedKey = key.trim()
-      const docRef = doc(db, `users/${uid}/settings/user`)
       
       if (trimmedKey) {
-        // Key has value - load existing settings and update
-        const existingSettings = await loadUserSettings(uid) || {}
-        const updatedSettings: UserSettings = {
-          ...existingSettings,
-          apiKeys: {
-            ...existingSettings.apiKeys,
-            asterApiSecretKey: trimmedKey,
-          },
-        }
-        await saveUserSettings(uid, updatedSettings)
+        await saveApiKeys(uid, { asterApiSecretKey: trimmedKey })
       } else {
-        // Key is empty - use updateDoc with deleteField() to remove it
-        await updateDoc(docRef, {
-          'apiKeys.asterApiSecretKey': deleteField(),
-        })
+        await saveApiKeys(uid, { asterApiSecretKey: deleteField() })
       }
       
       updateKeys({ asterApiSecretKey: trimmedKey || null })
     } catch (error) {
-      console.error('Error saving API key:', error)
+      console.error('[ApiKeysContext] Error saving API key:', error)
       throw error
     }
   }
 
-  // Save Hyperliquid wallet address to Firestore
+  // Save Hyperliquid wallet address using UserSettingsRepository
   const setHyperliquidWalletAddress = async (address: string) => {
     if (!uid) {
       console.error('Cannot save wallet address: user not authenticated')
@@ -265,34 +281,21 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
 
     try {
       const trimmedAddress = address.trim()
-      const docRef = doc(db, `users/${uid}/settings/user`)
       
       if (trimmedAddress) {
-        // Address has value - load existing settings and update
-        const existingSettings = await loadUserSettings(uid) || {}
-        const updatedSettings: UserSettings = {
-          ...existingSettings,
-          apiKeys: {
-            ...existingSettings.apiKeys,
-            hyperliquidWalletAddress: trimmedAddress,
-          },
-        }
-        await saveUserSettings(uid, updatedSettings)
+        await saveApiKeys(uid, { hyperliquidWalletAddress: trimmedAddress })
       } else {
-        // Address is empty - use updateDoc with deleteField() to remove it
-        await updateDoc(docRef, {
-          'apiKeys.hyperliquidWalletAddress': deleteField(),
-        })
+        await saveApiKeys(uid, { hyperliquidWalletAddress: deleteField() })
       }
       
       updateKeys({ hyperliquidWalletAddress: trimmedAddress || null })
     } catch (error) {
-      console.error('Error saving wallet address:', error)
+      console.error('[ApiKeysContext] Error saving wallet address:', error)
       throw error
     }
   }
 
-  // Save Kraken API key to Firestore
+  // Save Kraken API key using UserSettingsRepository
   const setKrakenApiKey = async (key: string) => {
     if (!uid) {
       console.error('Cannot save API key: user not authenticated')
@@ -301,34 +304,21 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
 
     try {
       const trimmedKey = key.trim()
-      const docRef = doc(db, `users/${uid}/settings/user`)
       
       if (trimmedKey) {
-        // Key has value - load existing settings and update
-        const existingSettings = await loadUserSettings(uid) || {}
-        const updatedSettings: UserSettings = {
-          ...existingSettings,
-          apiKeys: {
-            ...existingSettings.apiKeys,
-            krakenApiKey: trimmedKey,
-          },
-        }
-        await saveUserSettings(uid, updatedSettings)
+        await saveApiKeys(uid, { krakenApiKey: trimmedKey })
       } else {
-        // Key is empty - use updateDoc with deleteField() to remove it
-        await updateDoc(docRef, {
-          'apiKeys.krakenApiKey': deleteField(),
-        })
+        await saveApiKeys(uid, { krakenApiKey: deleteField() })
       }
       
       updateKeys({ krakenApiKey: trimmedKey || null })
     } catch (error) {
-      console.error('Error saving API key:', error)
+      console.error('[ApiKeysContext] Error saving API key:', error)
       throw error
     }
   }
 
-  // Save Kraken API Secret key to Firestore
+  // Save Kraken API Secret key using UserSettingsRepository
   const setKrakenApiSecretKey = async (key: string) => {
     if (!uid) {
       console.error('Cannot save API key: user not authenticated')
@@ -337,29 +327,16 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
 
     try {
       const trimmedKey = key.trim()
-      const docRef = doc(db, `users/${uid}/settings/user`)
       
       if (trimmedKey) {
-        // Key has value - load existing settings and update
-        const existingSettings = await loadUserSettings(uid) || {}
-        const updatedSettings: UserSettings = {
-          ...existingSettings,
-          apiKeys: {
-            ...existingSettings.apiKeys,
-            krakenApiSecretKey: trimmedKey,
-          },
-        }
-        await saveUserSettings(uid, updatedSettings)
+        await saveApiKeys(uid, { krakenApiSecretKey: trimmedKey })
       } else {
-        // Key is empty - use updateDoc with deleteField() to remove it
-        await updateDoc(docRef, {
-          'apiKeys.krakenApiSecretKey': deleteField(),
-        })
+        await saveApiKeys(uid, { krakenApiSecretKey: deleteField() })
       }
       
       updateKeys({ krakenApiSecretKey: trimmedKey || null })
     } catch (error) {
-      console.error('Error saving API key:', error)
+      console.error('[ApiKeysContext] Error saving API key:', error)
       throw error
     }
   }
@@ -367,12 +344,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   // Get current keys from ref (always available, even if state resets)
   const getCurrentKeys = () => keysRef.current
 
-  // Expose state values (for reactivity) - ref is kept in sync via updateKeys
-  // The ref ensures keys persist across remounts, state ensures reactivity
-  // When DataContext reads these values, they'll be current because:
-  // 1. Ref is updated immediately when keys are loaded
-  // 2. State is updated via updateKeys, triggering re-renders
-  // 3. Keys are always reloaded from Firestore, so state will be current
   return (
     <ApiKeysContext.Provider
       value={{
@@ -409,4 +380,3 @@ export function useApiKeys() {
   }
   return context
 }
-

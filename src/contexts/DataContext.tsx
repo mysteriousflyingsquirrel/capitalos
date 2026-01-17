@@ -436,7 +436,13 @@ export function DataProvider({ children }: DataProviderProps) {
       }
       
       // Now fetch Perpetuals data (keys are loaded or we've waited long enough)
-      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items)
+      // Use getCurrentKeys() to ensure we always have the latest keys, not stale closure values
+      const currentKeys = getCurrentKeys()
+      const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items, {
+        asterApiKey: currentKeys.asterApiKey,
+        asterApiSecretKey: currentKeys.asterApiSecretKey,
+        hyperliquidWalletAddress: currentKeys.hyperliquidWalletAddress,
+      })
       
       // Step 4: Calculate totals
       const calculationResult = calculateTotals(
@@ -553,7 +559,13 @@ export function DataProvider({ children }: DataProviderProps) {
     }
 
     try {
-      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems)
+      // Use getCurrentKeys() to ensure we always have the latest keys
+      const currentKeys = getCurrentKeys()
+      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems, {
+        asterApiKey: currentKeys.asterApiKey,
+        asterApiSecretKey: currentKeys.asterApiSecretKey,
+        hyperliquidWalletAddress: currentKeys.hyperliquidWalletAddress,
+      })
 
       setData((prev) => {
         if (prev.netWorthItems.length === 0) {

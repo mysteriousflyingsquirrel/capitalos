@@ -1,13 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useRef, ReactNode } from 'react'
 import type { CurrencyCode } from '../lib/currency'
 import { getExchangeRates, type ExchangeRates } from '../services/exchangeRateService'
-import { saveUserSettings, loadUserSettings } from '../services/firestoreService'
+import { loadUserSettings, saveBaseCurrency } from '../lib/dataSafety/userSettingsRepo'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 
 interface CurrencyContextType {
   baseCurrency: CurrencyCode
   exchangeRates: ExchangeRates | null
   convert: (amount: number, from: CurrencyCode) => number
+  setBaseCurrency: (currency: CurrencyCode) => Promise<void>
   isLoading: boolean
   error?: string
 }
@@ -20,33 +21,134 @@ interface CurrencyProviderProps {
 
 function CurrencyProviderInner({ children }: CurrencyProviderProps) {
   const { uid } = useAuth()
-  // Base currency is always CHF
-  const baseCurrency: CurrencyCode = 'CHF'
-
+  const [baseCurrency, setBaseCurrencyState] = useState<CurrencyCode>('CHF')
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | undefined>(undefined)
+  
+  // Ref to store baseCurrency persistently (survives remounts)
+  const baseCurrencyRef = useRef<CurrencyCode>('CHF')
+  
+  // Track previous uid to detect uid changes
+  const prevUidRef = useRef<string | null>(null)
 
-  // Fetch exchange rates
-  const fetchRates = async (base: CurrencyCode) => {
-    setIsLoading(true)
-    setError(undefined)
+  // Auth boundary reset: Clear all state synchronously when uid changes
+  useLayoutEffect(() => {
+    if (prevUidRef.current !== uid) {
+      const prevUid = prevUidRef.current
+      prevUidRef.current = uid
+      
+      // Reset to default
+      baseCurrencyRef.current = 'CHF'
+      setBaseCurrencyState('CHF')
+      setExchangeRates(null)
+      setIsLoading(true)
+      setError(undefined)
+      
+      if (import.meta.env.DEV) {
+        console.log('[CurrencyContext] Auth boundary reset:', {
+          prevUid,
+          newUid: uid,
+          resetToDefault: 'CHF',
+        })
+      }
+    }
+  }, [uid])
+
+  // Load baseCurrency from Firestore using UserSettingsRepository
+  useEffect(() => {
+    const loadBaseCurrency = async () => {
+      if (!uid) {
+        // No uid, use default
+        baseCurrencyRef.current = 'CHF'
+        setBaseCurrencyState('CHF')
+        setIsLoading(false)
+        return
+      }
+
+      if (import.meta.env.DEV) {
+        console.log('[CurrencyContext] Loading baseCurrency:', {
+          uid,
+          path: `users/${uid}/settings/user`,
+        })
+      }
+
+      try {
+        const settings = await loadUserSettings(uid)
+        
+        if (import.meta.env.DEV) {
+          console.log('[CurrencyContext] Settings loaded:', {
+            hasSettings: !!settings,
+            baseCurrency: settings?.baseCurrency || 'CHF (default)',
+          })
+        }
+        
+        // Use Firestore value or default to CHF
+        const currency = (settings?.baseCurrency || 'CHF') as CurrencyCode
+        
+        baseCurrencyRef.current = currency
+        setBaseCurrencyState(currency)
+      } catch (error) {
+        console.error('[CurrencyContext] Error loading baseCurrency:', error)
+        // On error, use default
+        baseCurrencyRef.current = 'CHF'
+        setBaseCurrencyState('CHF')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadBaseCurrency()
+  }, [uid])
+
+  // Fetch exchange rates when baseCurrency changes
+  useEffect(() => {
+    const fetchRates = async (base: CurrencyCode) => {
+      setIsLoading(true)
+      setError(undefined)
+      try {
+        const rates = await getExchangeRates(base)
+        setExchangeRates(rates)
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch exchange rates'
+        setError(errorMessage)
+        console.error('[CurrencyContext] Error fetching exchange rates:', err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    if (baseCurrency) {
+      fetchRates(baseCurrency)
+    }
+  }, [baseCurrency])
+
+  // Set base currency (updates Firestore and local state)
+  const setBaseCurrency = async (currency: CurrencyCode) => {
+    if (!uid) {
+      console.error('Cannot save baseCurrency: user not authenticated')
+      return
+    }
+
     try {
-      const rates = await getExchangeRates(base)
-      setExchangeRates(rates)
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch exchange rates'
-      setError(errorMessage)
-      console.error('Error fetching exchange rates:', err)
-    } finally {
-      setIsLoading(false)
+      // Update Firestore using repository
+      await saveBaseCurrency(uid, currency)
+      
+      // Update local state immediately (optimistic update)
+      baseCurrencyRef.current = currency
+      setBaseCurrencyState(currency)
+      
+      if (import.meta.env.DEV) {
+        console.log('[CurrencyContext] baseCurrency updated:', {
+          uid,
+          currency,
+        })
+      }
+    } catch (error) {
+      console.error('[CurrencyContext] Error saving baseCurrency:', error)
+      throw error
     }
   }
-
-  // Fetch exchange rates on mount (always CHF)
-  useEffect(() => {
-    fetchRates('CHF')
-  }, []) // Run once on mount
 
   // Convert amount from one currency to base currency
   // Memoized to prevent unnecessary re-renders in components that depend on it
@@ -80,6 +182,7 @@ function CurrencyProviderInner({ children }: CurrencyProviderProps) {
         baseCurrency,
         exchangeRates,
         convert,
+        setBaseCurrency,
         isLoading,
         error,
       }}
@@ -100,4 +203,3 @@ export function useCurrency() {
   }
   return context
 }
-

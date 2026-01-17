@@ -1,6 +1,7 @@
 import { doc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../config/firebase'
 import { safeWrite } from './repository'
+import { ensureUserSettingsInitialized } from './userSettingsRepo'
 
 /**
  * Ensure user is initialized in Firestore (idempotent, minimal writes)
@@ -37,33 +38,8 @@ export async function ensureUserInitialized(uid: string): Promise<void> {
     }
 
     // Ensure settings/user document exists with baseCurrency and apiKeys fields
-    const settingsRef = doc(db, `users/${uid}/settings/user`)
-    const settingsSnap = await getDoc(settingsRef)
-    
-    if (!settingsSnap.exists()) {
-      console.log(`[UserInitialization] Creating settings/user document: ${uid}`)
-      await safeWrite(settingsRef, {
-        baseCurrency: 'CHF',
-        apiKeys: {},
-      }, { origin: 'system', domain: 'settings', merge: true })
-    } else {
-      // Ensure baseCurrency and apiKeys fields exist (idempotent - won't overwrite if they exist)
-      const settingsData = settingsSnap.data()
-      const updates: any = {}
-      
-      if (!settingsData?.baseCurrency) {
-        updates.baseCurrency = 'CHF'
-      }
-      
-      if (!settingsData?.apiKeys) {
-        updates.apiKeys = {}
-      }
-      
-      if (Object.keys(updates).length > 0) {
-        console.log(`[UserInitialization] Adding missing fields to settings/user: ${uid}`, updates)
-        await safeWrite(settingsRef, updates, { origin: 'system', domain: 'settings', merge: true })
-      }
-    }
+    // Use the repository function for consistency
+    await ensureUserSettingsInitialized(uid)
 
     console.log(`[UserInitialization] User initialization complete: ${uid}`)
   } catch (error) {

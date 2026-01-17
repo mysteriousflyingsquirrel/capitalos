@@ -13,7 +13,8 @@ import {
   savePlatforms,
   type Platform,
 } from './storageService'
-import { clearAllUserData, loadUserSettings, saveUserSettings } from './firestoreService'
+import { clearAllUserData } from './firestoreService'
+import { loadUserSettings, saveBaseCurrency } from '../lib/dataSafety/userSettingsRepo'
 import { loadSnapshots, saveSnapshots, type NetWorthSnapshot } from './snapshotService'
 
 const BACKUP_SCHEMA_VERSION = '1.0.0'
@@ -177,8 +178,8 @@ export async function restoreBackup(
       currentUid
     ),
     savePlatforms((backup.data.platforms as Platform[]) || [], currentUid),
-    backup.data.settings
-      ? saveUserSettings(currentUid, backup.data.settings as { baseCurrency: string })
+    backup.data.settings && backup.data.settings.baseCurrency
+      ? saveBaseCurrency(currentUid, backup.data.settings.baseCurrency)
       : Promise.resolve(),
     saveSnapshots((backup.data.snapshots as NetWorthSnapshot[]) || [], currentUid),
   ])
