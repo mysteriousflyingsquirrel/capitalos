@@ -4,6 +4,16 @@ import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../config/firebase'
 
+// Refs to store keys persistently (survive remounts)
+interface ApiKeysRefs {
+  rapidApiKey: string | null
+  asterApiKey: string | null
+  asterApiSecretKey: string | null
+  hyperliquidWalletAddress: string | null
+  krakenApiKey: string | null
+  krakenApiSecretKey: string | null
+}
+
 interface ApiKeysContextType {
   rapidApiKey: string | null
   setRapidApiKey: (key: string) => Promise<void>
@@ -19,6 +29,8 @@ interface ApiKeysContextType {
   setKrakenApiSecretKey: (key: string) => Promise<void>
   isLoading: boolean
   apiKeysLoaded: boolean
+  // Get current keys from ref (always available, even if state resets)
+  getCurrentKeys: () => ApiKeysRefs
 }
 
 const ApiKeysContext = createContext<ApiKeysContextType | undefined>(undefined)
@@ -38,10 +50,33 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [apiKeysLoaded, setApiKeysLoaded] = useState(false)
   
+  // Refs to store keys persistently (survive remounts) - ALWAYS available
+  const keysRef = useRef<ApiKeysRefs>({
+    rapidApiKey: null,
+    asterApiKey: null,
+    asterApiSecretKey: null,
+    hyperliquidWalletAddress: null,
+    krakenApiKey: null,
+    krakenApiSecretKey: null,
+  })
+  
   // Track previous uid to detect uid changes
   const prevUidRef = useRef<string | null>(null)
   // Track if keys have ever been successfully loaded for the current uid
   const keysLoadedForUidRef = useRef<string | null>(null)
+  
+  // Helper to update both state and ref
+  const updateKeys = (updates: Partial<ApiKeysRefs>) => {
+    // Update ref (persistent, always available)
+    keysRef.current = { ...keysRef.current, ...updates }
+    // Update state (for reactivity)
+    if (updates.rapidApiKey !== undefined) setRapidApiKeyState(updates.rapidApiKey)
+    if (updates.asterApiKey !== undefined) setAsterApiKeyState(updates.asterApiKey)
+    if (updates.asterApiSecretKey !== undefined) setAsterApiSecretKeyState(updates.asterApiSecretKey)
+    if (updates.hyperliquidWalletAddress !== undefined) setHyperliquidWalletAddressState(updates.hyperliquidWalletAddress)
+    if (updates.krakenApiKey !== undefined) setKrakenApiKeyState(updates.krakenApiKey)
+    if (updates.krakenApiSecretKey !== undefined) setKrakenApiSecretKeyState(updates.krakenApiSecretKey)
+  }
 
   // Load API keys from Firestore on mount
   useEffect(() => {
@@ -73,37 +108,30 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         const settings = await loadUserSettings(uid)
         if (settings?.apiKeys) {
           // Load RapidAPI key from settings, or fallback to env variable
-          if (settings.apiKeys.rapidApiKey) {
-            setRapidApiKeyState(settings.apiKeys.rapidApiKey)
-          } else {
-            // Fallback to environment variable if available
-            const envKey = import.meta.env.VITE_RAPIDAPI_KEY
-            if (envKey) {
-              setRapidApiKeyState(envKey)
-            } else {
-              setRapidApiKeyState(null)
-            }
-          }
-          // Load other API keys
-          setAsterApiKeyState(settings.apiKeys.asterApiKey || null)
-          setAsterApiSecretKeyState(settings.apiKeys.asterApiSecretKey || null)
-          setHyperliquidWalletAddressState(settings.apiKeys.hyperliquidWalletAddress || null)
-          setKrakenApiKeyState(settings.apiKeys.krakenApiKey || null)
-          setKrakenApiSecretKeyState(settings.apiKeys.krakenApiSecretKey || null)
+          const rapidKey = settings.apiKeys.rapidApiKey || import.meta.env.VITE_RAPIDAPI_KEY || null
+          
+          // Update both ref and state (ref persists, state is reactive)
+          updateKeys({
+            rapidApiKey: rapidKey,
+            asterApiKey: settings.apiKeys.asterApiKey || null,
+            asterApiSecretKey: settings.apiKeys.asterApiSecretKey || null,
+            hyperliquidWalletAddress: settings.apiKeys.hyperliquidWalletAddress || null,
+            krakenApiKey: settings.apiKeys.krakenApiKey || null,
+            krakenApiSecretKey: settings.apiKeys.krakenApiSecretKey || null,
+          })
         } else {
           // No settings found, try environment variable for RapidAPI
-          const envKey = import.meta.env.VITE_RAPIDAPI_KEY
-          if (envKey) {
-            setRapidApiKeyState(envKey)
-          } else {
-            setRapidApiKeyState(null)
-          }
-          // Set others to null
-          setAsterApiKeyState(null)
-          setAsterApiSecretKeyState(null)
-          setHyperliquidWalletAddressState(null)
-          setKrakenApiKeyState(null)
-          setKrakenApiSecretKeyState(null)
+          const envKey = import.meta.env.VITE_RAPIDAPI_KEY || null
+          
+          // Update both ref and state
+          updateKeys({
+            rapidApiKey: envKey,
+            asterApiKey: null,
+            asterApiSecretKey: null,
+            hyperliquidWalletAddress: null,
+            krakenApiKey: null,
+            krakenApiSecretKey: null,
+          })
         }
       } catch (error) {
         console.error('Error loading API keys:', error)
@@ -149,7 +177,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         })
       }
       
-      setRapidApiKeyState(trimmedKey || null)
+      updateKeys({ rapidApiKey: trimmedKey || null })
     } catch (error) {
       console.error('Error saving API key:', error)
       throw error
@@ -185,7 +213,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         })
       }
       
-      setAsterApiKeyState(trimmedKey || null)
+      updateKeys({ asterApiKey: trimmedKey || null })
     } catch (error) {
       console.error('Error saving API key:', error)
       throw error
@@ -221,7 +249,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         })
       }
       
-      setAsterApiSecretKeyState(trimmedKey || null)
+      updateKeys({ asterApiSecretKey: trimmedKey || null })
     } catch (error) {
       console.error('Error saving API key:', error)
       throw error
@@ -257,7 +285,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         })
       }
       
-      setHyperliquidWalletAddressState(trimmedAddress || null)
+      updateKeys({ hyperliquidWalletAddress: trimmedAddress || null })
     } catch (error) {
       console.error('Error saving wallet address:', error)
       throw error
@@ -293,7 +321,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         })
       }
       
-      setKrakenApiKeyState(trimmedKey || null)
+      updateKeys({ krakenApiKey: trimmedKey || null })
     } catch (error) {
       console.error('Error saving API key:', error)
       throw error
@@ -329,13 +357,22 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         })
       }
       
-      setKrakenApiSecretKeyState(trimmedKey || null)
+      updateKeys({ krakenApiSecretKey: trimmedKey || null })
     } catch (error) {
       console.error('Error saving API key:', error)
       throw error
     }
   }
 
+  // Get current keys from ref (always available, even if state resets)
+  const getCurrentKeys = () => keysRef.current
+
+  // Expose state values (for reactivity) - ref is kept in sync via updateKeys
+  // The ref ensures keys persist across remounts, state ensures reactivity
+  // When DataContext reads these values, they'll be current because:
+  // 1. Ref is updated immediately when keys are loaded
+  // 2. State is updated via updateKeys, triggering re-renders
+  // 3. Keys are always reloaded from Firestore, so state will be current
   return (
     <ApiKeysContext.Provider
       value={{
@@ -353,6 +390,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         setKrakenApiSecretKey,
         isLoading,
         apiKeysLoaded,
+        getCurrentKeys,
       }}
     >
       {children}

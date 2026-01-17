@@ -69,6 +69,7 @@ export function DataProvider({ children }: DataProviderProps) {
     asterApiSecretKey,
     hyperliquidWalletAddress,
     apiKeysLoaded,
+    getCurrentKeys,
   } = useApiKeys()
   const { setHasInitialDataLoaded } = useSyncStatus()
   const prevUidRef = useRef<string | null>(null)
@@ -205,13 +206,28 @@ export function DataProvider({ children }: DataProviderProps) {
   }
 
   // Fetch Aster Perpetuals data
-  const fetchPerpetualsData = async (items: NetWorthItem[]): Promise<NetWorthItem[]> => {
+  // Accepts optional keys parameter - if not provided, uses closure values
+  // This allows refreshAllData to pass ref keys (always current) while other callers use closure
+  const fetchPerpetualsData = async (
+    items: NetWorthItem[],
+    providedKeys?: {
+      asterApiKey: string | null
+      asterApiSecretKey: string | null
+      hyperliquidWalletAddress: string | null
+    }
+  ): Promise<NetWorthItem[]> => {
+    // Use provided keys if available, otherwise use closure values
+    const keys = providedKeys || {
+      asterApiKey,
+      asterApiSecretKey,
+      hyperliquidWalletAddress,
+    }
     // Always log (not just dev mode) to diagnose production issues
     console.log('[DataContext] fetchPerpetualsData called:', {
       apiKeysLoaded,
-      hasAsterKey: !!asterApiKey,
-      hasAsterSecretKey: !!asterApiSecretKey,
-      hasHyperliquidKey: !!hyperliquidWalletAddress,
+      hasAsterKey: !!keys.asterApiKey,
+      hasAsterSecretKey: !!keys.asterApiSecretKey,
+      hasHyperliquidKey: !!keys.hyperliquidWalletAddress,
       krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
       hasUid: !!uid,
       uid: uid,
@@ -244,20 +260,20 @@ export function DataProvider({ children }: DataProviderProps) {
       console.log('[DataContext] fetchPerpetualsData: Fetching Aster, Hyperliquid, and Kraken data...')
       
       // Fetch Aster and Hyperliquid data (Kraken uses WebSocket only)
-      // Pass keys explicitly - services will return null if keys are missing
+      // Pass keys explicitly from parameters - services will return null if keys are missing
       const fetchPromises: Promise<PerpetualsData | null>[] = []
       
-      // Fetch Aster - pass keys explicitly
+      // Fetch Aster - pass keys explicitly from parameters
       fetchPromises.push(fetchAsterPerpetualsData({
         uid,
-        apiKey: asterApiKey || '',
-        apiSecret: asterApiSecretKey || null,
+        apiKey: keys.asterApiKey || '',
+        apiSecret: keys.asterApiSecretKey || null,
       }))
       
-      // Fetch Hyperliquid - pass wallet address explicitly
+      // Fetch Hyperliquid - pass wallet address explicitly from parameters
       fetchPromises.push(fetchHyperliquidPerpetualsData({
         uid,
-        walletAddress: hyperliquidWalletAddress || '',
+        walletAddress: keys.hyperliquidWalletAddress || '',
       }))
       
       const [asterData, hyperliquidData] = await Promise.all(fetchPromises)
@@ -660,14 +676,26 @@ export function DataProvider({ children }: DataProviderProps) {
         fetchStockPricesData(currentItems),
       ])
       
+      // Step 2: Get current keys from ref (always available, even if state resets)
+      // This ensures we always have the latest keys, not stale closure values
+      const currentKeys = getCurrentKeys()
+      
       console.log('[DataContext] refreshAllData: Fetched crypto/stock prices, about to fetch perpetuals', {
         currentItemsCount: currentItems.length,
         apiKeysLoaded,
+        hasAsterKey: !!currentKeys.asterApiKey,
+        hasAsterSecret: !!currentKeys.asterApiSecretKey,
+        hasHyperliquidKey: !!currentKeys.hyperliquidWalletAddress,
         krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
       })
       
-      // Step 2: Fetch perpetuals data (reads from WebSocket state for Kraken)
-      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems)
+      // Step 3: Fetch perpetuals data (reads from WebSocket state for Kraken)
+      // Pass keys from ref (always current) instead of using closure values
+      const itemsWithPerpetuals = await fetchPerpetualsData(currentItems, {
+        asterApiKey: currentKeys.asterApiKey,
+        asterApiSecretKey: currentKeys.asterApiSecretKey,
+        hyperliquidWalletAddress: currentKeys.hyperliquidWalletAddress,
+      })
       
       console.log('[DataContext] refreshAllData: After fetchPerpetualsData', {
         itemsWithPerpetualsCount: itemsWithPerpetuals.length,
