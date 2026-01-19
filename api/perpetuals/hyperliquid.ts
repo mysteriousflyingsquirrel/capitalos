@@ -60,10 +60,18 @@ interface PerpetualsOpenOrder {
   platform: string // "Hyperliquid"
 }
 
+interface PortfolioPnL {
+  pnl24hUsd: number | null
+  pnl7dUsd: number | null
+  pnl30dUsd: number | null
+  pnl90dUsd: number | null
+}
+
 interface PerpetualsData {
   exchangeBalance: ExchangeBalance[]
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
+  portfolioPnL?: PortfolioPnL
 }
 
 const HYPERLIQUID_BASE_URL = 'https://api.hyperliquid.xyz'
@@ -646,6 +654,183 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
   }
 }
 
+async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
+  try {
+    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type: 'portfolio',
+        user: walletAddress,
+      }),
+    })
+
+    if (!response.ok) {
+      return {
+        pnl24hUsd: null,
+        pnl7dUsd: null,
+        pnl30dUsd: null,
+        pnl90dUsd: null,
+      }
+    }
+
+    const data = await response.json()
+    
+    // The response is an array of tuples: ["day", {...}, "week", {...}, "month", {...}, "allTime", {...}]
+    // Or it could be an array of arrays: [["day", {...}], ["week", {...}], ...]
+    // Each bucket has pnlHistory: array of [timestampMs, pnlString]
+    
+    let dayBucket: any = null
+    let weekBucket: any = null
+    let monthBucket: any = null
+    let allTimeBucket: any = null
+    
+    if (Array.isArray(data)) {
+      // Handle format: [["day", {...}], ["week", {...}], ...]
+      if (data.length > 0 && Array.isArray(data[0]) && data[0].length >= 2) {
+        for (const item of data) {
+          if (Array.isArray(item) && item.length >= 2) {
+            const bucketName = item[0]
+            const bucketData = item[1]
+            
+            if (bucketName === 'day' && bucketData?.pnlHistory) {
+              dayBucket = bucketData
+            } else if (bucketName === 'week' && bucketData?.pnlHistory) {
+              weekBucket = bucketData
+            } else if (bucketName === 'month' && bucketData?.pnlHistory) {
+              monthBucket = bucketData
+            } else if (bucketName === 'allTime' && bucketData?.pnlHistory) {
+              allTimeBucket = bucketData
+            }
+          }
+        }
+      } else {
+        // Handle format: ["day", {...}, "week", {...}, ...] (flat array)
+        for (let i = 0; i < data.length - 1; i += 2) {
+          const bucketName = data[i]
+          const bucketData = data[i + 1]
+          
+          if (typeof bucketName === 'string' && bucketData && typeof bucketData === 'object') {
+            if (bucketName === 'day' && bucketData?.pnlHistory) {
+              dayBucket = bucketData
+            } else if (bucketName === 'week' && bucketData?.pnlHistory) {
+              weekBucket = bucketData
+            } else if (bucketName === 'month' && bucketData?.pnlHistory) {
+              monthBucket = bucketData
+            } else if (bucketName === 'allTime' && bucketData?.pnlHistory) {
+              allTimeBucket = bucketData
+            }
+          }
+        }
+      }
+    }
+    
+    // Helper function to calculate PnL from a bucket
+    const calculateBucketPnL = (bucket: any): number | null => {
+      if (!bucket || !bucket.pnlHistory || !Array.isArray(bucket.pnlHistory)) {
+        return null
+      }
+      
+      const history = bucket.pnlHistory
+      if (history.length < 2) {
+        return null
+      }
+      
+      // Ensure sorted by timestamp (ascending)
+      const sorted = [...history].sort((a, b) => {
+        const tsA = Array.isArray(a) ? a[0] : a.timestampMs || a.timestamp || 0
+        const tsB = Array.isArray(b) ? b[0] : b.timestampMs || b.timestamp || 0
+        return tsA - tsB
+      })
+      
+      const first = sorted[0]
+      const last = sorted[sorted.length - 1]
+      
+      const firstPnl = Array.isArray(first) ? parseFloat(first[1]) : parseFloat(first.pnlString || first.pnl || '0')
+      const lastPnl = Array.isArray(last) ? parseFloat(last[1]) : parseFloat(last.pnlString || last.pnl || '0')
+      
+      if (isNaN(firstPnl) || isNaN(lastPnl)) {
+        return null
+      }
+      
+      return lastPnl - firstPnl
+    }
+    
+    // Calculate 24H, 7D, 30D PnL
+    const pnl24hUsd = calculateBucketPnL(dayBucket)
+    const pnl7dUsd = calculateBucketPnL(weekBucket)
+    const pnl30dUsd = calculateBucketPnL(monthBucket)
+    
+    // Calculate 90D PnL from allTime bucket
+    let pnl90dUsd: number | null = null
+    if (allTimeBucket && allTimeBucket.pnlHistory && Array.isArray(allTimeBucket.pnlHistory)) {
+      const history = allTimeBucket.pnlHistory
+      
+      if (history.length >= 2) {
+        // Ensure sorted by timestamp (ascending)
+        const sorted = [...history].sort((a, b) => {
+          const tsA = Array.isArray(a) ? a[0] : a.timestampMs || a.timestamp || 0
+          const tsB = Array.isArray(b) ? b[0] : b.timestampMs || b.timestamp || 0
+          return tsA - tsB
+        })
+        
+        const nowMs = Date.now()
+        const targetTs = nowMs - (90 * 24 * 60 * 60 * 1000) // 90 days in milliseconds
+        
+        // Find closest point to targetTs
+        let closestPoint: any = null
+        let minDiff = Infinity
+        
+        for (const point of sorted) {
+          const ts = Array.isArray(point) ? point[0] : point.timestampMs || point.timestamp || 0
+          const diff = Math.abs(ts - targetTs)
+          if (diff < minDiff) {
+            minDiff = diff
+            closestPoint = point
+          }
+        }
+        
+        const latestPoint = sorted[sorted.length - 1]
+        
+        if (closestPoint && latestPoint) {
+          const closestTs = Array.isArray(closestPoint) ? closestPoint[0] : closestPoint.timestampMs || closestPoint.timestamp || 0
+          const latestTs = Array.isArray(latestPoint) ? latestPoint[0] : latestPoint.timestampMs || latestPoint.timestamp || 0
+          
+          // Only calculate if closest point is different from latest (meaningful range)
+          if (closestTs !== latestTs) {
+            const closestPnl = Array.isArray(closestPoint) 
+              ? parseFloat(closestPoint[1]) 
+              : parseFloat(closestPoint.pnlString || closestPoint.pnl || '0')
+            const latestPnl = Array.isArray(latestPoint) 
+              ? parseFloat(latestPoint[1]) 
+              : parseFloat(latestPoint.pnlString || latestPoint.pnl || '0')
+            
+            if (!isNaN(closestPnl) && !isNaN(latestPnl)) {
+              pnl90dUsd = latestPnl - closestPnl
+            }
+          }
+        }
+      }
+    }
+    
+    return {
+      pnl24hUsd,
+      pnl7dUsd,
+      pnl30dUsd,
+      pnl90dUsd,
+    }
+  } catch (error) {
+    return {
+      pnl24hUsd: null,
+      pnl7dUsd: null,
+      pnl30dUsd: null,
+      pnl90dUsd: null,
+    }
+  }
+}
+
 async function fetchAccountEquity(walletAddress: string): Promise<ExchangeBalance[]> {
   try {
     const allDexs = await fetchAllPerpDexs()
@@ -714,16 +899,18 @@ async function fetchAccountEquity(walletAddress: string): Promise<ExchangeBalanc
 async function fetchHyperliquidPerpetualsData(
   walletAddress: string
 ): Promise<PerpetualsData> {
-  const [openPositions, exchangeBalance, openOrders] = await Promise.all([
+  const [openPositions, exchangeBalance, openOrders, portfolioPnL] = await Promise.all([
     fetchOpenPositions(walletAddress),
     fetchAccountEquity(walletAddress),
     fetchOpenOrders(walletAddress),
+    fetchPortfolioPnL(walletAddress),
   ])
 
   return {
     exchangeBalance,
     openPositions,
     openOrders,
+    portfolioPnL,
   }
 }
 

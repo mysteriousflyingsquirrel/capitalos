@@ -72,10 +72,18 @@ export interface PerpetualsOpenOrder {
   platform: string // "Hyperliquid"
 }
 
+export interface PortfolioPnL {
+  pnl24hUsd: number | null
+  pnl7dUsd: number | null
+  pnl30dUsd: number | null
+  pnl90dUsd: number | null
+}
+
 export interface PerpetualsData {
   exchangeBalance: ExchangeBalance[]
   openPositions: PerpetualsOpenPosition[]
   openOrders: PerpetualsOpenOrder[]
+  portfolioPnL?: PortfolioPnL
 }
 
 export interface NetWorthItem {

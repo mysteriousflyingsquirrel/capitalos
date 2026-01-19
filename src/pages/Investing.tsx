@@ -27,12 +27,22 @@ function SectionCard({ title, children }: SectionCardProps) {
 // PnL Box Component
 interface PnLBoxProps {
   title: string
-  value: number
+  value: number | null
 }
 
 function PnLBox({ title, value }: PnLBoxProps) {
   const { isIncognito } = useIncognito()
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
+  
+  if (value === null) {
+    return (
+      <div className="bg-bg-surface-2 border border-border-subtle rounded-card p-4">
+        <div className="text-text-muted text-xs md:text-sm mb-2">{title}</div>
+        <div className="text-text-muted text-lg font-medium">N/A</div>
+      </div>
+    )
+  }
+  
   const isPositive = value >= 0
 
   return (
@@ -75,11 +85,21 @@ function Investing() {
   const { data } = useData()
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
 
-  // Example values for PnL boxes
-  const pnl24h = -39.21
-  const pnl7d = 245.67
-  const pnl30d = 892.15
-  const pnl90d = 1250.45
+  // Extract PnL values from Hyperliquid portfolio data
+  const portfolioPnL = useMemo(() => {
+    // Find the first Hyperliquid perpetuals item with portfolioPnL data
+    const hyperliquidItem = data.netWorthItems.find(
+      item => item.category === 'Perpetuals' && 
+      item.perpetualsData?.portfolioPnL
+    )
+    
+    return hyperliquidItem?.perpetualsData?.portfolioPnL || {
+      pnl24hUsd: null,
+      pnl7dUsd: null,
+      pnl30dUsd: null,
+      pnl90dUsd: null,
+    }
+  }, [data.netWorthItems])
 
   // Extract open positions from all perpetuals items
   const positions: PositionRow[] = useMemo(() => {
@@ -171,10 +191,10 @@ function Investing() {
         {/* Performance Frame */}
         <SectionCard title="Performance">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <PnLBox title="24-Hour PnL" value={pnl24h} />
-            <PnLBox title="7-Day PnL" value={pnl7d} />
-            <PnLBox title="30-Day PnL" value={pnl30d} />
-            <PnLBox title="90-Day PnL" value={pnl90d} />
+            <PnLBox title="24-Hour PnL" value={portfolioPnL.pnl24hUsd} />
+            <PnLBox title="7-Day PnL" value={portfolioPnL.pnl7dUsd} />
+            <PnLBox title="30-Day PnL" value={portfolioPnL.pnl30dUsd} />
+            <PnLBox title="90-Day PnL" value={portfolioPnL.pnl90dUsd} />
           </div>
         </SectionCard>
 
