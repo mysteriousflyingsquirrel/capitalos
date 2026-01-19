@@ -175,9 +175,9 @@ function Investing() {
           <div className="overflow-x-auto -mx-3 px-3 lg:-mx-6 lg:px-6">
             <table className="w-full" style={{ minWidth: '1070px', tableLayout: 'fixed' }}>
               <colgroup>
+                <col style={{ width: '110px' }} />
                 <col style={{ width: '70px' }} />
-                <col style={{ width: '80px' }} />
-                <col style={{ width: '100px' }} />
+                <col style={{ width: '70px' }} />
                 <col style={{ width: '130px' }} />
                 <col style={{ width: '150px' }} />
                 <col style={{ width: '120px' }} />
