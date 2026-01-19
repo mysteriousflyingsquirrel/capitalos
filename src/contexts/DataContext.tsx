@@ -324,10 +324,11 @@ export function DataProvider({ children }: DataProviderProps) {
       // Merge exchangeBalance from API sources
       const apiExchangeBalance = [...asterExchangeBalance, ...hyperliquidExchangeBalance, ...krakenExchangeBalance]
       
-      // Create perpetualsData structure (PerpetualsData interface doesn't include openOrders)
+      // Create perpetualsData structure
       const perpetualsData: PerpetualsData = {
         exchangeBalance: apiExchangeBalance.map(b => ({ ...b })),
         openPositions: mergedData.openPositions.map(p => ({ ...p })),
+        openOrders: mergedData.openOrders.map(o => ({ ...o })),
       }
 
       // Only create Perpetuals item if we have any data

@@ -50,9 +50,14 @@ interface ExchangeBalance {
 
 interface PerpetualsOpenOrder {
   id: string
-  name: string
-  margin: number | null
-  platform: string
+  token: string // coin symbol
+  activity: string // Limit, Stop, Limit Stop, etc.
+  side: 'Buy' | 'Sell' // normalized from "B"/"A"
+  price: number // display price (numeric)
+  priceDisplay: string // formatted price (e.g., "87000" or "85000 → 87000")
+  size: number // USD notional
+  amount: number // token amount
+  platform: string // "Hyperliquid"
 }
 
 interface PerpetualsData {
@@ -433,6 +438,216 @@ async function fetchMeta(dex: string = ''): Promise<{ universe: any[] } | null> 
 
 
 
+async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrder[]> {
+  try {
+    const allDexs = await fetchAllPerpDexs()
+    const dexDefault = ''
+    let dexWithSilver: string | null = null
+    
+    for (const dex of allDexs) {
+      if (dex && dex !== dexDefault) {
+        const containsSilver = await dexContainsSilver(dex)
+        if (containsSilver) {
+          dexWithSilver = dex
+          break
+        }
+      }
+    }
+    
+    const dexsToQuery = [dexDefault]
+    if (dexWithSilver) {
+      dexsToQuery.push(dexWithSilver)
+    }
+    
+    const allOrders: PerpetualsOpenOrder[] = []
+    
+    for (const dex of dexsToQuery) {
+      try {
+        // Fetch meta data to get szDecimals for formatting
+        const meta = await fetchMeta(dex)
+        const szDecimalsMap: Record<string, number> = {}
+        
+        if (meta?.universe) {
+          for (const entry of meta.universe) {
+            const coin = extractSymbol(entry)
+            if (coin) {
+              let szDecimals = 2 // default
+              if (typeof entry === 'object' && entry !== null) {
+                if (typeof entry.szDecimals === 'number') {
+                  szDecimals = entry.szDecimals
+                } else if (typeof entry.szDecimals === 'string') {
+                  szDecimals = parseInt(entry.szDecimals, 10) || 2
+                }
+              }
+              szDecimalsMap[coin.toUpperCase()] = szDecimals
+            }
+          }
+        }
+        
+        // Fetch frontendOpenOrders from Hyperliquid
+        const requestBody: any = {
+          type: 'frontendOpenOrders',
+          user: walletAddress,
+        }
+        
+        if (dex) {
+          requestBody.dex = dex
+        }
+        
+        const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        })
+
+        if (!response.ok) {
+          continue
+        }
+
+        const data = await response.json()
+        
+        // Handle different response formats
+        let orders: any[] = []
+        if (Array.isArray(data)) {
+          orders = data
+        } else if (data && typeof data === 'object' && Array.isArray(data.orders)) {
+          orders = data.orders
+        } else if (data && typeof data === 'object' && Array.isArray(data.openOrders)) {
+          orders = data.openOrders
+        }
+        
+        for (const order of orders) {
+          if (!order || !order.coin) {
+            continue
+          }
+          
+          const token = order.coin
+          const side = order.side === 'B' ? 'Buy' : order.side === 'A' ? 'Sell' : null
+          if (!side) {
+            continue
+          }
+          
+          // Parse amount (token amount)
+          let amount = 0
+          if (typeof order.sz === 'string') {
+            amount = Math.abs(parseFloat(order.sz))
+          } else if (typeof order.sz === 'number') {
+            amount = Math.abs(order.sz)
+          }
+          
+          if (amount <= 0) {
+            continue
+          }
+          
+          // Parse prices
+          let limitPx: number | null = null
+          let triggerPx: number | null = null
+          
+          if (order.limitPx !== undefined && order.limitPx !== null) {
+            if (typeof order.limitPx === 'string') {
+              limitPx = parseFloat(order.limitPx)
+            } else if (typeof order.limitPx === 'number') {
+              limitPx = order.limitPx
+            }
+            if (isNaN(limitPx) || !isFinite(limitPx)) {
+              limitPx = null
+            }
+          }
+          
+          if (order.triggerPx !== undefined && order.triggerPx !== null) {
+            if (typeof order.triggerPx === 'string') {
+              triggerPx = parseFloat(order.triggerPx)
+            } else if (typeof order.triggerPx === 'number') {
+              triggerPx = order.triggerPx
+            }
+            if (isNaN(triggerPx) || !isFinite(triggerPx)) {
+              triggerPx = null
+            }
+          }
+          
+          const isTrigger = order.isTrigger === true || order.isTrigger === 'true' || !!triggerPx
+          
+          // Determine activity
+          let activity = 'Limit'
+          if (isTrigger) {
+            const orderType = order.orderType || ''
+            // Check if orderType indicates a limit order
+            if (orderType.toLowerCase().includes('limit') || (limitPx !== null && triggerPx !== null)) {
+              activity = 'Limit Stop'
+            } else {
+              activity = 'Stop'
+            }
+            
+            // Optionally append trigger condition
+            if (order.triggerCondition) {
+              const condition = order.triggerCondition
+              if (condition === 'Above' || condition === 'above') {
+                activity += ' Above'
+              } else if (condition === 'Below' || condition === 'below') {
+                activity += ' Below'
+              }
+            }
+          }
+          
+          // Determine price display
+          let price: number
+          let priceDisplay: string
+          
+          if (!isTrigger) {
+            // Regular limit order
+            price = limitPx || 0
+            priceDisplay = limitPx !== null ? limitPx.toString() : '0'
+          } else {
+            // Trigger order
+            if (limitPx !== null && triggerPx !== null) {
+              // Stop-limit: show both
+              price = limitPx // Use limit price as the main price
+              priceDisplay = `${triggerPx} → ${limitPx}`
+            } else if (triggerPx !== null) {
+              // Stop order with only trigger
+              price = triggerPx
+              priceDisplay = triggerPx.toString()
+            } else {
+              // Fallback
+              price = limitPx || 0
+              priceDisplay = limitPx !== null ? limitPx.toString() : '0'
+            }
+          }
+          
+          // Calculate size (USD notional)
+          // For stop-limit, use limitPx; otherwise use triggerPx if available, else limitPx
+          const priceForNotional = isTrigger && limitPx !== null
+            ? limitPx  // Use limit for stop-limit
+            : (triggerPx !== null ? triggerPx : (limitPx !== null ? limitPx : 0))
+          
+          const sizeUsd = amount * priceForNotional
+          
+          allOrders.push({
+            id: `hyperliquid-order-${token}-${dex || 'default'}-${Date.now()}-${Math.random()}`,
+            token,
+            activity,
+            side,
+            price,
+            priceDisplay,
+            size: sizeUsd,
+            amount,
+            platform: 'Hyperliquid',
+          })
+        }
+      } catch (error) {
+        // Continue to next DEX on error
+        continue
+      }
+    }
+    
+    return allOrders
+  } catch (error) {
+    return []
+  }
+}
+
 async function fetchAccountEquity(walletAddress: string): Promise<ExchangeBalance[]> {
   try {
     const allDexs = await fetchAllPerpDexs()
@@ -501,15 +716,16 @@ async function fetchAccountEquity(walletAddress: string): Promise<ExchangeBalanc
 async function fetchHyperliquidPerpetualsData(
   walletAddress: string
 ): Promise<PerpetualsData> {
-  const [openPositions, exchangeBalance] = await Promise.all([
+  const [openPositions, exchangeBalance, openOrders] = await Promise.all([
     fetchOpenPositions(walletAddress),
     fetchAccountEquity(walletAddress),
+    fetchOpenOrders(walletAddress),
   ])
 
   return {
     exchangeBalance,
     openPositions,
-    openOrders: [],
+    openOrders,
   }
 }
 

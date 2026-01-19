@@ -5,7 +5,7 @@ import { useCurrency } from '../contexts/CurrencyContext'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useData } from '../contexts/DataContext'
 import { formatMoney, formatNumber } from '../lib/currency'
-import type { PerpetualsOpenPosition } from './NetWorth'
+import type { PerpetualsOpenPosition, PerpetualsOpenOrder } from './NetWorth'
 
 // Helper component: SectionCard
 interface SectionCardProps {
@@ -64,7 +64,8 @@ interface OpenOrderRow {
   token: string
   activity: string
   side: 'Buy' | 'Sell'
-  price: number
+  price: number // numeric price for calculations
+  priceDisplay: string // formatted price (e.g., "87000" or "85000 → 87000")
   size: number
   amount: string
 }
@@ -126,33 +127,40 @@ function Investing() {
     })
   }, [data.netWorthItems])
 
-  // Example open orders data
-  const openOrders: OpenOrderRow[] = [
-    {
-      token: 'BTC',
-      activity: 'Limit',
-      side: 'Buy',
-      price: 87000,
-      size: 3200,
-      amount: '0.02 BTC',
-    },
-    {
-      token: 'ETH',
-      activity: 'Market',
-      side: 'Sell',
-      price: 3750,
-      size: 1500,
-      amount: '0.4 ETH',
-    },
-    {
-      token: 'SOL',
-      activity: 'Limit',
-      side: 'Buy',
-      price: 140,
-      size: 2100,
-      amount: '15 SOL',
-    },
-  ]
+  // Extract open orders from all perpetuals items
+  const openOrders: OpenOrderRow[] = useMemo(() => {
+    const allOpenOrders: PerpetualsOpenOrder[] = []
+    
+    // Collect all open orders from all perpetuals items
+    data.netWorthItems
+      .filter(item => item.category === 'Perpetuals' && item.perpetualsData)
+      .forEach(item => {
+        if (item.perpetualsData?.openOrders) {
+          allOpenOrders.push(...item.perpetualsData.openOrders)
+        }
+      })
+
+    // Map to OpenOrderRow format
+    return allOpenOrders.map((order) => {
+      // Format token amount (no token name, just number)
+      let amountStr = '-'
+      if (order.amount !== null && order.amount !== undefined && order.amount > 0) {
+        // Format with appropriate decimals (up to 8 for crypto, but remove trailing zeros)
+        const formatted = order.amount.toFixed(8).replace(/\.?0+$/, '')
+        amountStr = formatted
+      }
+
+      return {
+        token: order.token,
+        activity: order.activity,
+        side: order.side,
+        price: order.price,
+        priceDisplay: order.priceDisplay,
+        size: order.size,
+        amount: amountStr,
+      }
+    })
+  }, [data.netWorthItems])
 
   return (
     <div className="min-h-screen px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
@@ -324,40 +332,62 @@ function Investing() {
                 </tr>
               </thead>
               <tbody>
-                {openOrders.map((order, index) => {
-                  const isBuy = order.side === 'Buy'
+                {openOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center">
+                      <div className="text2 text-text-muted">No open orders</div>
+                    </td>
+                  </tr>
+                ) : (
+                  openOrders.map((order, index) => {
+                    const isBuy = order.side === 'Buy'
 
-                  return (
-                    <tr key={index} className="border-b border-border-subtle last:border-b-0">
-                      <td className="py-3 pr-4 whitespace-nowrap">
-                        <div className="text2 text-text-primary font-medium">{order.token}</div>
-                      </td>
-                      <td className="py-3 pr-4 whitespace-nowrap">
-                        <div className="text2 text-text-primary">{order.activity}</div>
-                      </td>
-                      <td className="py-3 pr-4 whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                            isBuy
-                              ? 'bg-success/20 text-success border border-success/30'
-                              : 'bg-danger/20 text-danger border border-danger/30'
-                          }`}
-                        >
-                          {order.side}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{formatCurrency(order.price)}</div>
-                      </td>
-                      <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{formatCurrency(order.size)}</div>
-                      </td>
-                      <td className="py-3 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{order.amount}</div>
-                      </td>
-                    </tr>
-                  )
-                })}
+                    return (
+                      <tr key={index} className="border-b border-border-subtle last:border-b-0">
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <div className="text2 text-text-primary font-medium">{order.token}</div>
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <div className="text2 text-text-primary">{order.activity}</div>
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <span
+                            className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                              isBuy
+                                ? 'bg-success/20 text-success border border-success/30'
+                                : 'bg-danger/20 text-danger border border-danger/30'
+                            }`}
+                          >
+                            {order.side}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4 text-right whitespace-nowrap">
+                          <div className="text2 text-text-primary">
+                            {order.priceDisplay && order.priceDisplay.includes('→') 
+                              ? order.priceDisplay.split('→').map((p, i) => {
+                                  const num = parseFloat(p.trim())
+                                  if (isNaN(num)) return null
+                                  return (
+                                    <span key={i}>
+                                      {i > 0 && ' → '}
+                                      ${formatNumber(num, 'us', { incognito: isIncognito })}
+                                    </span>
+                                  )
+                                })
+                              : `$${formatNumber(order.price, 'us', { incognito: isIncognito })}`
+                            }
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4 text-right whitespace-nowrap">
+                          <div className="text2 text-text-primary">{formatCurrency(order.size)}</div>
+                        </td>
+                        <td className="py-3 text-right whitespace-nowrap">
+                          <div className="text2 text-text-primary">{order.amount || '-'}</div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
               </tbody>
             </table>
           </div>

@@ -60,9 +60,22 @@ export interface ExchangeBalance {
   platform: string
 }
 
+export interface PerpetualsOpenOrder {
+  id: string
+  token: string // coin symbol
+  activity: string // Limit, Stop, Limit Stop, etc.
+  side: 'Buy' | 'Sell' // normalized from "B"/"A"
+  price: number // display price (numeric)
+  priceDisplay: string // formatted price (e.g., "87000" or "85000 → 87000")
+  size: number // USD notional
+  amount: number // token amount
+  platform: string // "Hyperliquid"
+}
+
 export interface PerpetualsData {
   exchangeBalance: ExchangeBalance[]
   openPositions: PerpetualsOpenPosition[]
+  openOrders: PerpetualsOpenOrder[]
 }
 
 export interface NetWorthItem {
