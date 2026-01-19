@@ -348,9 +348,6 @@ function Investing() {
                           <div className="text2 text-text-primary font-medium">{order.token}</div>
                         </td>
                         <td className="py-3 pr-4 whitespace-nowrap">
-                          <div className="text2 text-text-primary">{order.activity}</div>
-                        </td>
-                        <td className="py-3 pr-4 whitespace-nowrap">
                           <span
                             className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                               isBuy
@@ -360,6 +357,9 @@ function Investing() {
                           >
                             {order.side}
                           </span>
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <div className="text2 text-text-primary">{order.activity}</div>
                         </td>
                         <td className="py-3 pr-4 text-right whitespace-nowrap">
                           <div className="text2 text-text-primary">
