@@ -245,12 +245,19 @@ function Investing() {
                 </tr>
               </thead>
               <tbody>
-                {positions.map((position, index) => {
-                  const isLong = position.side === 'Long'
-                  const pnlIsPositive = position.pnl >= 0
+                {positions.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-8 text-center">
+                      <div className="text2 text-text-muted">No positions</div>
+                    </td>
+                  </tr>
+                ) : (
+                  positions.map((position, index) => {
+                    const isLong = position.side === 'Long'
+                    const pnlIsPositive = position.pnl >= 0
 
-                  return (
-                    <tr key={index} className="border-b border-border-subtle last:border-b-0">
+                    return (
+                      <tr key={index} className="border-b border-border-subtle last:border-b-0">
                       <td className="py-3 pr-4 whitespace-nowrap">
                         <div className="text2 text-text-primary font-medium">{position.token}</div>
                       </td>
@@ -311,7 +318,8 @@ function Investing() {
                       </td>
                     </tr>
                   )
-                })}
+                  })
+                )}
               </tbody>
             </table>
           </div>
