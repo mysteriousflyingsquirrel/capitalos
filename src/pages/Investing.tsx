@@ -108,7 +108,7 @@ function Investing() {
       if (pos.amountToken !== null && pos.amountToken !== undefined && pos.amountToken > 0) {
         // Format with appropriate decimals (up to 8 for crypto, but remove trailing zeros)
         const formatted = pos.amountToken.toFixed(8).replace(/\.?0+$/, '')
-        amountStr = `${formatted} ${pos.ticker}`
+        amountStr = formatted
       }
 
       return {
