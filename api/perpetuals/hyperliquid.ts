@@ -342,17 +342,24 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           }
           
           // Funding Fee: cumFunding.sinceOpen (in USD)
+          // Note: Hyperliquid returns funding from the exchange's perspective, so we invert the sign
+          // Negative means you paid funding (cost), positive means you received funding (income)
           let fundingFeeUsd: number | null = null
           if (position.cumFunding && typeof position.cumFunding === 'object') {
             const sinceOpen = position.cumFunding.sinceOpen
             if (sinceOpen !== undefined && sinceOpen !== null) {
+              let rawValue: number
               if (typeof sinceOpen === 'string') {
-                fundingFeeUsd = parseFloat(sinceOpen)
+                rawValue = parseFloat(sinceOpen)
               } else if (typeof sinceOpen === 'number') {
-                fundingFeeUsd = sinceOpen
+                rawValue = sinceOpen
+              } else {
+                rawValue = NaN
               }
-              if (isNaN(fundingFeeUsd) || !isFinite(fundingFeeUsd)) {
-                fundingFeeUsd = null
+              if (!isNaN(rawValue) && isFinite(rawValue)) {
+                // Invert sign: Hyperliquid's negative = you paid (should be negative for us)
+                // Hyperliquid's positive = you received (should be positive for us)
+                fundingFeeUsd = -rawValue
               }
             }
           }
