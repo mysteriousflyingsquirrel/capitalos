@@ -48,7 +48,7 @@ function PnLBox({ title, value }: PnLBoxProps) {
 // Position row data interface
 interface PositionRow {
   token: string
-  side: string // ▲ or ▼ symbol
+  side: 'Long' | 'Short'
   leverage: string
   pnl: number
   pnlPercent: number
@@ -95,19 +95,18 @@ function Investing() {
 
     // Map to PositionRow format
     return allOpenPositions.map((pos) => {
-      const directionArrow = pos.positionSide === 'LONG' ? '▲' : pos.positionSide === 'SHORT' ? '▼' : ''
+      const side = pos.positionSide === 'LONG' ? 'Long' : pos.positionSide === 'SHORT' ? 'Short' : 'Long'
       const leverageStr = pos.leverage !== null && pos.leverage !== undefined 
         ? `${Math.round(pos.leverage)}x` 
-        : ''
-      const sideDisplay = leverageStr ? `${directionArrow} ${leverageStr}` : directionArrow
+        : '1x'
       
       const size = pos.margin + pos.pnl
       const pnlPercent = pos.margin !== 0 ? (pos.pnl / pos.margin) * 100 : 0
 
       return {
         token: pos.ticker,
-        side: sideDisplay,
-        leverage: '', // Not used separately, combined with side
+        side: side,
+        leverage: leverageStr,
         pnl: pos.pnl,
         pnlPercent: pnlPercent,
         size: size,
@@ -169,6 +168,7 @@ function Investing() {
             <table className="w-full" style={{ minWidth: '1070px', tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '70px' }} />
+                <col style={{ width: '80px' }} />
                 <col style={{ width: '100px' }} />
                 <col style={{ width: '130px' }} />
                 <col style={{ width: '150px' }} />
@@ -184,6 +184,9 @@ function Investing() {
                   </th>
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Side</Heading>
+                  </th>
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Leverage</Heading>
                   </th>
                   <th className="text-right pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>PnL</Heading>
@@ -207,6 +210,7 @@ function Investing() {
               </thead>
               <tbody>
                 {positions.map((position, index) => {
+                  const isLong = position.side === 'Long'
                   const pnlIsPositive = position.pnl >= 0
 
                   return (
@@ -215,13 +219,26 @@ function Investing() {
                         <div className="text2 text-text-primary font-medium">{position.token}</div>
                       </td>
                       <td className="py-3 pr-4 whitespace-nowrap">
-                        <div className="text2 text-text-primary">{position.side}</div>
+                        <span
+                          className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                            isLong
+                              ? 'bg-success/20 text-success border border-success/30'
+                              : 'bg-danger/20 text-danger border border-danger/30'
+                          }`}
+                        >
+                          {position.side}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4 whitespace-nowrap">
+                        <div className="text2 text-text-primary">{position.leverage}</div>
                       </td>
                       <td className="py-3 pr-4 text-right whitespace-nowrap">
                         <div className="flex flex-col items-end">
-                          <div className="text2 text-text-primary">{formatCurrency(position.size)}</div>
-                          <div className="text2 mt-0.5" style={{ color: pnlIsPositive ? '#2ECC71' : '#E74C3C' }}>
+                          <div className="text2" style={{ color: pnlIsPositive ? '#2ECC71' : '#E74C3C' }}>
                             {formatCurrency(position.pnl)}
+                          </div>
+                          <div className="text2 mt-0.5" style={{ color: pnlIsPositive ? '#2ECC71' : '#E74C3C' }}>
+                            {pnlIsPositive ? '+' : ''}{position.pnlPercent.toFixed(2)}%
                           </div>
                         </div>
                       </td>
