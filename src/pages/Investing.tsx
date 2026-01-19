@@ -302,9 +302,9 @@ function Investing() {
           <div className="overflow-x-auto -mx-3 px-3 lg:-mx-6 lg:px-6">
             <table className="w-full" style={{ minWidth: '700px', tableLayout: 'fixed' }}>
               <colgroup>
+                <col style={{ width: '110px' }} />
                 <col style={{ width: '70px' }} />
-                <col style={{ width: '100px' }} />
-                <col style={{ width: '80px' }} />
+                <col style={{ width: '70px' }} />
                 <col style={{ width: '150px' }} />
                 <col style={{ width: '150px' }} />
                 <col style={{ width: '120px' }} />
@@ -315,10 +315,10 @@ function Investing() {
                     <Heading level={4}>Token</Heading>
                   </th>
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Activity</Heading>
+                    <Heading level={4}>Side</Heading>
                   </th>
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Side</Heading>
+                    <Heading level={4}>Activity</Heading>
                   </th>
                   <th className="text-right pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Price</Heading>
