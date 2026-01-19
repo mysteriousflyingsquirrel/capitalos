@@ -185,13 +185,13 @@ function Investing() {
               <colgroup>
                 <col style={{ width: '110px' }} />
                 <col style={{ width: '70px' }} />
-                <col style={{ width: '70px' }} />
-                <col style={{ width: '130px' }} />
-                <col style={{ width: '150px' }} />
-                <col style={{ width: '120px' }} />
-                <col style={{ width: '150px' }} />
-                <col style={{ width: '150px' }} />
-                <col style={{ width: '120px' }} />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
               </colgroup>
               <thead>
                 <tr className="border-b border-border-strong">
@@ -304,10 +304,10 @@ function Investing() {
               <colgroup>
                 <col style={{ width: '110px' }} />
                 <col style={{ width: '70px' }} />
-                <col style={{ width: '70px' }} />
-                <col style={{ width: '150px' }} />
-                <col style={{ width: '150px' }} />
-                <col style={{ width: '120px' }} />
+                <col />
+                <col />
+                <col />
+                <col />
               </colgroup>
               <thead>
                 <tr className="border-b border-border-strong">
