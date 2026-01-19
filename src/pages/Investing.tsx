@@ -185,7 +185,7 @@ function Investing() {
               <colgroup>
                 <col style={{ width: '150px' }} />
                 <col style={{ width: '150px' }} />
-                <col />
+                <col style={{ width: '50px' }} />
                 <col />
                 <col />
                 <col />
@@ -304,7 +304,7 @@ function Investing() {
               <colgroup>
                 <col style={{ width: '150px' }} />
                 <col style={{ width: '150px' }} />
-                <col />
+                <col style={{ width: '50px' }} />
                 <col />
                 <col />
                 <col />
