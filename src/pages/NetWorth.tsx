@@ -187,7 +187,7 @@ function NetWorthCategorySection({
       return sum + (isNaN(balanceUsd) || !isFinite(balanceUsd) ? 0 : balanceUsd)
     }
     if (category === 'Perpetuals') {
-      // For Perpetuals: calculate only from Exchange Balance (Open Positions are displayed but not included in total)
+      // For Perpetuals: calculate only from Exchange Balance
       if (!item.perpetualsData) return sum
       const { exchangeBalance } = item.perpetualsData
       
@@ -203,8 +203,6 @@ function NetWorthCategorySection({
           totalChf += balanceChf
         })
       }
-      
-      // Note: Open Positions are displayed but NOT included in the total perpetuals value
       
       return sum + (isNaN(totalChf) || !isFinite(totalChf) ? 0 : totalChf)
     }
@@ -384,135 +382,6 @@ function NetWorthCategorySection({
                               <div className="flex items-center justify-end gap-2">
                                 <span className="text2 truncate">
                                   {balance.platform}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-2">
-                              {/* Actions column - empty */}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Open Positions Table */}
-              <div>
-                <Heading level={3} className="mb-3 text-text-secondary">Open Positions</Heading>
-                <div className="w-full overflow-hidden">
-                  <style>{`
-                    @media (max-width: 767px) {
-                      .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
-                      .perp-table-holdings-col { width: calc((100% - 55px) * 1 / 6) !important; }
-                      .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
-                      .perp-table-actions-col { width: 55px !important; }
-                      .perp-table-balance-cell { padding-right: 0.25rem !important; }
-                    }
-                    @media (min-width: 768px) {
-                      .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
-                      .perp-table-holdings-col { width: calc((100% - 85px) * 1 / 8) !important; }
-                      .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
-                      .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
-                      .perp-table-actions-col { width: 85px !important; }
-                    }
-                  `}</style>
-                  <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
-                    <colgroup>
-                      <col className="perp-table-item-col" />
-                      <col className="perp-table-holdings-col" />
-                      <col className="perp-table-balance-col" />
-                      <col className="perp-table-platform-col hidden md:table-column" />
-                      <col className="perp-table-actions-col" />
-                    </colgroup>
-                    <thead>
-                      <tr className="border-b border-border-subtle">
-                        <th className="text-left pb-2">
-                          <Heading level={4}>Item</Heading>
-                        </th>
-                        <th className="text-right pb-2">
-                          <Heading level={4}>Holdings</Heading>
-                        </th>
-                        <th className="text-right pb-2">
-                          <Heading level={4}>Balance</Heading>
-                        </th>
-                        <th className="text-right pb-2 hidden md:table-cell">
-                          <Heading level={4}>Platform</Heading>
-                        </th>
-                        <th className="text-right pb-2">
-                          <Heading level={4}>Actions</Heading>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {perpetualsData.openPositions.map((pos) => {
-                        const holdingsUsd = pos.margin + pos.pnl
-                        const balanceUsd = pos.margin + pos.pnl
-                        const balanceChf = usdToChfRate && usdToChfRate > 0 
-                          ? balanceUsd * usdToChfRate 
-                          : convert(balanceUsd, 'USD')
-                        const pnlSign = pos.pnl >= 0 ? '+' : '-'
-                        const pnlFormatted = formatNumber(Math.abs(pos.pnl), 'ch', { incognito: isIncognito })
-                        
-                        // Format second line: direction arrow and leverage
-                        // Format: "▼ 1x"
-                        const secondLineParts: string[] = []
-                        
-                        // Add direction arrow and leverage if available
-                        // Show direction if we have positionSide, even without leverage
-                        if (pos.positionSide) {
-                          const directionArrow = pos.positionSide === 'LONG' ? '▲' : '▼'
-                          if (pos.leverage !== null && pos.leverage !== undefined) {
-                            const roundedLeverage = Math.round(pos.leverage)
-                            const leverageStr = `${roundedLeverage}x`
-                            secondLineParts.push(`${directionArrow} ${leverageStr}`)
-                          } else {
-                            // Show just direction if no leverage
-                            secondLineParts.push(directionArrow)
-                          }
-                        } else if (pos.leverage !== null && pos.leverage !== undefined) {
-                          // Show just leverage if no direction
-                          const roundedLeverage = Math.round(pos.leverage)
-                          secondLineParts.push(`${roundedLeverage}x`)
-                        }
-                        
-                        const secondLineDisplay = secondLineParts.length > 0
-                          ? secondLineParts.join(' / ')
-                          : null
-
-                        return (
-                          <tr key={pos.id} className="border-b border-border-subtle last:border-b-0">
-                            <td className="py-2 pr-2">
-                              <div className="text2 leading-tight">
-                                {pos.ticker}
-                                {secondLineDisplay && (
-                                  <>
-                                    <br />
-                                    <span className="text-[0.9em]">
-                                      {secondLineDisplay}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2 text-right px-2">
-                              <div className="text2 leading-tight">
-                                <div>{formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })}</div>
-                                <div className={`text-[0.9em] ${pos.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                  {pnlSign}{pnlFormatted}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-2 text-right px-2 perp-table-balance-cell">
-                              <div className="text2 whitespace-nowrap">
-                                {formatCurrency(balanceChf)}
-                              </div>
-                            </td>
-                            <td className="py-2 text-right pr-2 hidden md:table-cell">
-                              <div className="flex items-center justify-end gap-2">
-                                <span className="text2 truncate">
-                                  {pos.platform}
                                 </span>
                               </div>
                             </td>
