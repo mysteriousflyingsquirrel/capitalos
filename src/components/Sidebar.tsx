@@ -10,6 +10,7 @@ import dashboardIcon from '../icons/dashboard_icon.svg'
 import netWorthIcon from '../icons/networth_icon.svg'
 import cashflowIcon from '../icons/cashflow_icon.svg'
 import investingIcon from '../icons/investment_icon.svg'
+import analyticsIcon from '../icons/tax_icon.svg'
 import settingsIcon from '../icons/settings_icon.svg'
 
 interface NavigationItem {
@@ -22,7 +23,8 @@ const navigation: NavigationItem[] = [
   { name: 'Dashboard', path: '/', icon: dashboardIcon },
   { name: 'Net Worth', path: '/net-worth', icon: netWorthIcon },
   { name: 'Cashflow', path: '/cashflow', icon: cashflowIcon },
-  { name: 'Analytics', path: '/analytics', icon: investingIcon },
+  { name: 'Analytics', path: '/analytics', icon: analyticsIcon },
+  { name: 'Investing', path: '/investing', icon: investingIcon },
   { name: 'Settings', path: '/settings', icon: settingsIcon },
 ]
 

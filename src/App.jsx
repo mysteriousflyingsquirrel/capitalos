@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Cashflow from './pages/Cashflow'
 import NetWorth from './pages/NetWorth'
 import Analytics from './pages/Analytics'
+import Investing from './pages/Investing'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
 import { CurrencyProvider } from './contexts/CurrencyContext'
@@ -55,6 +56,7 @@ function ProtectedRoutes() {
           <Route path="/cashflow" element={<Cashflow />} />
           <Route path="/net-worth" element={<NetWorth />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/investing" element={<Investing />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>

@@ -252,12 +252,13 @@ function Analytics() {
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   return (
-    <div className="min-h-screen px-2 py-4 lg:p-6">
+    <div className="min-h-screen px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* Page Title */}
         <Heading level={1}>Analytics</Heading>
 
         {/* Cashflow Forecast Section */}
-        <div className="bg-bg-surface-1 border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           {/* Header */}
           <div className="mb-6 pb-4 border-b border-border-strong">
             <Heading level={2}>Cashflow Forecast (12 Months)</Heading>
@@ -481,11 +482,21 @@ function Analytics() {
                         </colgroup>
                         <thead>
                           <tr className="border-b border-border-subtle">
-                            <th className="text-left pb-2 pr-2">Month</th>
-                            <th className="text-right pb-2 pr-2">Start Balance</th>
-                            <th className="text-right pb-2 pr-2">Inflows</th>
-                            <th className="text-right pb-2 pr-2">Outflows</th>
-                            <th className="text-right pb-2">End Balance</th>
+                            <th className="text-left pb-2 pr-2">
+                              <Heading level={4}>Month</Heading>
+                            </th>
+                            <th className="text-right pb-2 pr-2">
+                              <Heading level={4}>Start Balance</Heading>
+                            </th>
+                            <th className="text-right pb-2 pr-2">
+                              <Heading level={4}>Inflows</Heading>
+                            </th>
+                            <th className="text-right pb-2 pr-2">
+                              <Heading level={4}>Outflows</Heading>
+                            </th>
+                            <th className="text-right pb-2">
+                              <Heading level={4}>End Balance</Heading>
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -500,23 +511,22 @@ function Analytics() {
                                   isNegative ? 'bg-danger/10' : isBelowBuffer ? 'bg-amber-500/10' : ''
                                 }`}
                               >
-                                <td className="py-2 text-text-primary pr-2">{projection.month}</td>
-                                <td className="py-2 text-right text-text-secondary pr-2 whitespace-nowrap">
-                                  {formatCurrency(projection.startBalance)}
+                                <td className="py-2 pr-2">
+                                  <div className="text2 text-text-primary">{projection.month}</div>
                                 </td>
-                                <td className="py-2 text-right text-success pr-2 whitespace-nowrap">
-                                  {formatCurrency(projection.totalInflows)}
+                                <td className="py-2 text-right pr-2 whitespace-nowrap">
+                                  <div className="text2 text-text-secondary">{formatCurrency(projection.startBalance)}</div>
                                 </td>
-                                <td className="py-2 text-right text-danger pr-2 whitespace-nowrap">
-                                  {formatCurrency(projection.totalOutflows)}
+                                <td className="py-2 text-right pr-2 whitespace-nowrap">
+                                  <div className="text2" style={{ color: '#2ECC71' }}>{formatCurrency(projection.totalInflows)}</div>
+                                </td>
+                                <td className="py-2 text-right pr-2 whitespace-nowrap">
+                                  <div className="text2" style={{ color: '#E74C3C' }}>{formatCurrency(projection.totalOutflows)}</div>
                                 </td>
                                 <td className="py-2 text-right whitespace-nowrap">
-                                  <TotalText
-                                    variant={isNegative ? 'outflow' : 'inflow'}
-                                    className={isBelowBuffer ? 'text-amber-500' : ''}
-                                  >
+                                  <div className={`text2 ${isNegative ? 'text-danger' : 'text-success'} ${isBelowBuffer ? 'text-amber-500' : ''}`}>
                                     {formatCurrency(projection.endBalance)}
-                                  </TotalText>
+                                  </div>
                                 </td>
                               </tr>
                             )
