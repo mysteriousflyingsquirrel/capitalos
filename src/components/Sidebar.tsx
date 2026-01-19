@@ -106,7 +106,7 @@ function Sidebar() {
       <aside
         className={`
           fixed left-0 top-14 lg:top-0 h-[calc(100vh-3.5rem)] lg:h-full w-[250px] bg-[#050A1A]
-          flex flex-col z-50
+          flex flex-col z-50 border-r border-border-subtle
           transform transition-transform duration-300 ease-in-out
           lg:translate-x-0
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}

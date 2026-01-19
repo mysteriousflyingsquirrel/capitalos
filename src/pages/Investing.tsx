@@ -75,10 +75,10 @@ function Investing() {
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
 
   // Example values for PnL boxes
-  const totalPnL = 531.32
   const pnl24h = -39.21
   const pnl7d = 245.67
   const pnl30d = 892.15
+  const pnl90d = 1250.45
 
   // Extract open positions from all perpetuals items
   const positions: PositionRow[] = useMemo(() => {
@@ -155,10 +155,10 @@ function Investing() {
         {/* Performance Frame */}
         <SectionCard title="Performance">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <PnLBox title="Total PnL" value={totalPnL} />
             <PnLBox title="24-Hour PnL" value={pnl24h} />
             <PnLBox title="7-Day PnL" value={pnl7d} />
             <PnLBox title="30-Day PnL" value={pnl30d} />
+            <PnLBox title="90-Day PnL" value={pnl90d} />
           </div>
         </SectionCard>
 
