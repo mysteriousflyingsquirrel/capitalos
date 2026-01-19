@@ -648,6 +648,27 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
       }
     }
     
+    // Sort orders by: 1. Token, 2. Side, 3. Price
+    allOrders.sort((a, b) => {
+      // 1. Sort by Token (alphabetically, case-insensitive)
+      const tokenA = a.token.toUpperCase()
+      const tokenB = b.token.toUpperCase()
+      if (tokenA !== tokenB) {
+        return tokenA.localeCompare(tokenB)
+      }
+      
+      // 2. Sort by Side (Buy before Sell)
+      const sideOrder = { 'Buy': 0, 'Sell': 1 }
+      const sideA = sideOrder[a.side as keyof typeof sideOrder] ?? 2
+      const sideB = sideOrder[b.side as keyof typeof sideOrder] ?? 2
+      if (sideA !== sideB) {
+        return sideA - sideB
+      }
+      
+      // 3. Sort by Price (ascending)
+      return a.price - b.price
+    })
+    
     return allOrders
   } catch (error) {
     return []
