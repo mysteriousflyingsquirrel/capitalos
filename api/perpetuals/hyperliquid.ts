@@ -678,8 +678,11 @@ async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
 
     const data = await response.json()
     
-    // The response is an array of tuples: ["day", {...}, "week", {...}, "month", {...}, "allTime", {...}]
-    // Or it could be an array of arrays: [["day", {...}], ["week", {...}], ...]
+    // The response can be in multiple formats:
+    // 1. Array of tuples: [["day", {...}], ["week", {...}], ...]
+    // 2. Flat array: ["day", {...}, "week", {...}, ...]
+    // 3. Object keyed by period: { day: {...}, week: {...} }
+    // 4. Object with data array: { data: [[...]] }
     // Each bucket has pnlHistory: array of [timestampMs, pnlString]
     
     let dayBucket: any = null
@@ -687,10 +690,11 @@ async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
     let monthBucket: any = null
     let allTimeBucket: any = null
     
-    if (Array.isArray(data)) {
+    // Helper function to extract buckets from tuple array format
+    const extractFromTupleArray = (arr: any[]) => {
       // Handle format: [["day", {...}], ["week", {...}], ...]
-      if (data.length > 0 && Array.isArray(data[0]) && data[0].length >= 2) {
-        for (const item of data) {
+      if (arr.length > 0 && Array.isArray(arr[0]) && arr[0].length >= 2) {
+        for (const item of arr) {
           if (Array.isArray(item) && item.length >= 2) {
             const bucketName = item[0]
             const bucketData = item[1]
@@ -708,9 +712,9 @@ async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
         }
       } else {
         // Handle format: ["day", {...}, "week", {...}, ...] (flat array)
-        for (let i = 0; i < data.length - 1; i += 2) {
-          const bucketName = data[i]
-          const bucketData = data[i + 1]
+        for (let i = 0; i < arr.length - 1; i += 2) {
+          const bucketName = arr[i]
+          const bucketData = arr[i + 1]
           
           if (typeof bucketName === 'string' && bucketData && typeof bucketData === 'object') {
             if (bucketName === 'day' && bucketData?.pnlHistory) {
@@ -727,6 +731,29 @@ async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
       }
     }
     
+    if (Array.isArray(data)) {
+      extractFromTupleArray(data)
+    } else if (data && typeof data === 'object') {
+      // Handle object format: { day: {...}, week: {...} }
+      if (data.day && data.day.pnlHistory) {
+        dayBucket = data.day
+      }
+      if (data.week && data.week.pnlHistory) {
+        weekBucket = data.week
+      }
+      if (data.month && data.month.pnlHistory) {
+        monthBucket = data.month
+      }
+      if (data.allTime && data.allTime.pnlHistory) {
+        allTimeBucket = data.allTime
+      }
+      
+      // Handle format: { data: [[...]] }
+      if (data.data && Array.isArray(data.data)) {
+        extractFromTupleArray(data.data)
+      }
+    }
+    
     // Helper function to calculate PnL from a bucket
     const calculateBucketPnL = (bucket: any): number | null => {
       if (!bucket || !bucket.pnlHistory || !Array.isArray(bucket.pnlHistory)) {
@@ -734,8 +761,15 @@ async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
       }
       
       const history = bucket.pnlHistory
-      if (history.length < 2) {
+      
+      // If no history, return null
+      if (history.length === 0) {
         return null
+      }
+      
+      // If only one point, delta is 0 (no change)
+      if (history.length === 1) {
+        return 0
       }
       
       // Ensure sorted by timestamp (ascending)
