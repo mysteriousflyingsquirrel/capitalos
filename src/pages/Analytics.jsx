@@ -196,6 +196,19 @@ function Analytics() {
   const formatCurrency = (value) => 
     formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
 
+  // Format currency helper for charts
+  const formatCurrencyValue = (value) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
+
+  // Format for chart ticks
+  const formatCurrencyTick = (value) => {
+    if (isIncognito) return '****'
+    const converted = convert(value, 'CHF')
+    if (converted >= 1000) {
+      return `${(converted / 1000).toFixed(0)}'k`
+    }
+    return converted.toString()
+  }
+
   const handleAddEntry = (type, entryData) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto 
       ? crypto.randomUUID() 
@@ -347,7 +360,7 @@ function Analytics() {
               {/* Entry Lists */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 {/* Manual Inflows */}
-                <div className="bg-bg-surface-2 border border-border-subtle rounded-input p-4">
+                <div className="bg-[#050A1A] border border-border-subtle rounded-input p-4">
                   <div className="flex items-center justify-between mb-4">
                     <Heading level={3}>Manual Inflows (Future)</Heading>
                     <button
@@ -406,7 +419,7 @@ function Analytics() {
                 </div>
 
                 {/* Planned Payments */}
-                <div className="bg-bg-surface-2 border border-border-subtle rounded-input p-4">
+                <div className="bg-[#050A1A] border border-border-subtle rounded-input p-4">
                   <div className="flex items-center justify-between mb-4">
                     <Heading level={3}>Planned Payments (Future)</Heading>
                     <button
@@ -469,7 +482,7 @@ function Analytics() {
               {forecastResult && (
                 <div className="space-y-6">
                   {/* Monthly Projection Table */}
-                  <div className="bg-bg-surface-2 border border-border-subtle rounded-input p-4">
+                  <div className="bg-[#050A1A] border border-border-subtle rounded-input p-4">
                     <Heading level={3} className="mb-4">Monthly Projection</Heading>
                     <div className="overflow-x-auto -mx-4 px-4">
                       <table className="w-full text-xs md:text-sm min-w-[600px]" style={{ tableLayout: 'fixed' }}>
@@ -537,14 +550,12 @@ function Analytics() {
                   </div>
 
                   {/* Chart */}
-                  <div className="bg-bg-surface-2 border border-border-subtle rounded-input p-4">
+                  <div className="bg-[#050A1A] border border-border-subtle rounded-input p-4">
                     <Heading level={3} className="mb-4">Balance Projection Chart</Heading>
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart 
                         data={forecastResult.monthlyProjections}
-                        margin={{ left: 12, right: 12, top: 5, bottom: 5 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.muted1} opacity={0.3} />
                         <XAxis
                           dataKey="month"
                           stroke={CHART_COLORS.muted1}
@@ -553,26 +564,32 @@ function Analytics() {
                         <YAxis
                           stroke={CHART_COLORS.muted1}
                           tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
-                          tickFormatter={(value) => formatCurrency(value)}
-                          width={80}
+                          tickFormatter={formatCurrencyTick}
                         />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: '#050A1A',
-                            border: '1px solid #B87333',
-                            borderRadius: '8px',
+                            backgroundColor: '#FFFFFF',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '12px',
+                            color: '#111827',
+                            fontSize: '0.648rem',
+                            fontWeight: '400',
                           }}
-                          formatter={(value) => formatCurrency(value)}
+                          formatter={(value) => formatCurrencyValue(value)}
                         />
-                        <Legend />
+                        <Legend
+                          wrapperStyle={{ color: '#8B8F99', fontSize: '0.72rem', fontWeight: '400' }}
+                          iconType="line"
+                          className="text2"
+                        />
                         <Line
                           type="monotone"
                           dataKey="endBalance"
                           name="End Balance"
                           stroke={CHART_COLORS.accent1}
-                          strokeWidth={2}
-                          dot={{ fill: CHART_COLORS.accent1, r: 4 }}
-                          activeDot={{ r: 6 }}
+                          strokeWidth={1}
+                          dot={false}
+                          activeDot={false}
                         />
                         {safetyBuffer !== null && safetyBuffer !== undefined && safetyBuffer > 0 && (
                           <Line
@@ -583,6 +600,7 @@ function Analytics() {
                             strokeWidth={1}
                             strokeDasharray="5 5"
                             dot={false}
+                            activeDot={false}
                           />
                         )}
                       </LineChart>

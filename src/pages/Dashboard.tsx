@@ -1091,11 +1091,6 @@ function Dashboard() {
           </div>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={netWorthData}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke={CHART_COLORS.muted1}
-                opacity={0.2}
-              />
               <XAxis
                 dataKey="month"
                 stroke={CHART_COLORS.muted1}
@@ -1131,7 +1126,7 @@ function Dashboard() {
                 type="monotone"
                 dataKey="Total Net Worth"
                 stroke={CHART_COLORS.danger}
-                strokeWidth={4}
+                strokeWidth={2}
                 dot={false}
                 activeDot={false}
               />
@@ -1139,7 +1134,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Cash"
                   stroke={CHART_COLORS.accent1}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
@@ -1147,7 +1142,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Bank Accounts"
                   stroke={CHART_COLORS.accent2}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
@@ -1155,7 +1150,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Retirement Funds"
                   stroke={CHART_COLORS.accent3}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
@@ -1163,7 +1158,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Index Funds"
                   stroke={CHART_COLORS.purple}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
@@ -1171,7 +1166,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Stocks"
                   stroke={CHART_COLORS.orange}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
@@ -1179,7 +1174,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Commodities"
                   stroke={CHART_COLORS.teal}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
@@ -1187,7 +1182,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Crypto"
                   stroke={CHART_COLORS.pink}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
@@ -1195,7 +1190,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Perpetuals"
                   stroke={CHART_COLORS.lime}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
@@ -1203,7 +1198,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Real Estate"
                   stroke={CHART_COLORS.indigo}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
@@ -1211,7 +1206,7 @@ function Dashboard() {
                   type="monotone"
                   dataKey="Depreciating Assets"
                   stroke={CHART_COLORS.cyan}
-                  strokeWidth={2}
+                  strokeWidth={1}
                   dot={false}
                   activeDot={false}
                 />
