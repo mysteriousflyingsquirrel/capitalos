@@ -203,7 +203,7 @@ function Investing() {
           <div className="overflow-x-auto -mx-3 px-3 lg:-mx-6 lg:px-6">
             <table className="w-full" style={{ minWidth: '1070px', tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: '150px' }} />
+                <col style={{ width: '120px' }} />
                 <col style={{ width: '80px' }} />
                 <col style={{ width: '50px' }} />
                 <col />
@@ -322,7 +322,7 @@ function Investing() {
           <div className="overflow-x-auto -mx-3 px-3 lg:-mx-6 lg:px-6">
             <table className="w-full" style={{ minWidth: '700px', tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: '150px' }} />
+                <col style={{ width: '120px' }} />
                 <col style={{ width: '80px' }} />
                 <col style={{ width: '50px' }} />
                 <col />
