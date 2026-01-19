@@ -617,10 +617,8 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
           }
           
           // Calculate size (USD notional)
-          // For stop-limit, use limitPx; otherwise use triggerPx if available, else limitPx
-          const priceForNotional = isTrigger && limitPx !== null
-            ? limitPx  // Use limit for stop-limit
-            : (triggerPx !== null ? triggerPx : (limitPx !== null ? limitPx : 0))
+          // Always use limitPx (execution price) for size calculation
+          const priceForNotional = limitPx !== null ? limitPx : 0
           
           const sizeUsd = amount * priceForNotional
           
