@@ -1,9 +1,11 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useIncognito } from '../contexts/IncognitoContext'
+import { useData } from '../contexts/DataContext'
 import { formatMoney } from '../lib/currency'
+import type { PerpetualsOpenPosition } from './NetWorth'
 
 // Helper component: SectionCard
 interface SectionCardProps {
@@ -46,7 +48,7 @@ function PnLBox({ title, value }: PnLBoxProps) {
 // Position row data interface
 interface PositionRow {
   token: string
-  side: 'Long' | 'Short'
+  side: string // ▲ or ▼ symbol
   leverage: string
   pnl: number
   pnlPercent: number
@@ -69,6 +71,7 @@ interface OpenOrderRow {
 
 function Investing() {
   const { isIncognito } = useIncognito()
+  const { data } = useData()
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
 
   // Example values for PnL boxes
@@ -77,45 +80,44 @@ function Investing() {
   const pnl7d = 245.67
   const pnl30d = 892.15
 
-  // Example positions data
-  const positions: PositionRow[] = [
-    {
-      token: 'BTC',
-      side: 'Long',
-      leverage: '3x Iso',
-      pnl: 321.54,
-      pnlPercent: 1.54,
-      size: 3352.43,
-      amount: '0.02 BTC',
-      entryPrice: 87000,
-      liqPrice: 82000,
-      fundingFee: -32,
-    },
-    {
-      token: 'ETH',
-      side: 'Short',
-      leverage: '5x Cross',
-      pnl: -125.30,
-      pnlPercent: -2.15,
-      size: 5825.67,
-      amount: '15.5 ETH',
-      entryPrice: 3750,
-      liqPrice: 3900,
-      fundingFee: 18.50,
-    },
-    {
-      token: 'SOL',
-      side: 'Long',
-      leverage: '10x Iso',
-      pnl: 89.25,
-      pnlPercent: 0.85,
-      size: 10500.00,
-      amount: '75 SOL',
-      entryPrice: 140,
-      liqPrice: 126,
-      fundingFee: -5.75,
-    },
-  ]
+  // Extract open positions from all perpetuals items
+  const positions: PositionRow[] = useMemo(() => {
+    const allOpenPositions: PerpetualsOpenPosition[] = []
+    
+    // Collect all open positions from all perpetuals items
+    data.netWorthItems
+      .filter(item => item.category === 'Perpetuals' && item.perpetualsData)
+      .forEach(item => {
+        if (item.perpetualsData?.openPositions) {
+          allOpenPositions.push(...item.perpetualsData.openPositions)
+        }
+      })
+
+    // Map to PositionRow format
+    return allOpenPositions.map((pos) => {
+      const directionArrow = pos.positionSide === 'LONG' ? '▲' : pos.positionSide === 'SHORT' ? '▼' : ''
+      const leverageStr = pos.leverage !== null && pos.leverage !== undefined 
+        ? `${Math.round(pos.leverage)}x` 
+        : ''
+      const sideDisplay = leverageStr ? `${directionArrow} ${leverageStr}` : directionArrow
+      
+      const size = pos.margin + pos.pnl
+      const pnlPercent = pos.margin !== 0 ? (pos.pnl / pos.margin) * 100 : 0
+
+      return {
+        token: pos.ticker,
+        side: sideDisplay,
+        leverage: '', // Not used separately, combined with side
+        pnl: pos.pnl,
+        pnlPercent: pnlPercent,
+        size: size,
+        amount: '', // Empty for now
+        entryPrice: 0, // Empty for now
+        liqPrice: 0, // Empty for now
+        fundingFee: 0, // Empty for now
+      }
+    })
+  }, [data.netWorthItems])
 
   // Example open orders data
   const openOrders: OpenOrderRow[] = [
@@ -167,7 +169,6 @@ function Investing() {
             <table className="w-full" style={{ minWidth: '1070px', tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '70px' }} />
-                <col style={{ width: '80px' }} />
                 <col style={{ width: '100px' }} />
                 <col style={{ width: '130px' }} />
                 <col style={{ width: '150px' }} />
@@ -183,9 +184,6 @@ function Investing() {
                   </th>
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Side</Heading>
-                  </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Leverage</Heading>
                   </th>
                   <th className="text-right pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>PnL</Heading>
@@ -209,9 +207,7 @@ function Investing() {
               </thead>
               <tbody>
                 {positions.map((position, index) => {
-                  const isLong = position.side === 'Long'
                   const pnlIsPositive = position.pnl >= 0
-                  const fundingIsPositive = position.fundingFee >= 0
 
                   return (
                     <tr key={index} className="border-b border-border-subtle last:border-b-0">
@@ -219,26 +215,13 @@ function Investing() {
                         <div className="text2 text-text-primary font-medium">{position.token}</div>
                       </td>
                       <td className="py-3 pr-4 whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                            isLong
-                              ? 'bg-success/20 text-success border border-success/30'
-                              : 'bg-danger/20 text-danger border border-danger/30'
-                          }`}
-                        >
-                          {position.side}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4 whitespace-nowrap">
-                        <div className="text2 text-text-primary">{position.leverage}</div>
+                        <div className="text2 text-text-primary">{position.side}</div>
                       </td>
                       <td className="py-3 pr-4 text-right whitespace-nowrap">
                         <div className="flex flex-col items-end">
-                          <div className="text2" style={{ color: pnlIsPositive ? '#2ECC71' : '#E74C3C' }}>
-                            {formatCurrency(position.pnl)}
-                          </div>
+                          <div className="text2 text-text-primary">{formatCurrency(position.size)}</div>
                           <div className="text2 mt-0.5" style={{ color: pnlIsPositive ? '#2ECC71' : '#E74C3C' }}>
-                            {pnlIsPositive ? '+' : ''}{position.pnlPercent.toFixed(2)}%
+                            {formatCurrency(position.pnl)}
                           </div>
                         </div>
                       </td>
@@ -246,18 +229,16 @@ function Investing() {
                         <div className="text2 text-text-primary">{formatCurrency(position.size)}</div>
                       </td>
                       <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{position.amount}</div>
+                        <div className="text2 text-text-primary">{position.amount || '-'}</div>
                       </td>
                       <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{formatCurrency(position.entryPrice)}</div>
+                        <div className="text2 text-text-primary">{position.entryPrice > 0 ? formatCurrency(position.entryPrice) : '-'}</div>
                       </td>
                       <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{formatCurrency(position.liqPrice)}</div>
+                        <div className="text2 text-text-primary">{position.liqPrice > 0 ? formatCurrency(position.liqPrice) : '-'}</div>
                       </td>
                       <td className="py-3 text-right whitespace-nowrap">
-                        <div className="text2" style={{ color: fundingIsPositive ? '#2ECC71' : '#E74C3C' }}>
-                          {formatCurrency(position.fundingFee)}
-                        </div>
+                        <div className="text2 text-text-primary">{position.fundingFee !== 0 ? formatCurrency(position.fundingFee) : '-'}</div>
                       </td>
                     </tr>
                   )
