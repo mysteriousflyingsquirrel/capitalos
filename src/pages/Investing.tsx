@@ -184,7 +184,7 @@ function Investing() {
             <table className="w-full" style={{ minWidth: '1070px', tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '150px' }} />
-                <col style={{ width: '150px' }} />
+                <col style={{ width: '80px' }} />
                 <col style={{ width: '50px' }} />
                 <col />
                 <col />
@@ -303,7 +303,7 @@ function Investing() {
             <table className="w-full" style={{ minWidth: '700px', tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '150px' }} />
-                <col style={{ width: '150px' }} />
+                <col style={{ width: '80px' }} />
                 <col style={{ width: '50px' }} />
                 <col />
                 <col />
