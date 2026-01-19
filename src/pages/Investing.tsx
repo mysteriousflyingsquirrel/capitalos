@@ -4,7 +4,7 @@ import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useData } from '../contexts/DataContext'
-import { formatMoney } from '../lib/currency'
+import { formatMoney, formatNumber } from '../lib/currency'
 import type { PerpetualsOpenPosition } from './NetWorth'
 
 // Helper component: SectionCard
@@ -53,10 +53,10 @@ interface PositionRow {
   pnl: number
   pnlPercent: number
   size: number
-  amount: string
-  entryPrice: number
-  liqPrice: number
-  fundingFee: number
+  amount: string // Token amount (e.g., "0.0335 ETH")
+  entryPrice: number | null // Entry price
+  liqPrice: number | null // Liquidation price
+  fundingFee: number | null // Funding fee in USD
 }
 
 // Open Order row data interface
@@ -103,6 +103,14 @@ function Investing() {
       const size = pos.margin + pos.pnl
       const pnlPercent = pos.margin !== 0 ? (pos.pnl / pos.margin) * 100 : 0
 
+      // Format token amount
+      let amountStr = '-'
+      if (pos.amountToken !== null && pos.amountToken !== undefined && pos.amountToken > 0) {
+        // Format with appropriate decimals (up to 8 for crypto, but remove trailing zeros)
+        const formatted = pos.amountToken.toFixed(8).replace(/\.?0+$/, '')
+        amountStr = `${formatted} ${pos.ticker}`
+      }
+
       return {
         token: pos.ticker,
         side: side,
@@ -110,10 +118,10 @@ function Investing() {
         pnl: pos.pnl,
         pnlPercent: pnlPercent,
         size: size,
-        amount: '', // Empty for now
-        entryPrice: 0, // Empty for now
-        liqPrice: 0, // Empty for now
-        fundingFee: 0, // Empty for now
+        amount: amountStr,
+        entryPrice: pos.entryPrice ?? null,
+        liqPrice: pos.liquidationPrice ?? null,
+        fundingFee: pos.fundingFeeUsd ?? null,
       }
     })
   }, [data.netWorthItems])
@@ -249,13 +257,29 @@ function Investing() {
                         <div className="text2 text-text-primary">{position.amount || '-'}</div>
                       </td>
                       <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{position.entryPrice > 0 ? formatCurrency(position.entryPrice) : '-'}</div>
+                        <div className="text2 text-text-primary">
+                          {position.entryPrice !== null && position.entryPrice > 0 
+                            ? `$${formatNumber(position.entryPrice, 'us', { incognito: isIncognito })}` 
+                            : '-'}
+                        </div>
                       </td>
                       <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{position.liqPrice > 0 ? formatCurrency(position.liqPrice) : '-'}</div>
+                        <div className="text2 text-text-primary">
+                          {position.liqPrice !== null && position.liqPrice > 0 
+                            ? `$${formatNumber(position.liqPrice, 'us', { incognito: isIncognito })}` 
+                            : '-'}
+                        </div>
                       </td>
                       <td className="py-3 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{position.fundingFee !== 0 ? formatCurrency(position.fundingFee) : '-'}</div>
+                        <div className="text2" style={{ 
+                          color: position.fundingFee !== null && position.fundingFee !== 0 
+                            ? (position.fundingFee > 0 ? '#2ECC71' : '#E74C3C') 
+                            : undefined 
+                        }}>
+                          {position.fundingFee !== null && position.fundingFee !== 0
+                            ? formatCurrency(position.fundingFee)
+                            : '-'}
+                        </div>
                       </td>
                     </tr>
                   )

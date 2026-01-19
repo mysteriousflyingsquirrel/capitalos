@@ -46,6 +46,11 @@ export interface PerpetualsOpenPosition {
   platform: string
   leverage?: number | null // leverage (e.g., 1 for 1x)
   positionSide?: 'LONG' | 'SHORT' | null // position direction
+  // Additional fields for Hyperliquid positions
+  amountToken?: number | null // token amount (absolute value of szi)
+  entryPrice?: number | null // entry price
+  liquidationPrice?: number | null // liquidation price
+  fundingFeeUsd?: number | null // total funding fee in USD (cumFunding.sinceOpen)
 }
 
 export interface ExchangeBalance {
@@ -274,25 +279,7 @@ function NetWorthCategorySection({
             const perpetualsItem = items.find(item => item.category === 'Perpetuals') || items[0]
             const perpetualsData = perpetualsItem?.perpetualsData
             
-            // Debug logging
-            console.log('[NetWorth] Perpetuals category render - START:', {
-              itemsCount: items.length,
-              items: items,
-              itemsCategories: items.map(i => i.category),
-              perpetualsItem: perpetualsItem,
-              hasPerpetualsItem: !!perpetualsItem,
-              perpetualsItemId: perpetualsItem?.id,
-              perpetualsItemCategory: perpetualsItem?.category,
-              perpetualsData: perpetualsData,
-              hasPerpetualsData: !!perpetualsData,
-              positionsCount: perpetualsData?.openPositions?.length || 0,
-            })
-            
-            if (perpetualsData) {
-              console.log('[NetWorth] Perpetuals data details:', {
-                openPositions: perpetualsData.openPositions,
-              })
-            } else {
+            if (!perpetualsData) {
               console.warn('[NetWorth] No perpetualsData found!', {
                 items: items,
                 perpetualsItem: perpetualsItem,

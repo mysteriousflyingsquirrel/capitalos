@@ -34,6 +34,11 @@ interface PerpetualsOpenPosition {
   platform: string
   leverage?: number | null
   positionSide?: 'LONG' | 'SHORT' | null
+  // Additional fields for Hyperliquid positions
+  amountToken?: number | null // token amount (absolute value of szi)
+  entryPrice?: number | null // entry price
+  liquidationPrice?: number | null // liquidation price
+  fundingFeeUsd?: number | null // total funding fee in USD (cumFunding.sinceOpen)
 }
 
 interface ExchangeBalance {
@@ -224,6 +229,28 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
     
     for (const dex of dexsToQuery) {
       try {
+        // Fetch meta data to get szDecimals for formatting
+        const meta = await fetchMeta(dex)
+        const szDecimalsMap: Record<string, number> = {}
+        
+        if (meta?.universe) {
+          for (const entry of meta.universe) {
+            const coin = extractSymbol(entry)
+            if (coin) {
+              // Extract szDecimals from universe entry
+              let szDecimals = 2 // default
+              if (typeof entry === 'object' && entry !== null) {
+                if (typeof entry.szDecimals === 'number') {
+                  szDecimals = entry.szDecimals
+                } else if (typeof entry.szDecimals === 'string') {
+                  szDecimals = parseInt(entry.szDecimals, 10) || 2
+                }
+              }
+              szDecimalsMap[coin.toUpperCase()] = szDecimals
+            }
+          }
+        }
+        
         const userState = await fetchUserState(walletAddress, dex)
         const assetPositions = userState?.assetPositions
         
@@ -235,10 +262,13 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           const position = pos.position || pos
           
           let size = 0
+          let sziRaw: string | number | null = null
           if (typeof position.szi === 'string') {
             size = parseFloat(position.szi)
+            sziRaw = position.szi
           } else if (typeof position.szi === 'number') {
             size = position.szi
+            sziRaw = position.szi
           } else if (typeof position.size === 'string') {
             size = parseFloat(position.size)
           } else if (typeof position.size === 'number') {
@@ -278,6 +308,55 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           
           const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
 
+          // Extract new fields
+          // Amount: absolute value of szi
+          let amountToken: number | null = null
+          if (sziRaw !== null) {
+            amountToken = Math.abs(size)
+          }
+          
+          // Entry Price: entryPx
+          let entryPrice: number | null = null
+          if (position.entryPx !== undefined && position.entryPx !== null) {
+            if (typeof position.entryPx === 'string') {
+              entryPrice = parseFloat(position.entryPx)
+            } else if (typeof position.entryPx === 'number') {
+              entryPrice = position.entryPx
+            }
+            if (isNaN(entryPrice) || !isFinite(entryPrice)) {
+              entryPrice = null
+            }
+          }
+          
+          // Liquidation Price: liquidationPx
+          let liquidationPrice: number | null = null
+          if (position.liquidationPx !== undefined && position.liquidationPx !== null) {
+            if (typeof position.liquidationPx === 'string') {
+              liquidationPrice = parseFloat(position.liquidationPx)
+            } else if (typeof position.liquidationPx === 'number') {
+              liquidationPrice = position.liquidationPx
+            }
+            if (isNaN(liquidationPrice) || !isFinite(liquidationPrice)) {
+              liquidationPrice = null
+            }
+          }
+          
+          // Funding Fee: cumFunding.sinceOpen (in USD)
+          let fundingFeeUsd: number | null = null
+          if (position.cumFunding && typeof position.cumFunding === 'object') {
+            const sinceOpen = position.cumFunding.sinceOpen
+            if (sinceOpen !== undefined && sinceOpen !== null) {
+              if (typeof sinceOpen === 'string') {
+                fundingFeeUsd = parseFloat(sinceOpen)
+              } else if (typeof sinceOpen === 'number') {
+                fundingFeeUsd = sinceOpen
+              }
+              if (isNaN(fundingFeeUsd) || !isFinite(fundingFeeUsd)) {
+                fundingFeeUsd = null
+              }
+            }
+          }
+
           allPositions.push({
             id: `hyperliquid-pos-${symbol}-${dex || 'default'}-${Date.now()}`,
             ticker: symbol,
@@ -286,6 +365,10 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             platform: 'Hyperliquid',
             leverage,
             positionSide,
+            amountToken,
+            entryPrice,
+            liquidationPrice,
+            fundingFeeUsd,
           })
         }
       } catch (error) {
