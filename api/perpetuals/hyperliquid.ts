@@ -699,81 +699,81 @@ async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
 
     const data = await response.json()
     
-    // The response can be in multiple formats:
-    // 1. Array of tuples: [["day", {...}], ["week", {...}], ...]
-    // 2. Flat array: ["day", {...}, "week", {...}, ...]
-    // 3. Object keyed by period: { day: {...}, week: {...} }
-    // 4. Object with data array: { data: [[...]] }
-    // Each bucket has pnlHistory: array of [timestampMs, pnlString]
-    
-    let dayBucket: any = null
-    let weekBucket: any = null
-    let monthBucket: any = null
-    let allTimeBucket: any = null
-    
-    // Helper function to extract buckets from tuple array format
-    const extractFromTupleArray = (arr: any[]) => {
-      // Handle format: [["day", {...}], ["week", {...}], ...]
-      if (arr.length > 0 && Array.isArray(arr[0]) && arr[0].length >= 2) {
-        for (const item of arr) {
-          if (Array.isArray(item) && item.length >= 2) {
-            const bucketName = item[0]
-            const bucketData = item[1]
-            
-            if (bucketName === 'day' && bucketData?.pnlHistory) {
-              dayBucket = bucketData
-            } else if (bucketName === 'week' && bucketData?.pnlHistory) {
-              weekBucket = bucketData
-            } else if (bucketName === 'month' && bucketData?.pnlHistory) {
-              monthBucket = bucketData
-            } else if (bucketName === 'allTime' && bucketData?.pnlHistory) {
-              allTimeBucket = bucketData
+    // Normalize portfolio response into a map: Record<string, BucketData>
+    // Supports multiple formats:
+    // A) Array-of-tuples: [ ["day", {...}], ["perpDay", {...}], ... ]
+    // B) Flat array: [ "day", {...}, "perpDay", {...}, ... ]
+    // C) Object: { day: {...}, perpDay: {...}, ... }
+    // D) Object wrapper: { data: <any of the above> }
+    const normalizePortfolio = (input: any): Record<string, any> => {
+      const bucketMap: Record<string, any> = {}
+      
+      if (Array.isArray(input)) {
+        // Check if it's array-of-tuples format: [ [name, bucket], ... ]
+        if (input.length > 0 && Array.isArray(input[0]) && input[0].length >= 2) {
+          for (const item of input) {
+            if (Array.isArray(item) && item.length >= 2) {
+              const bucketName = item[0]
+              const bucketData = item[1]
+              if (typeof bucketName === 'string' && bucketData && typeof bucketData === 'object') {
+                bucketMap[bucketName] = bucketData
+              }
+            }
+          }
+        } else {
+          // Flat array format: [name, bucket, name, bucket, ...]
+          for (let i = 0; i < input.length - 1; i += 2) {
+            const bucketName = input[i]
+            const bucketData = input[i + 1]
+            if (typeof bucketName === 'string' && bucketData && typeof bucketData === 'object') {
+              bucketMap[bucketName] = bucketData
             }
           }
         }
-      } else {
-        // Handle format: ["day", {...}, "week", {...}, ...] (flat array)
-        for (let i = 0; i < arr.length - 1; i += 2) {
-          const bucketName = arr[i]
-          const bucketData = arr[i + 1]
-          
-          if (typeof bucketName === 'string' && bucketData && typeof bucketData === 'object') {
-            if (bucketName === 'day' && bucketData?.pnlHistory) {
-              dayBucket = bucketData
-            } else if (bucketName === 'week' && bucketData?.pnlHistory) {
-              weekBucket = bucketData
-            } else if (bucketName === 'month' && bucketData?.pnlHistory) {
-              monthBucket = bucketData
-            } else if (bucketName === 'allTime' && bucketData?.pnlHistory) {
-              allTimeBucket = bucketData
+      } else if (input && typeof input === 'object') {
+        // If it has a "data" field, normalize that recursively
+        if (input.data !== undefined) {
+          const normalized = normalizePortfolio(input.data)
+          Object.assign(bucketMap, normalized)
+        } else {
+          // Treat keys as bucket names and values as bucket objects
+          for (const [key, value] of Object.entries(input)) {
+            if (typeof key === 'string' && value && typeof value === 'object') {
+              bucketMap[key] = value
             }
           }
         }
-      }
-    }
-    
-    if (Array.isArray(data)) {
-      extractFromTupleArray(data)
-    } else if (data && typeof data === 'object') {
-      // Handle object format: { day: {...}, week: {...} }
-      if (data.day && data.day.pnlHistory) {
-        dayBucket = data.day
-      }
-      if (data.week && data.week.pnlHistory) {
-        weekBucket = data.week
-      }
-      if (data.month && data.month.pnlHistory) {
-        monthBucket = data.month
-      }
-      if (data.allTime && data.allTime.pnlHistory) {
-        allTimeBucket = data.allTime
       }
       
-      // Handle format: { data: [[...]] }
-      if (data.data && Array.isArray(data.data)) {
-        extractFromTupleArray(data.data)
-      }
+      return bucketMap
     }
+    
+    const bucketMap = normalizePortfolio(data)
+    
+    // Log available bucket keys for debugging (without full payload)
+    const availableKeys = Object.keys(bucketMap)
+    if (availableKeys.length > 0) {
+      console.log(`[Hyperliquid PnL] Available buckets: ${availableKeys.join(', ')}`)
+    }
+    
+    // Helper to pick bucket with priority: preferredName if available, else fallbackName
+    const pickBucket = (preferredName: string, fallbackName: string): any => {
+      const preferred = bucketMap[preferredName]
+      if (preferred && preferred.pnlHistory && Array.isArray(preferred.pnlHistory) && preferred.pnlHistory.length >= 1) {
+        return preferred
+      }
+      const fallback = bucketMap[fallbackName]
+      if (fallback && fallback.pnlHistory && Array.isArray(fallback.pnlHistory) && fallback.pnlHistory.length >= 1) {
+        return fallback
+      }
+      return null
+    }
+    
+    // Select buckets with priority: perp* if available, else regular
+    const dayBucket = pickBucket('perpDay', 'day')
+    const weekBucket = pickBucket('perpWeek', 'week')
+    const monthBucket = pickBucket('perpMonth', 'month')
+    const allTimeBucket = pickBucket('perpAllTime', 'allTime')
     
     // Helper function to calculate PnL from a bucket
     const calculateBucketPnL = (bucket: any): number | null => {
@@ -818,7 +818,7 @@ async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
     const pnl7dUsd = calculateBucketPnL(weekBucket)
     const pnl30dUsd = calculateBucketPnL(monthBucket)
     
-    // Calculate 90D PnL from allTime bucket
+    // Calculate 90D PnL from allTime bucket (using closest timestamp approach)
     let pnl90dUsd: number | null = null
     if (allTimeBucket && allTimeBucket.pnlHistory && Array.isArray(allTimeBucket.pnlHistory)) {
       const history = allTimeBucket.pnlHistory
