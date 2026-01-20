@@ -12,6 +12,15 @@ const registeredStores: Array<() => void> = []
 const debouncedWrites: Array<() => void> = []
 
 /**
+ * Global localStorage keys that are safe to keep across user swaps.
+ * These do not contain user-specific data.
+ */
+const GLOBAL_KEYS_TO_PRESERVE = new Set<string>([
+  'capitalos_exchange_rates_v1',
+  'capitalos_device_id',
+])
+
+/**
  * Register a Firestore subscription for teardown tracking
  */
 export function registerSubscription(key: string, unsubscribe: () => void) {
@@ -110,6 +119,9 @@ export function resetAllLocalPersistence(prevUid: string | null, nextUid: string
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
     if (key && key.startsWith('capitalos_') && !key.includes(prevUid)) {
+      if (GLOBAL_KEYS_TO_PRESERVE.has(key)) {
+        continue
+      }
       // Old global keys - remove them
       keysToRemove.push(key)
     }

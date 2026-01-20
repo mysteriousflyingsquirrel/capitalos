@@ -41,7 +41,9 @@ function CurrencyProviderInner({ children }: CurrencyProviderProps) {
       // Reset to default
       baseCurrencyRef.current = 'CHF'
       setBaseCurrencyState('CHF')
-      setExchangeRates(null)
+      // NOTE: exchange rates are not user-specific. Do not clear them on uid changes,
+      // otherwise a uid change where baseCurrency stays the same (e.g. CHF->CHF) can
+      // leave exchangeRates null because the fetch effect is keyed only on baseCurrency.
       setIsLoading(true)
       setError(undefined)
       
@@ -85,6 +87,14 @@ function CurrencyProviderInner({ children }: CurrencyProviderProps) {
         
         // Use Firestore value or default to CHF
         const currency = (settings?.baseCurrency || 'CHF') as CurrencyCode
+
+        if (import.meta.env.DEV) {
+          console.log('[CurrencyContext] Applying baseCurrency:', {
+            uid,
+            rawFromFirestore: settings?.baseCurrency,
+            applied: currency,
+          })
+        }
         
         baseCurrencyRef.current = currency
         setBaseCurrencyState(currency)
@@ -107,8 +117,19 @@ function CurrencyProviderInner({ children }: CurrencyProviderProps) {
       setIsLoading(true)
       setError(undefined)
       try {
+        if (import.meta.env.DEV) {
+          console.log('[CurrencyContext] Fetching exchange rates:', { base, uid })
+        }
         const rates = await getExchangeRates(base)
         setExchangeRates(rates)
+        if (import.meta.env.DEV) {
+          console.log('[CurrencyContext] Exchange rates applied:', {
+            requestedBase: base,
+            returnedBase: rates.base,
+            fetchedAt: rates.fetchedAt,
+            rates,
+          })
+        }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to fetch exchange rates'
         setError(errorMessage)
