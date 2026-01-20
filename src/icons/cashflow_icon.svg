@@ -1,10 +1,19 @@
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Cashflow: in/out arrows around a coin -->
   <g fill="none" stroke="#000" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Up arrow -->
-    <line x1="144" y1="424" x2="144" y2="128" />
-    <polyline points="88,192 144,128 200,192" />
-    <!-- Down arrow -->
-    <line x1="368" y1="88" x2="368" y2="384" />
-    <polyline points="312,320 368,384 424,320" />
+    <!-- Coin -->
+    <circle cx="256" cy="256" r="84" />
+
+    <!-- Inflow (left -> coin) -->
+    <path d="M72 256h92" />
+    <polyline points="132,212 176,256 132,300" />
+
+    <!-- Outflow (coin -> right) -->
+    <path d="M348 256h92" />
+    <polyline points="380,212 336,256 380,300" />
+
+    <!-- Small motion arcs -->
+    <path d="M176 144c24-24 50-36 80-36" />
+    <path d="M336 368c-24 24-50 36-80 36" />
   </g>
 </svg>

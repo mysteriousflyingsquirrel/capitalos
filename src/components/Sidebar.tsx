@@ -10,6 +10,7 @@ import dashboardIcon from '../icons/dashboard_icon.svg'
 import netWorthIcon from '../icons/networth_icon.svg'
 import cashflowIcon from '../icons/cashflow_icon.svg'
 import investingIcon from '../icons/investment_icon.svg'
+import exchangeIcon from '../icons/exchange_icon.svg'
 import analyticsIcon from '../icons/tax_icon.svg'
 import settingsIcon from '../icons/settings_icon.svg'
 
@@ -203,7 +204,7 @@ function Sidebar() {
             >
               <div className="flex items-center gap-3">
                 <img
-                  src={investingIcon}
+                  src={exchangeIcon}
                   alt="Exchanges"
                   className="w-5 h-5 flex-shrink-0"
                   style={{ filter: 'brightness(0) invert(1)' }}
@@ -224,9 +225,10 @@ function Sidebar() {
             {isExchangesOpen && (
               <div className="mt-1 space-y-1">
                 {[
-                  { name: 'Hyperliquid', path: '/exchanges/hyperliquid' },
-                  { name: 'Kraken', path: '/exchanges/kraken' },
-                  { name: 'Aster', path: '/exchanges/aster' },
+                  // Use Google's favicon service for reliability (many sites don't expose /favicon.ico)
+                  { name: 'Hyperliquid', path: '/exchanges/hyperliquid', iconSrc: 'https://www.google.com/s2/favicons?domain=hyperfoundation.org&sz=32' },
+                  { name: 'Kraken', path: '/exchanges/kraken', iconSrc: 'https://www.google.com/s2/favicons?domain=kraken.com&sz=32' },
+                  { name: 'Aster', path: '/exchanges/aster', iconSrc: 'https://www.google.com/s2/favicons?domain=asterdex.com&sz=32' },
                 ].map((child) => {
                   const isChildActive = location.pathname.startsWith(child.path)
                   return (
@@ -245,6 +247,19 @@ function Sidebar() {
                         }
                       `}
                     >
+                      <span className="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                        <img
+                          src={(child as any).iconSrc}
+                          alt=""
+                          className="w-4 h-4 rounded-sm"
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
+                          onError={(e) => {
+                            // Hide broken icon without affecting layout
+                            ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+                          }}
+                        />
+                      </span>
                       <span
                         className={`
                           font-semibold text-sm
