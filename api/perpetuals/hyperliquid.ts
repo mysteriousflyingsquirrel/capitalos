@@ -676,179 +676,118 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
 }
 
 async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
-  const empty: PortfolioPnL = {
-    pnl24hUsd: null,
-    pnl7dUsd: null,
-    pnl30dUsd: null,
-    pnl90dUsd: null,
-  }
+  const empty: PortfolioPnL = { pnl24hUsd: null, pnl7dUsd: null, pnl30dUsd: null, pnl90dUsd: null }
 
   try {
-    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+    const resp = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'portfolio', user: walletAddress }),
     })
+    if (!resp.ok) return empty
 
-    if (!response.ok) return empty
-
-    const raw = await response.json()
-
-    // -------- helpers --------
-    const normKey = (k: string) => String(k).toLowerCase().replace(/[_-]/g, '')
-
-    const getHistoryArray = (bucket: any, keys: string[]): any[] | null => {
-      if (!bucket || typeof bucket !== 'object') return null
-      for (const k of keys) {
-        const v = (bucket as any)[k]
-        if (Array.isArray(v) && v.length >= 1) return v
-      }
-      return null
+    let data: any = await resp.json()
+    if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray((data as any).data)) {
+      data = (data as any).data
     }
 
-    const parsePoint = (pt: any): { ts: number; val: number } | null => {
-      // expected: [timestampMs, "123.45"] or [timestampMs, 123.45]
-      if (Array.isArray(pt) && pt.length >= 2) {
-        const ts = Number(pt[0])
-        const val = Number(pt[1])
-        if (Number.isFinite(ts) && Number.isFinite(val)) return { ts, val }
+    // Build bucket map from tuple array or flat array
+    const buckets: Record<string, any> = {}
+    if (Array.isArray(data)) {
+      if (data.length > 0 && Array.isArray(data[0]) && data[0].length >= 2) {
+        // [["day", {...}], ...]
+        for (const pair of data) {
+          if (Array.isArray(pair) && typeof pair[0] === 'string') buckets[pair[0]] = pair[1]
+        }
+      } else {
+        // ["day", {...}, ...] (unlikely for portfolio but supported)
+        for (let i = 0; i < data.length - 1; i += 2) {
+          if (typeof data[i] === 'string') buckets[data[i]] = data[i + 1]
+        }
       }
-      // fallback: object-like
-      if (pt && typeof pt === 'object') {
-        const ts = Number((pt as any).timestampMs ?? (pt as any).timestamp ?? (pt as any).ts)
-        const val = Number((pt as any).pnl ?? (pt as any).value ?? (pt as any).val)
-        if (Number.isFinite(ts) && Number.isFinite(val)) return { ts, val }
-      }
-      return null
+    } else if (data && typeof data === 'object') {
+      Object.assign(buckets, data)
     }
 
-    const sortPoints = (arr: any[]): { ts: number; val: number }[] => {
-      const pts = arr.map(parsePoint).filter(Boolean) as { ts: number; val: number }[]
+    const pick = (preferred: string, fallback: string) => buckets[preferred] ?? buckets[fallback] ?? null
+
+    const dayB = pick('perpDay', 'day')
+    const weekB = pick('perpWeek', 'week')
+    const monthB = pick('perpMonth', 'month')
+    const allB = pick('perpAllTime', 'allTime')
+
+    // ---- history normalization (THIS is the key fix) ----
+    const normalizeSeries = (series: any): { ts: number; v: number }[] => {
+      if (!Array.isArray(series) || series.length === 0) return []
+
+      // Case A: tuple format: [[ts, v], [ts, v], ...]
+      if (Array.isArray(series[0])) {
+        const pts = series
+          .filter(p => Array.isArray(p) && p.length >= 2)
+          .map(p => ({ ts: Number(p[0]), v: Number(p[1]) }))
+          .filter(p => Number.isFinite(p.ts) && Number.isFinite(p.v))
+        pts.sort((a, b) => a.ts - b.ts)
+        return pts
+      }
+
+      // Case B: flat format: [ts, v, ts, v, ...]
+      const pts: { ts: number; v: number }[] = []
+      for (let i = 0; i < series.length - 1; i += 2) {
+        const ts = Number(series[i])
+        const v = Number(series[i + 1])
+        if (Number.isFinite(ts) && Number.isFinite(v)) pts.push({ ts, v })
+      }
       pts.sort((a, b) => a.ts - b.ts)
       return pts
     }
 
-    const deltaFromSeries = (series: any[] | null): number | null => {
-      if (!series || series.length === 0) return null
-      const pts = sortPoints(series)
-      if (pts.length === 0) return null
-      if (pts.length === 1) return 0
-      return pts[pts.length - 1].val - pts[0].val
-    }
+    const getPnlPoints = (b: any) => normalizeSeries(b?.pnlHistory ?? b?.pnl_history ?? [])
+    const getEqPoints = (b: any) => normalizeSeries(b?.accountValueHistory ?? b?.account_value_history ?? [])
 
-    const closestDeltaFromSeries = (series: any[] | null, days: number): number | null => {
-      if (!series || series.length === 0) return null
-      const pts = sortPoints(series)
-      if (pts.length < 2) return null
+    const deltaFromBucket = (b: any): number | null => {
+      if (!b) return null
 
-      const nowMs = Date.now()
-      const targetTs = nowMs - days * 24 * 60 * 60 * 1000
+      const pnlPts = getPnlPoints(b)
+      if (pnlPts.length >= 2) return pnlPts[pnlPts.length - 1].v - pnlPts[0].v
+      if (pnlPts.length === 1) return 0
 
-      let closest = pts[0]
-      let best = Math.abs(closest.ts - targetTs)
-      for (const p of pts) {
-        const d = Math.abs(p.ts - targetTs)
-        if (d < best) {
-          best = d
-          closest = p
-        }
-      }
-
-      const latest = pts[pts.length - 1]
-      if (closest.ts === latest.ts) return null
-      return latest.val - closest.val
-    }
-
-    // Normalize any portfolio response into a map bucketName -> bucketData
-    const normalizePortfolio = (input: any): Record<string, any> => {
-      const out: Record<string, any> = {}
-      const walk = (x: any) => {
-        if (!x) return
-        if (Array.isArray(x)) {
-          // array-of-tuples: [ [name,bucket], ... ]
-          if (x.length > 0 && Array.isArray(x[0]) && x[0].length >= 2) {
-            for (const item of x) {
-              if (Array.isArray(item) && item.length >= 2 && typeof item[0] === 'string') {
-                out[item[0]] = item[1]
-              }
-            }
-            return
-          }
-          // flat: [name,bucket,name,bucket...]
-          for (let i = 0; i < x.length - 1; i += 2) {
-            if (typeof x[i] === 'string') out[x[i]] = x[i + 1]
-          }
-          return
-        }
-        if (typeof x === 'object') {
-          if ((x as any).data !== undefined) {
-            walk((x as any).data)
-            return
-          }
-          for (const [k, v] of Object.entries(x)) {
-            out[k] = v
-          }
-        }
-      }
-      walk(input)
-      return out
-    }
-
-    const bucketMap = normalizePortfolio(raw)
-
-    const getBucket = (name: string): any => {
-      const target = normKey(name)
-      for (const [k, v] of Object.entries(bucketMap)) {
-        if (normKey(k) === target) return v
-      }
-      return null
-    }
-
-    // Prefer perp* buckets, fallback to non-perp
-    const pick = (preferred: string, fallback: string): any => getBucket(preferred) ?? getBucket(fallback)
-
-    const dayBucket = pick('perpDay', 'day')
-    const weekBucket = pick('perpWeek', 'week')
-    const monthBucket = pick('perpMonth', 'month')
-    const allTimeBucket = pick('perpAllTime', 'allTime')
-
-    // For each bucket: prefer pnlHistory, fallback to accountValueHistory
-    const pnlKeys = ['pnlHistory', 'pnl_history']
-    const eqKeys = ['accountValueHistory', 'account_value_history', 'accountValue', 'account_value'] // last two are rare but cheap to try
-
-    const bucketDelta = (bucket: any): number | null => {
-      const pnlSeries = getHistoryArray(bucket, pnlKeys)
-      const pnlDelta = deltaFromSeries(pnlSeries)
-      if (pnlDelta !== null) return pnlDelta
-
-      const eqSeries = getHistoryArray(bucket, eqKeys)
-      const eqDelta = deltaFromSeries(eqSeries)
-      if (eqDelta !== null) return eqDelta
+      // fallback to equity curve if pnlHistory missing
+      const eqPts = getEqPoints(b)
+      if (eqPts.length >= 2) return eqPts[eqPts.length - 1].v - eqPts[0].v
+      if (eqPts.length === 1) return 0
 
       return null
     }
 
-    const pnl24hUsd = bucketDelta(dayBucket)
-    const pnl7dUsd = bucketDelta(weekBucket)
-    const pnl30dUsd = bucketDelta(monthBucket)
+    const pnl24hUsd = deltaFromBucket(dayB)
+    const pnl7dUsd = deltaFromBucket(weekB)
+    const pnl30dUsd = deltaFromBucket(monthB)
 
-    // 90D derived: prefer allTime series (pnlHistory first, else accountValueHistory)
     let pnl90dUsd: number | null = null
-    if (allTimeBucket) {
-      const pnlSeries = getHistoryArray(allTimeBucket, pnlKeys)
-      pnl90dUsd = closestDeltaFromSeries(pnlSeries, 90)
-      if (pnl90dUsd === null) {
-        const eqSeries = getHistoryArray(allTimeBucket, eqKeys)
-        pnl90dUsd = closestDeltaFromSeries(eqSeries, 90)
+    if (allB) {
+      // prefer pnl points; fallback to equity
+      let pts = getPnlPoints(allB)
+      if (pts.length < 2) pts = getEqPoints(allB)
+
+      if (pts.length >= 2) {
+        const target = Date.now() - 90 * 24 * 60 * 60 * 1000
+        let closest = pts[0]
+        let best = Math.abs(closest.ts - target)
+        for (const p of pts) {
+          const d = Math.abs(p.ts - target)
+          if (d < best) { best = d; closest = p }
+        }
+        const latest = pts[pts.length - 1]
+        pnl90dUsd = closest.ts === latest.ts ? null : (latest.v - closest.v)
       }
     }
 
-    // If everything is null, user truly has no history buckets / no series
     return { pnl24hUsd, pnl7dUsd, pnl30dUsd, pnl90dUsd }
   } catch {
     return empty
   }
 }
+
 
 async function fetchAccountEquity(walletAddress: string): Promise<ExchangeBalance[]> {
   try {

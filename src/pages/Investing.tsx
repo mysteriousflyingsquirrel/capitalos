@@ -87,18 +87,36 @@ function Investing() {
 
   // Extract PnL values from Hyperliquid portfolio data
   const portfolioPnL = useMemo(() => {
+    console.log('[Investing] Extracting portfolioPnL:', {
+      netWorthItemsCount: data.netWorthItems.length,
+      perpetualsItems: data.netWorthItems.filter(item => item.category === 'Perpetuals').map(item => ({
+        id: item.id,
+        name: item.name,
+        hasPerpetualsData: !!item.perpetualsData,
+        hasPortfolioPnL: !!item.perpetualsData?.portfolioPnL,
+      })),
+    })
+    
     // Find the first Hyperliquid perpetuals item with portfolioPnL data
     const hyperliquidItem = data.netWorthItems.find(
       item => item.category === 'Perpetuals' && 
       item.perpetualsData?.portfolioPnL
     )
     
-    return hyperliquidItem?.perpetualsData?.portfolioPnL || {
+    const result = hyperliquidItem?.perpetualsData?.portfolioPnL || {
       pnl24hUsd: null,
       pnl7dUsd: null,
       pnl30dUsd: null,
       pnl90dUsd: null,
     }
+    
+    console.log('[Investing] PortfolioPnL result:', {
+      foundItem: !!hyperliquidItem,
+      itemId: hyperliquidItem?.id,
+      portfolioPnL: result,
+    })
+    
+    return result
   }, [data.netWorthItems])
 
   // Extract open positions from all perpetuals items
