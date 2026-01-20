@@ -324,12 +324,22 @@ export function DataProvider({ children }: DataProviderProps) {
       // Merge exchangeBalance from API sources
       const apiExchangeBalance = [...asterExchangeBalance, ...hyperliquidExchangeBalance, ...krakenExchangeBalance]
       
+      // Extract portfolioPnL from hyperliquidData
+      const portfolioPnL = hyperliquidData?.portfolioPnL
+      console.log('[DataContext] fetchPerpetualsData: Extracted portfolioPnL from hyperliquidData:', portfolioPnL)
+      
       // Create perpetualsData structure
       const perpetualsData: PerpetualsData = {
         exchangeBalance: apiExchangeBalance.map(b => ({ ...b })),
         openPositions: mergedData.openPositions.map(p => ({ ...p })),
         openOrders: mergedData.openOrders.map(o => ({ ...o })),
+        ...(portfolioPnL && { portfolioPnL }),
       }
+      
+      console.log('[DataContext] fetchPerpetualsData: Created perpetualsData with portfolioPnL:', {
+        hasPortfolioPnL: !!perpetualsData.portfolioPnL,
+        portfolioPnL: perpetualsData.portfolioPnL,
+      })
 
       // Only create Perpetuals item if we have any data
       if (asterData || hyperliquidData || finalKrakenData || apiExchangeBalance.length > 0) {
@@ -347,6 +357,8 @@ export function DataProvider({ children }: DataProviderProps) {
           hasPerpetualsData: !!perpetualsItem.perpetualsData,
           exchangeBalanceCount: perpetualsItem.perpetualsData?.exchangeBalance?.length || 0,
           positionsCount: perpetualsItem.perpetualsData?.openPositions?.length || 0,
+          hasPortfolioPnL: !!perpetualsItem.perpetualsData?.portfolioPnL,
+          portfolioPnL: perpetualsItem.perpetualsData?.portfolioPnL,
           itemsWithoutPerpetualsCount: itemsWithoutPerpetuals.length,
           returningItemsCount: itemsWithoutPerpetuals.length + 1,
         })
