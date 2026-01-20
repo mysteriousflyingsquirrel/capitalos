@@ -1,10 +1,12 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Cashflow from './pages/Cashflow'
 import NetWorth from './pages/NetWorth'
 import Analytics from './pages/Analytics'
 import Investing from './pages/Investing'
+import Kraken from './pages/Kraken'
+import Aster from './pages/Aster'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
 import { CurrencyProvider } from './contexts/CurrencyContext'
@@ -56,7 +58,13 @@ function ProtectedRoutes() {
           <Route path="/cashflow" element={<Cashflow />} />
           <Route path="/net-worth" element={<NetWorth />} />
           <Route path="/analytics" element={<Analytics />} />
-          <Route path="/investing" element={<Investing />} />
+          {/* Backwards-compat deep link: redirect old Investing route to Exchanges → Hyperliquid */}
+          <Route path="/investing/*" element={<Navigate to="/exchanges/hyperliquid" replace />} />
+
+          {/* Exchanges */}
+          <Route path="/exchanges/hyperliquid" element={<Investing />} />
+          <Route path="/exchanges/kraken" element={<Kraken />} />
+          <Route path="/exchanges/aster" element={<Aster />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>

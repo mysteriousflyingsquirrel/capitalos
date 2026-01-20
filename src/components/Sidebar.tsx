@@ -24,14 +24,21 @@ const navigation: NavigationItem[] = [
   { name: 'Net Worth', path: '/net-worth', icon: netWorthIcon },
   { name: 'Cashflow', path: '/cashflow', icon: cashflowIcon },
   { name: 'Analytics', path: '/analytics', icon: analyticsIcon },
-  { name: 'Investing', path: '/investing', icon: investingIcon },
-  { name: 'Settings', path: '/settings', icon: settingsIcon },
 ]
 
 function Sidebar() {
   const location = useLocation()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const isOnExchangesRoute = location.pathname.startsWith('/exchanges')
+  const [isExchangesOpen, setIsExchangesOpen] = useState(isOnExchangesRoute)
   const { toggleIncognito } = useIncognito()
+
+  // If the user is on a child route, default to expanded.
+  useEffect(() => {
+    if (isOnExchangesRoute) {
+      setIsExchangesOpen(true)
+    }
+  }, [isOnExchangesRoute])
 
   // Keyboard shortcut: CTRL + I to toggle incognito
   useEffect(() => {
@@ -181,10 +188,127 @@ function Sidebar() {
               </Link>
             )
           })}
+
+          {/* Exchanges group (non-clickable parent) */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setIsExchangesOpen((v) => !v)}
+              className={`
+                w-full flex items-center justify-between gap-3 px-4 py-3 rounded-input
+                transition-all duration-200
+                text-text-secondary hover:text-[#F8C445] hover:bg-bg-surface-2
+              `}
+              aria-expanded={isExchangesOpen}
+            >
+              <div className="flex items-center gap-3">
+                <img
+                  src={investingIcon}
+                  alt="Exchanges"
+                  className="w-5 h-5 flex-shrink-0"
+                  style={{ filter: 'brightness(0) invert(1)' }}
+                />
+                <span className="font-semibold text-sm">Exchanges</span>
+              </div>
+              <svg
+                className={`w-4 h-4 transition-transform duration-200 ${isExchangesOpen ? 'rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+
+            {isExchangesOpen && (
+              <div className="mt-1 space-y-1">
+                {[
+                  { name: 'Hyperliquid', path: '/exchanges/hyperliquid' },
+                  { name: 'Kraken', path: '/exchanges/kraken' },
+                  { name: 'Aster', path: '/exchanges/aster' },
+                ].map((child) => {
+                  const isChildActive = location.pathname.startsWith(child.path)
+                  return (
+                    <Link
+                      key={child.path}
+                      to={child.path}
+                      onClick={() => setIsMobileOpen(false)}
+                      className={`
+                        flex items-center gap-3 pl-12 pr-4 py-2 rounded-input
+                        transition-all duration-200
+                        relative
+                        ${
+                          isChildActive
+                            ? 'bg-bg-surface-1 border-l-4 border-[#F8C445] text-text-primary'
+                            : 'text-text-secondary hover:text-[#F8C445] hover:bg-bg-surface-2'
+                        }
+                      `}
+                    >
+                      <span
+                        className={`
+                          font-semibold text-sm
+                          ${
+                            isChildActive
+                              ? 'bg-gradient-to-r from-[#F8C445] to-[#DAA520] bg-clip-text text-transparent'
+                              : ''
+                          }
+                        `}
+                      >
+                        {child.name}
+                      </span>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* User info and sign out */}
-        <div className="px-4 py-4 border-t border-border-subtle">
+        <div className="px-4 py-4">
+          {/* Settings (anchored at bottom, above sync status) */}
+          <Link
+            to="/settings"
+            onClick={() => setIsMobileOpen(false)}
+            className={`
+              flex items-center gap-3 px-4 py-3 rounded-input
+              transition-all duration-200
+              relative
+              ${
+                location.pathname === '/settings'
+                  ? 'bg-bg-surface-1 border-l-4 border-[#F8C445] text-text-primary'
+                  : 'text-text-secondary hover:text-[#F8C445] hover:bg-bg-surface-2'
+              }
+            `}
+          >
+            <img
+              src={settingsIcon}
+              alt="Settings"
+              className="w-5 h-5 flex-shrink-0"
+              style={{
+                filter:
+                  location.pathname === '/settings'
+                    ? 'brightness(0) invert(1) drop-shadow(0 0 4px rgba(248, 196, 69, 0.5))'
+                    : 'brightness(0) invert(1)',
+              }}
+            />
+            <span
+              className={`
+                font-semibold text-sm
+                ${
+                  location.pathname === '/settings'
+                    ? 'bg-gradient-to-r from-[#F8C445] to-[#DAA520] bg-clip-text text-transparent'
+                    : ''
+                }
+              `}
+            >
+              Settings
+            </span>
+          </Link>
+
+          <div className="my-3 border-t border-border-subtle" />
+
           {/* Sync Status */}
           <div className="mb-3 px-3 py-2 bg-bg-surface-2 rounded-input">
             <div className="flex items-center gap-2">
