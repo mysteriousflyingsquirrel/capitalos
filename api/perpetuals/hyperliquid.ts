@@ -676,213 +676,177 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
 }
 
 async function fetchPortfolioPnL(walletAddress: string): Promise<PortfolioPnL> {
+  const empty: PortfolioPnL = {
+    pnl24hUsd: null,
+    pnl7dUsd: null,
+    pnl30dUsd: null,
+    pnl90dUsd: null,
+  }
+
   try {
     const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        type: 'portfolio',
-        user: walletAddress,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'portfolio', user: walletAddress }),
     })
 
-    if (!response.ok) {
-      return {
-        pnl24hUsd: null,
-        pnl7dUsd: null,
-        pnl30dUsd: null,
-        pnl90dUsd: null,
-      }
-    }
+    if (!response.ok) return empty
 
-    const data = await response.json()
-    
-    // Normalize portfolio response into a map: Record<string, BucketData>
-    // Supports multiple formats:
-    // A) Array-of-tuples: [ ["day", {...}], ["perpDay", {...}], ... ]
-    // B) Flat array: [ "day", {...}, "perpDay", {...}, ... ]
-    // C) Object: { day: {...}, perpDay: {...}, ... }
-    // D) Object wrapper: { data: <any of the above> }
-    const normalizePortfolio = (input: any): Record<string, any> => {
-      const bucketMap: Record<string, any> = {}
-      
-      if (Array.isArray(input)) {
-        // Check if it's array-of-tuples format: [ [name, bucket], ... ]
-        if (input.length > 0 && Array.isArray(input[0]) && input[0].length >= 2) {
-          for (const item of input) {
-            if (Array.isArray(item) && item.length >= 2) {
-              const bucketName = item[0]
-              const bucketData = item[1]
-              if (typeof bucketName === 'string' && bucketData && typeof bucketData === 'object') {
-                bucketMap[bucketName] = bucketData
-              }
-            }
-          }
-        } else {
-          // Flat array format: [name, bucket, name, bucket, ...]
-          for (let i = 0; i < input.length - 1; i += 2) {
-            const bucketName = input[i]
-            const bucketData = input[i + 1]
-            if (typeof bucketName === 'string' && bucketData && typeof bucketData === 'object') {
-              bucketMap[bucketName] = bucketData
-            }
-          }
-        }
-      } else if (input && typeof input === 'object') {
-        // If it has a "data" field, normalize that recursively
-        if (input.data !== undefined) {
-          const normalized = normalizePortfolio(input.data)
-          Object.assign(bucketMap, normalized)
-        } else {
-          // Treat keys as bucket names and values as bucket objects
-          for (const [key, value] of Object.entries(input)) {
-            if (typeof key === 'string' && value && typeof value === 'object') {
-              bucketMap[key] = value
-            }
-          }
-        }
-      }
-      
-      return bucketMap
-    }
-    
-    const bucketMap = normalizePortfolio(data)
-    
-    // Log available bucket keys for debugging (without full payload)
-    const availableKeys = Object.keys(bucketMap)
-    if (availableKeys.length > 0) {
-      console.log(`[Hyperliquid PnL] Available buckets: ${availableKeys.join(', ')}`)
-    }
-    
-    // Helper to pick bucket with priority: preferredName if available, else fallbackName
-    const pickBucket = (preferredName: string, fallbackName: string): any => {
-      const preferred = bucketMap[preferredName]
-      if (preferred && preferred.pnlHistory && Array.isArray(preferred.pnlHistory) && preferred.pnlHistory.length >= 1) {
-        return preferred
-      }
-      const fallback = bucketMap[fallbackName]
-      if (fallback && fallback.pnlHistory && Array.isArray(fallback.pnlHistory) && fallback.pnlHistory.length >= 1) {
-        return fallback
+    const raw = await response.json()
+
+    // -------- helpers --------
+    const normKey = (k: string) => String(k).toLowerCase().replace(/[_-]/g, '')
+
+    const getHistoryArray = (bucket: any, keys: string[]): any[] | null => {
+      if (!bucket || typeof bucket !== 'object') return null
+      for (const k of keys) {
+        const v = (bucket as any)[k]
+        if (Array.isArray(v) && v.length >= 1) return v
       }
       return null
     }
-    
-    // Select buckets with priority: perp* if available, else regular
-    const dayBucket = pickBucket('perpDay', 'day')
-    const weekBucket = pickBucket('perpWeek', 'week')
-    const monthBucket = pickBucket('perpMonth', 'month')
-    const allTimeBucket = pickBucket('perpAllTime', 'allTime')
-    
-    // Helper function to calculate PnL from a bucket
-    const calculateBucketPnL = (bucket: any): number | null => {
-      if (!bucket || !bucket.pnlHistory || !Array.isArray(bucket.pnlHistory)) {
-        return null
+
+    const parsePoint = (pt: any): { ts: number; val: number } | null => {
+      // expected: [timestampMs, "123.45"] or [timestampMs, 123.45]
+      if (Array.isArray(pt) && pt.length >= 2) {
+        const ts = Number(pt[0])
+        const val = Number(pt[1])
+        if (Number.isFinite(ts) && Number.isFinite(val)) return { ts, val }
       }
-      
-      const history = bucket.pnlHistory
-      
-      // If no history, return null
-      if (history.length === 0) {
-        return null
+      // fallback: object-like
+      if (pt && typeof pt === 'object') {
+        const ts = Number((pt as any).timestampMs ?? (pt as any).timestamp ?? (pt as any).ts)
+        const val = Number((pt as any).pnl ?? (pt as any).value ?? (pt as any).val)
+        if (Number.isFinite(ts) && Number.isFinite(val)) return { ts, val }
       }
-      
-      // If only one point, delta is 0 (no change)
-      if (history.length === 1) {
-        return 0
-      }
-      
-      // Ensure sorted by timestamp (ascending)
-      const sorted = [...history].sort((a, b) => {
-        const tsA = Array.isArray(a) ? a[0] : a.timestampMs || a.timestamp || 0
-        const tsB = Array.isArray(b) ? b[0] : b.timestampMs || b.timestamp || 0
-        return tsA - tsB
-      })
-      
-      const first = sorted[0]
-      const last = sorted[sorted.length - 1]
-      
-      const firstPnl = Array.isArray(first) ? parseFloat(first[1]) : parseFloat(first.pnlString || first.pnl || '0')
-      const lastPnl = Array.isArray(last) ? parseFloat(last[1]) : parseFloat(last.pnlString || last.pnl || '0')
-      
-      if (isNaN(firstPnl) || isNaN(lastPnl)) {
-        return null
-      }
-      
-      return lastPnl - firstPnl
+      return null
     }
-    
-    // Calculate 24H, 7D, 30D PnL
-    const pnl24hUsd = calculateBucketPnL(dayBucket)
-    const pnl7dUsd = calculateBucketPnL(weekBucket)
-    const pnl30dUsd = calculateBucketPnL(monthBucket)
-    
-    // Calculate 90D PnL from allTime bucket (using closest timestamp approach)
-    let pnl90dUsd: number | null = null
-    if (allTimeBucket && allTimeBucket.pnlHistory && Array.isArray(allTimeBucket.pnlHistory)) {
-      const history = allTimeBucket.pnlHistory
-      
-      if (history.length >= 2) {
-        // Ensure sorted by timestamp (ascending)
-        const sorted = [...history].sort((a, b) => {
-          const tsA = Array.isArray(a) ? a[0] : a.timestampMs || a.timestamp || 0
-          const tsB = Array.isArray(b) ? b[0] : b.timestampMs || b.timestamp || 0
-          return tsA - tsB
-        })
-        
-        const nowMs = Date.now()
-        const targetTs = nowMs - (90 * 24 * 60 * 60 * 1000) // 90 days in milliseconds
-        
-        // Find closest point to targetTs
-        let closestPoint: any = null
-        let minDiff = Infinity
-        
-        for (const point of sorted) {
-          const ts = Array.isArray(point) ? point[0] : point.timestampMs || point.timestamp || 0
-          const diff = Math.abs(ts - targetTs)
-          if (diff < minDiff) {
-            minDiff = diff
-            closestPoint = point
-          }
+
+    const sortPoints = (arr: any[]): { ts: number; val: number }[] => {
+      const pts = arr.map(parsePoint).filter(Boolean) as { ts: number; val: number }[]
+      pts.sort((a, b) => a.ts - b.ts)
+      return pts
+    }
+
+    const deltaFromSeries = (series: any[] | null): number | null => {
+      if (!series || series.length === 0) return null
+      const pts = sortPoints(series)
+      if (pts.length === 0) return null
+      if (pts.length === 1) return 0
+      return pts[pts.length - 1].val - pts[0].val
+    }
+
+    const closestDeltaFromSeries = (series: any[] | null, days: number): number | null => {
+      if (!series || series.length === 0) return null
+      const pts = sortPoints(series)
+      if (pts.length < 2) return null
+
+      const nowMs = Date.now()
+      const targetTs = nowMs - days * 24 * 60 * 60 * 1000
+
+      let closest = pts[0]
+      let best = Math.abs(closest.ts - targetTs)
+      for (const p of pts) {
+        const d = Math.abs(p.ts - targetTs)
+        if (d < best) {
+          best = d
+          closest = p
         }
-        
-        const latestPoint = sorted[sorted.length - 1]
-        
-        if (closestPoint && latestPoint) {
-          const closestTs = Array.isArray(closestPoint) ? closestPoint[0] : closestPoint.timestampMs || closestPoint.timestamp || 0
-          const latestTs = Array.isArray(latestPoint) ? latestPoint[0] : latestPoint.timestampMs || latestPoint.timestamp || 0
-          
-          // Only calculate if closest point is different from latest (meaningful range)
-          if (closestTs !== latestTs) {
-            const closestPnl = Array.isArray(closestPoint) 
-              ? parseFloat(closestPoint[1]) 
-              : parseFloat(closestPoint.pnlString || closestPoint.pnl || '0')
-            const latestPnl = Array.isArray(latestPoint) 
-              ? parseFloat(latestPoint[1]) 
-              : parseFloat(latestPoint.pnlString || latestPoint.pnl || '0')
-            
-            if (!isNaN(closestPnl) && !isNaN(latestPnl)) {
-              pnl90dUsd = latestPnl - closestPnl
+      }
+
+      const latest = pts[pts.length - 1]
+      if (closest.ts === latest.ts) return null
+      return latest.val - closest.val
+    }
+
+    // Normalize any portfolio response into a map bucketName -> bucketData
+    const normalizePortfolio = (input: any): Record<string, any> => {
+      const out: Record<string, any> = {}
+      const walk = (x: any) => {
+        if (!x) return
+        if (Array.isArray(x)) {
+          // array-of-tuples: [ [name,bucket], ... ]
+          if (x.length > 0 && Array.isArray(x[0]) && x[0].length >= 2) {
+            for (const item of x) {
+              if (Array.isArray(item) && item.length >= 2 && typeof item[0] === 'string') {
+                out[item[0]] = item[1]
+              }
             }
+            return
+          }
+          // flat: [name,bucket,name,bucket...]
+          for (let i = 0; i < x.length - 1; i += 2) {
+            if (typeof x[i] === 'string') out[x[i]] = x[i + 1]
+          }
+          return
+        }
+        if (typeof x === 'object') {
+          if ((x as any).data !== undefined) {
+            walk((x as any).data)
+            return
+          }
+          for (const [k, v] of Object.entries(x)) {
+            out[k] = v
           }
         }
       }
+      walk(input)
+      return out
     }
-    
-    return {
-      pnl24hUsd,
-      pnl7dUsd,
-      pnl30dUsd,
-      pnl90dUsd,
+
+    const bucketMap = normalizePortfolio(raw)
+
+    const getBucket = (name: string): any => {
+      const target = normKey(name)
+      for (const [k, v] of Object.entries(bucketMap)) {
+        if (normKey(k) === target) return v
+      }
+      return null
     }
-  } catch (error) {
-    return {
-      pnl24hUsd: null,
-      pnl7dUsd: null,
-      pnl30dUsd: null,
-      pnl90dUsd: null,
+
+    // Prefer perp* buckets, fallback to non-perp
+    const pick = (preferred: string, fallback: string): any => getBucket(preferred) ?? getBucket(fallback)
+
+    const dayBucket = pick('perpDay', 'day')
+    const weekBucket = pick('perpWeek', 'week')
+    const monthBucket = pick('perpMonth', 'month')
+    const allTimeBucket = pick('perpAllTime', 'allTime')
+
+    // For each bucket: prefer pnlHistory, fallback to accountValueHistory
+    const pnlKeys = ['pnlHistory', 'pnl_history']
+    const eqKeys = ['accountValueHistory', 'account_value_history', 'accountValue', 'account_value'] // last two are rare but cheap to try
+
+    const bucketDelta = (bucket: any): number | null => {
+      const pnlSeries = getHistoryArray(bucket, pnlKeys)
+      const pnlDelta = deltaFromSeries(pnlSeries)
+      if (pnlDelta !== null) return pnlDelta
+
+      const eqSeries = getHistoryArray(bucket, eqKeys)
+      const eqDelta = deltaFromSeries(eqSeries)
+      if (eqDelta !== null) return eqDelta
+
+      return null
     }
+
+    const pnl24hUsd = bucketDelta(dayBucket)
+    const pnl7dUsd = bucketDelta(weekBucket)
+    const pnl30dUsd = bucketDelta(monthBucket)
+
+    // 90D derived: prefer allTime series (pnlHistory first, else accountValueHistory)
+    let pnl90dUsd: number | null = null
+    if (allTimeBucket) {
+      const pnlSeries = getHistoryArray(allTimeBucket, pnlKeys)
+      pnl90dUsd = closestDeltaFromSeries(pnlSeries, 90)
+      if (pnl90dUsd === null) {
+        const eqSeries = getHistoryArray(allTimeBucket, eqKeys)
+        pnl90dUsd = closestDeltaFromSeries(eqSeries, 90)
+      }
+    }
+
+    // If everything is null, user truly has no history buckets / no series
+    return { pnl24hUsd, pnl7dUsd, pnl30dUsd, pnl90dUsd }
+  } catch {
+    return empty
   }
 }
 
