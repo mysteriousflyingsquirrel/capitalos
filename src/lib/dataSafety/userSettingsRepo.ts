@@ -8,6 +8,7 @@
  * Structure:
  * {
  *   baseCurrency: string,
+ *   themeId: string,
  *   apiKeys: {
  *     rapidApiKey?: string,
  *     asterApiKey?: string,
@@ -48,13 +49,14 @@ export interface ApiKeys {
 export interface UserSettingsData {
   baseCurrency: string | null
   apiKeys: ApiKeys | null
+  themeId: string | null
 }
 
 /**
  * Load user settings from Firestore
  * 
  * Returns null if document doesn't exist or on error.
- * apiKeys and baseCurrency are null if not present in document.
+ * apiKeys/baseCurrency/themeId are null if not present in document.
  */
 export async function loadUserSettings(uid: string): Promise<UserSettingsData | null> {
   const docRef = getUserSettingsDocPath(uid)
@@ -86,9 +88,37 @@ export async function loadUserSettings(uid: string): Promise<UserSettingsData | 
     return {
       baseCurrency: data?.baseCurrency || null,
       apiKeys: data?.apiKeys || null,
+      themeId: data?.themeId || null,
     }
   } catch (error) {
     console.error('[UserSettingsRepo] Error loading settings:', error)
+    throw error
+  }
+}
+
+/**
+ * Save themeId to Firestore
+ * Uses merge write to preserve other fields
+ */
+export async function saveThemeId(uid: string, themeId: string): Promise<void> {
+  const docRef = getUserSettingsDocPath(uid)
+
+  if (import.meta.env.DEV) {
+    console.log('[UserSettingsRepo] Saving themeId:', {
+      uid,
+      themeId,
+      path: `users/${uid}/settings/user`,
+    })
+  }
+
+  try {
+    await safeWrite(docRef, { themeId }, {
+      origin: 'user',
+      domain: 'settings',
+      merge: true,
+    })
+  } catch (error) {
+    console.error('[UserSettingsRepo] Error saving themeId:', error)
     throw error
   }
 }
@@ -224,6 +254,7 @@ export async function ensureUserSettingsInitialized(uid: string): Promise<void> 
       
       await safeWrite(docRef, {
         baseCurrency: 'CHF',
+        themeId: 'galaxy',
         apiKeys: {},
       }, {
         origin: 'system',
@@ -231,12 +262,16 @@ export async function ensureUserSettingsInitialized(uid: string): Promise<void> 
         merge: true,
       })
     } else {
-      // Document exists, ensure baseCurrency and apiKeys fields exist
+      // Document exists, ensure baseCurrency/themeId/apiKeys fields exist
       const data = snap.data()
       const updates: any = {}
       
       if (!data?.baseCurrency) {
         updates.baseCurrency = 'CHF'
+      }
+
+      if (!data?.themeId) {
+        updates.themeId = 'galaxy'
       }
       
       if (!data?.apiKeys) {

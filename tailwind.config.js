@@ -13,41 +13,43 @@ module.exports = {
 
       colors: {
         // Backgrounds
-        "bg-page": "#111827",
-        "bg-surface-1": "#161B22",
-        "bg-surface-2": "#11151C",
-        "bg-surface-3": "#1C2129",
-
-        // Borders
-        "border-subtle": "#2A3039",
-        "border-strong": "#39404A",
-
-        // Text
-        "text-primary": "#F0F2F5",
-        "text-secondary": "#C5CAD3",
-        "text-muted": "#8B8F99",
-        "text-disabled": "#5D6168",
-
-        // Neon Accents
-        "accent-blue": "#4A56FF",
-        "accent-purple": "#AD33FF",
-
-        // Neon Highlights
-        "highlight-yellow": "#F8C445",
-        "highlight-blue": "#4A90E2",
-        "highlight-turquoise": "#3CC8C0",
-        "highlight-purple": "#A45CFF",
-        "highlight-pink": "#FF3FB0",
-
-        // Status
-        success: "#2ECC71",
-        warning: "#F8C445",
-        danger: "#E74C3C",
-        info: "#4A90E2",
+        "bg-page": "var(--bg-page)",
+        "bg-frame": "var(--bg-frame)",
+        "bg-surface-1": "var(--bg-surface-1)",
+        "bg-surface-2": "var(--bg-surface-2)",
+        "bg-surface-3": "var(--bg-surface-3)",
+      
+        // Borders (derived from surfaces, no gray drift)
+        "border-subtle": "var(--border-subtle)",
+        "border-strong": "var(--border-strong)",
+      
+        // Text (cool white → muted blue-gray ladder)
+        "text-primary": "var(--text-primary)",
+        "text-secondary": "var(--text-secondary)",
+        "text-muted": "var(--text-muted)",
+        "text-disabled": "var(--text-disabled)",
+      
+        // Neon Accents (single identity hue, consistent glow)
+        "accent-blue": "var(--accent-blue)",
+        "accent-purple": "var(--accent-purple)",
+      
+        // Neon Highlights (tuned to dark background luminance)
+        "highlight-yellow": "var(--highlight-yellow)",
+        "highlight-blue": "var(--highlight-blue)",
+        "highlight-turquoise": "var(--highlight-turquoise)",
+        "highlight-purple": "var(--highlight-purple)",
+        "highlight-pink": "var(--highlight-pink)",
+      
+        // Status (slightly cooler, better contrast on navy)
+        success: "var(--success)",
+        warning: "var(--warning)",
+        danger: "var(--danger)",
+        info: "var(--info)",
       },
+      
 
       backgroundImage: {
-        "accent-gradient": "linear-gradient(90deg, #4A56FF, #AD33FF)",
+        "accent-gradient": "linear-gradient(90deg, var(--accent-blue), var(--accent-purple))",
       },
 
       borderRadius: {

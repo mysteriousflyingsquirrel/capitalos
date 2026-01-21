@@ -46,7 +46,7 @@ function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-bg-page">
       <div className="max-w-md w-full">
-        <div className="bg-[#050A1A] border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-bg-frame border border-[#DAA520] rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={1} className="mb-6 text-center">
             Capitalos
           </Heading>

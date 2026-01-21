@@ -256,7 +256,7 @@ function NetWorthCategorySection({
       : (subtotal * (exchangeRates?.rates['USD'] || 1)))
 
   return (
-    <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6 overflow-hidden">
+    <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6 overflow-hidden">
       <div className="mb-6 pb-4 border-b border-border-strong">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -1259,13 +1259,13 @@ function NetWorth() {
   }
 
   return (
-    <div className="min-h-screen px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
+    <div className="min-h-screen px-2 lg:px-6 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Net Worth</Heading>
         
         {/* Total Net Worth */}
-        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <div className="mb-6 pb-4 border-b border-border-strong">
             <div className="flex flex-col">
               <div className="flex items-center justify-between mb-2">

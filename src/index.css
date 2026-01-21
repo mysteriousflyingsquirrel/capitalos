@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Default theme (Galaxy) to avoid flicker before Firestore loads */
+  --bg-page: #050A1A;
+  --bg-frame: #111827;
+  --bg-surface-1: #141C2F;
+  --bg-surface-2: #18223A;
+  --bg-surface-3: #1D2945;
+
+  --border-subtle: #27314D;
+  --border-strong: #344067;
+
+  --text-primary: #E9EDFF;
+  --text-secondary: #C7D0F2;
+  --text-muted: #8F9AC7;
+  --text-disabled: #5E678A;
+
+  --accent-blue: #8F6BFF;
+  --accent-purple: #8F6BFF;
+
+  --highlight-yellow: #F6C453;
+  --highlight-blue: #5AA2FF;
+  --highlight-turquoise: #3FD6C6;
+  --highlight-purple: #9A7BFF;
+  --highlight-pink: #FF5BC4;
+
+  --success: #32D583;
+  --warning: #F6C453;
+  --danger: #FF5C5C;
+  --info: #5AA2FF;
+}
+
 @layer base {
   body {
     @apply bg-bg-page text-text-primary font-sans;

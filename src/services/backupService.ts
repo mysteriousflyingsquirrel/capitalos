@@ -37,6 +37,7 @@ export interface BackupData {
     settings: {
       baseCurrency?: string
       apiKeys?: ApiKeys
+      themeId?: string
     } | null
     snapshots: unknown[]
   }
@@ -72,6 +73,7 @@ export async function createBackup(uid: string): Promise<BackupData> {
     ? {
         baseCurrency: settings.baseCurrency || undefined,
         apiKeys: settings.apiKeys || undefined,
+        themeId: settings.themeId || undefined,
       }
     : null
 
@@ -332,6 +334,10 @@ export async function restoreBackup(
 
       if (settings.apiKeys) {
         settingsData.apiKeys = settings.apiKeys
+      }
+
+      if (settings.themeId) {
+        settingsData.themeId = settings.themeId
       }
 
       if (Object.keys(settingsData).length > 0) {

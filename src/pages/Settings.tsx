@@ -4,6 +4,8 @@ import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useApiKeys } from '../contexts/ApiKeysContext'
 import { useData } from '../contexts/DataContext'
+import { useTheme } from '../contexts/ThemeContext'
+import { THEMES, type ThemeId } from '../lib/themes'
 import type { CurrencyCode } from '../lib/currency'
 import { supportedCurrencies } from '../lib/currency'
 import {
@@ -20,6 +22,7 @@ import { saveSnapshots, hasSnapshotForDate, createSnapshot, getTodayUTCDate, get
 function Settings() {
   const { baseCurrency, exchangeRates, isLoading, error, convert } = useCurrency()
   const { uid, user } = useAuth()
+  const { themeId, setThemeId, isLoading: themeLoading } = useTheme()
   const { rapidApiKey, setRapidApiKey, asterApiKey, setAsterApiKey, asterApiSecretKey, setAsterApiSecretKey, hyperliquidWalletAddress, setHyperliquidWalletAddress, krakenApiKey, setKrakenApiKey, krakenApiSecretKey, setKrakenApiSecretKey, isLoading: apiKeysLoading } = useApiKeys()
   const { data } = useData()
   const [exportLoading, setExportLoading] = useState(false)
@@ -61,6 +64,10 @@ function Settings() {
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
   const [snapshotSuccess, setSnapshotSuccess] = useState(false)
+  // Theme
+  const [themeSaving, setThemeSaving] = useState(false)
+  const [themeError, setThemeError] = useState<string | null>(null)
+  const [themeSuccess, setThemeSuccess] = useState(false)
 
   // Format rate for display
   const formatRate = (value: number) => value.toFixed(4)
@@ -194,6 +201,31 @@ function Settings() {
       }
     }
     input.click()
+  }
+
+  const handleThemeChange = async (nextThemeId: ThemeId) => {
+    if (!uid) {
+      alert('Please sign in to change theme.')
+      return
+    }
+
+    if (nextThemeId === themeId) return
+
+    setThemeSaving(true)
+    setThemeError(null)
+    setThemeSuccess(false)
+
+    try {
+      await setThemeId(nextThemeId)
+      setThemeSuccess(true)
+      setTimeout(() => setThemeSuccess(false), 3000)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save theme'
+      setThemeError(message)
+      setTimeout(() => setThemeError(null), 5000)
+    } finally {
+      setThemeSaving(false)
+    }
   }
 
 
@@ -453,13 +485,13 @@ function Settings() {
   }
 
   return (
-    <div className="min-h-screen px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
+    <div className="min-h-screen px-2 lg:px-6 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Settings</Heading>
 
         {/* General Section */}
-        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">General</Heading>
           
           <div>
@@ -496,21 +528,83 @@ function Settings() {
           </div>
         </div>
 
-        {/* API Keys Section */}
-        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
-          <Heading level={2} className="mb-4">API Keys</Heading>
-          
-          {apiKeyError && (
-            <div className="mb-4 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
-              {apiKeyError}
-            </div>
-          )}
+        {/* Theme Section */}
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+          <Heading level={2} className="mb-4">Theme</Heading>
 
-          {apiKeySuccess && (
-            <div className="mb-4 text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
-              API keys saved successfully!
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {THEMES.map((t) => {
+              const selected = t.id === themeId
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => handleThemeChange(t.id)}
+                  disabled={themeSaving || themeLoading}
+                  className={`
+                    w-full flex items-center justify-between gap-4 px-4 py-3 rounded-input border
+                    transition-all duration-200 text-left
+                    ${
+                      selected
+                        ? 'bg-bg-surface-2 border-border-strong'
+                        : 'bg-transparent border-border-subtle hover:bg-bg-surface-2'
+                    }
+                    ${themeSaving || themeLoading ? 'opacity-60 cursor-not-allowed' : ''}
+                  `}
+                >
+                  <div>
+                    <div className="text-text-primary font-semibold text-sm">{t.label}</div>
+                    <div
+                      className={`text-text-muted text-[0.567rem] md:text-xs ${
+                        selected ? 'opacity-100' : 'opacity-0'
+                      }`}
+                    >
+                      Selected
+                    </div>
+                  </div>
+
+                  {/* Tiny color preview */}
+                  <div className="flex items-center gap-1.5">
+                    {[
+                      t.colors['bg-page'],
+                      t.colors['bg-surface-2'],
+                      t.colors['accent-blue'],
+                      t.colors['highlight-yellow'],
+                      t.colors.success,
+                    ].map((c, idx) => (
+                      <span
+                        key={`${t.id}-${idx}`}
+                        className="w-2.5 h-2.5 rounded-full border border-border-subtle"
+                        style={{ backgroundColor: c }}
+                        aria-hidden="true"
+                      />
+                    ))}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Footer messages (keep at bottom of frame) */}
+          {(themeError || themeSuccess) && (
+            <div className="mt-4">
+              {themeError && (
+                <div className="text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+                  {themeError}
+                </div>
+              )}
+              {themeSuccess && (
+                <div className="text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
+                  Theme saved successfully!
+                </div>
+              )}
             </div>
           )}
+        </div>
+
+        {/* API Keys Section */}
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+          <Heading level={2} className="mb-4">API Keys</Heading>
 
           <form onSubmit={handleSaveAllApiKeys} className="space-y-6">
             {/* RapidAPI Group */}
@@ -805,10 +899,26 @@ function Settings() {
               </button>
             </div>
           </form>
+
+          {/* Footer messages (keep at bottom of frame) */}
+          {(apiKeyError || apiKeySuccess) && (
+            <div className="mt-4">
+              {apiKeyError && (
+                <div className="text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+                  {apiKeyError}
+                </div>
+              )}
+              {apiKeySuccess && (
+                <div className="text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
+                  API keys saved successfully!
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Reports Section */}
-        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">Reports</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
@@ -855,7 +965,7 @@ function Settings() {
         </div>
 
         {/* Data Section */}
-        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">Data</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
@@ -875,16 +985,6 @@ function Settings() {
                   >
                     {exportLoading ? 'Exporting...' : 'Export Data (JSON)'}
                   </button>
-                  {exportSuccess && (
-                    <p className="mt-2 text-success text-[0.567rem] md:text-xs">
-                      Export successful! File downloaded.
-                    </p>
-                  )}
-                  {exportError && (
-                    <p className="mt-2 text-danger text-[0.567rem] md:text-xs">
-                      {exportError}
-                    </p>
-                  )}
                   <p className="mt-2 text-warning text-[0.567rem] md:text-xs">
                     ⚠️ This JSON file contains sensitive financial data. Keep it private and secure.
                   </p>
@@ -898,24 +998,40 @@ function Settings() {
                   >
                     {importLoading ? 'Importing...' : 'Import Data (JSON)'}
                   </button>
-                  {importSuccess && (
-                    <p className="mt-2 text-success text-[0.567rem] md:text-xs">
-                      Import successful! Page will reload shortly...
-                    </p>
-                  )}
-                  {importError && (
-                    <p className="mt-2 text-danger text-[0.567rem] md:text-xs">
-                      {importError}
-                    </p>
-                  )}
                 </div>
               </div>
             </div>
+
+            {/* Footer messages (keep at bottom of frame) */}
+            {(exportSuccess || exportError || importSuccess || importError) && (
+              <div className="mt-4 space-y-2">
+                {exportSuccess && (
+                  <div className="text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
+                    Export successful! File downloaded.
+                  </div>
+                )}
+                {exportError && (
+                  <div className="text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+                    {exportError}
+                  </div>
+                )}
+                {importSuccess && (
+                  <div className="text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
+                    Import successful! Page will reload shortly...
+                  </div>
+                )}
+                {importError && (
+                  <div className="text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+                    {importError}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Platforms Section */}
-        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">Platforms</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-4">
@@ -1078,7 +1194,7 @@ function Settings() {
         </div>
 
         {/* Developer Section */}
-        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">Developer</Heading>
           
           <p className="text-text-secondary text-[0.567rem] md:text-xs mb-6">
@@ -1092,18 +1208,6 @@ function Settings() {
               <p className="text-text-muted text-[0.567rem] md:text-xs mb-4">
                 Manually create a snapshot of your current net worth. This will calculate and store the total value of all categories in CHF.
               </p>
-              
-              {snapshotError && (
-                <div className="mb-4 text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
-                  {snapshotError}
-                </div>
-              )}
-
-              {snapshotSuccess && (
-                <div className="mb-4 text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
-                  Snapshot created successfully!
-                </div>
-              )}
 
               <button
                 onClick={handleCreateSnapshot}
@@ -1112,12 +1216,28 @@ function Settings() {
               >
                 {creatingSnapshot ? 'Creating Snapshot...' : 'Create Snapshot'}
               </button>
+
+              {/* Footer messages (keep at bottom of frame) */}
+              {(snapshotError || snapshotSuccess) && (
+                <div className="mt-4">
+                  {snapshotError && (
+                    <div className="text-[0.567rem] md:text-xs text-danger bg-bg-surface-2 border border-danger/40 rounded-input px-3 py-2">
+                      {snapshotError}
+                    </div>
+                  )}
+                  {snapshotSuccess && (
+                    <div className="text-[0.567rem] md:text-xs text-success bg-bg-surface-2 border border-success/40 rounded-input px-3 py-2">
+                      Snapshot created successfully!
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* About Section */}
-        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           <Heading level={2} className="mb-4">About</Heading>
           
           <div className="space-y-4">

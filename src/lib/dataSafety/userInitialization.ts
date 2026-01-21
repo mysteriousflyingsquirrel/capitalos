@@ -8,7 +8,7 @@ import { ensureUserSettingsInitialized } from './userSettingsRepo'
  * 
  * Creates if missing:
  * - users/{uid} (with createdAt, lastLoginAt, schemaVersion)
- * - users/{uid}/settings/user (with baseCurrency and apiKeys fields)
+ * - users/{uid}/settings/user (with baseCurrency, themeId and apiKeys fields)
  * 
  * Never overwrites existing documents.
  */
@@ -37,7 +37,7 @@ export async function ensureUserInitialized(uid: string): Promise<void> {
       }, { origin: 'system', domain: 'user', merge: true })
     }
 
-    // Ensure settings/user document exists with baseCurrency and apiKeys fields
+    // Ensure settings/user document exists with baseCurrency, themeId and apiKeys fields
     // Use the repository function for consistency
     await ensureUserSettingsInitialized(uid)
 

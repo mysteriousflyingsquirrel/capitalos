@@ -265,13 +265,13 @@ function Analytics() {
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
   return (
-    <div className="min-h-screen px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
+    <div className="min-h-screen px-2 lg:px-6 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Analytics</Heading>
 
         {/* Cashflow Forecast Section */}
-        <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
           {/* Header */}
           <div className="mb-6 pb-4 border-b border-border-strong">
             <Heading level={2}>Cashflow Forecast (12 Months)</Heading>
@@ -360,7 +360,7 @@ function Analytics() {
               {/* Entry Lists */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 {/* Manual Inflows */}
-                <div className="bg-[#050A1A] border border-border-subtle rounded-input p-4">
+                <div className="bg-bg-frame border border-border-subtle rounded-input p-4">
                   <div className="flex items-center justify-between mb-4">
                     <Heading level={3}>Manual Inflows (Future)</Heading>
                     <button
@@ -419,7 +419,7 @@ function Analytics() {
                 </div>
 
                 {/* Planned Payments */}
-                <div className="bg-[#050A1A] border border-border-subtle rounded-input p-4">
+                <div className="bg-bg-frame border border-border-subtle rounded-input p-4">
                   <div className="flex items-center justify-between mb-4">
                     <Heading level={3}>Planned Payments (Future)</Heading>
                     <button
@@ -482,7 +482,7 @@ function Analytics() {
               {forecastResult && (
                 <div className="space-y-6">
                   {/* Monthly Projection Table */}
-                  <div className="bg-[#050A1A] border border-border-subtle rounded-input p-4">
+                  <div className="bg-bg-frame border border-border-subtle rounded-input p-4">
                     <Heading level={3} className="mb-4">Monthly Projection</Heading>
                     <div className="overflow-x-auto -mx-4 px-4">
                       <table className="w-full text-xs md:text-sm min-w-[600px]" style={{ tableLayout: 'fixed' }}>
@@ -550,7 +550,7 @@ function Analytics() {
                   </div>
 
                   {/* Chart */}
-                  <div className="bg-[#050A1A] border border-border-subtle rounded-input p-4">
+                  <div className="bg-bg-frame border border-border-subtle rounded-input p-4">
                     <Heading level={3} className="mb-4">Balance Projection Chart</Heading>
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart 

@@ -15,7 +15,7 @@ interface SectionCardProps {
 
 function SectionCard({ title, children }: SectionCardProps) {
   return (
-    <div className="bg-[#050A1A] border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+    <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
         <Heading level={2}>{title}</Heading>
       </div>
@@ -201,7 +201,7 @@ function Investing() {
   }, [data.netWorthItems])
 
   return (
-    <div className="min-h-screen px-2 pt-4 pb-12 lg:pt-6 lg:pb-16">
+    <div className="min-h-screen px-2 lg:px-6 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Hyperliquid</Heading>

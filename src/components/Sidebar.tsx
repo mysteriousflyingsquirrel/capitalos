@@ -113,7 +113,7 @@ function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed left-0 top-14 lg:top-0 h-[calc(100vh-3.5rem)] lg:h-full w-[250px] bg-[#050A1A]
+          fixed left-0 top-14 lg:top-0 h-[calc(100vh-3.5rem)] lg:h-full w-[250px] bg-bg-frame
           flex flex-col z-50 border-r border-border-subtle
           transform transition-transform duration-300 ease-in-out
           lg:translate-x-0
@@ -281,7 +281,7 @@ function Sidebar() {
         </nav>
 
         {/* User info and sign out */}
-        <div className="px-4 py-4">
+        <div className="px-4 py-3">
           {/* Settings (anchored at bottom, above sync status) */}
           <Link
             to="/settings"
@@ -322,78 +322,81 @@ function Sidebar() {
             </span>
           </Link>
 
-          <div className="my-3 border-t border-border-subtle" />
+          <div className="my-2 border-t border-border-subtle" />
 
           {/* Sync Status */}
-          <div className="mb-3 px-3 py-2 bg-bg-surface-2 rounded-input">
-            <div className="flex items-center gap-2">
+          <div className="px-3 py-2 bg-bg-surface-2 rounded-input">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
               {isSyncing ? (
                 <>
                   <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                  <span className="text-text-secondary text-xs">Syncing...</span>
+                  <span className="text-text-secondary text-[11px]">Syncing</span>
                 </>
               ) : !online ? (
                 <>
                   <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
-                  <span className="text-text-secondary text-xs">Offline</span>
+                  <span className="text-text-secondary text-[11px]">Offline</span>
                 </>
               ) : safeMode || quotaExceeded ? (
                 <>
                   <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                  <span className="text-text-secondary text-xs">Safe Mode</span>
+                  <span className="text-text-secondary text-[11px]">Safe Mode</span>
                 </>
               ) : (
                 <>
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                  <span className="text-text-secondary text-xs">Synced</span>
+                  <span className="text-text-secondary text-[11px]">Synced</span>
                 </>
               )}
             </div>
-            {activeListeners > 0 && !isSyncing && (
+              <div className="text-text-muted text-[10px] whitespace-nowrap">
+                {!isSyncing && lastSyncTime ? new Date(lastSyncTime).toLocaleTimeString() : ''}
+              </div>
+            </div>
+            {!isSyncing && activeListeners > 0 && (
               <div className="text-text-muted text-[10px] mt-1">
                 {activeListeners} listener{activeListeners !== 1 ? 's' : ''}
               </div>
             )}
-            {lastSyncTime && !isSyncing && (
-              <div className="text-text-muted text-[10px] mt-1">
-                {new Date(lastSyncTime).toLocaleTimeString()}
-              </div>
-            )}
           </div>
           
-          {email && (
-            <div className="mb-3 px-3 py-2 text-text-muted text-xs truncate">
-              {email}
+          {/* Email + Sign out (compact row) */}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="text-text-muted text-[11px] truncate min-w-0">
+              {email || ''}
             </div>
-          )}
-          <button
-            onClick={async () => {
-              const confirmed = window.confirm('Are you sure you want to sign out?')
-              if (!confirmed) return
-              
-              try {
-                await signOut()
-              } catch (error) {
-                console.error('Failed to sign out:', error)
-              }
-            }}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-input text-text-secondary hover:text-danger hover:bg-bg-surface-2 transition-all duration-200"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+            <button
+              onClick={async () => {
+                const confirmed = window.confirm('Are you sure you want to sign out?')
+                if (!confirmed) return
+                
+                try {
+                  await signOut()
+                } catch (error) {
+                  console.error('Failed to sign out:', error)
+                }
+              }}
+              className="flex items-center justify-center w-9 h-9 rounded-input text-text-secondary hover:text-danger hover:bg-bg-surface-2 transition-all duration-200 flex-shrink-0"
+              aria-label="Sign out"
+              title="Sign out"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-              />
-            </svg>
-            <span className="font-semibold text-sm">Sign Out</span>
-          </button>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
       </aside>
     </>

@@ -9,6 +9,7 @@ import Kraken from './pages/Kraken'
 import Aster from './pages/Aster'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
+import { ThemeProvider } from './contexts/ThemeContext'
 import { CurrencyProvider } from './contexts/CurrencyContext'
 import { AuthGateProvider, AuthGateState } from './lib/dataSafety/authGate'
 import { AuthContextCompatProvider, useAuth } from './lib/dataSafety/authGateCompat'
@@ -96,18 +97,20 @@ function App() {
       <AuthGateProvider>
         <ErrorBoundary>
           <AuthContextCompatProvider>
-            <CurrencyProvider>
-              <ApiKeysProvider>
-                <DataProvider>
-                  <IncognitoProvider>
-                    <Router>
-                      <ProtectedRoutes />
-                      <SyncStatusIndicator />
-                    </Router>
-                  </IncognitoProvider>
-                </DataProvider>
-              </ApiKeysProvider>
-            </CurrencyProvider>
+            <ThemeProvider>
+              <CurrencyProvider>
+                <ApiKeysProvider>
+                  <DataProvider>
+                    <IncognitoProvider>
+                      <Router>
+                        <ProtectedRoutes />
+                        <SyncStatusIndicator />
+                      </Router>
+                    </IncognitoProvider>
+                  </DataProvider>
+                </ApiKeysProvider>
+              </CurrencyProvider>
+            </ThemeProvider>
           </AuthContextCompatProvider>
         </ErrorBoundary>
       </AuthGateProvider>
