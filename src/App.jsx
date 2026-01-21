@@ -7,6 +7,7 @@ import Analytics from './pages/Analytics'
 import Investing from './pages/Investing'
 import Kraken from './pages/Kraken'
 import Aster from './pages/Aster'
+import Mexc from './pages/Mexc'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
 import { ThemeProvider } from './contexts/ThemeContext'
@@ -64,6 +65,7 @@ function ProtectedRoutes() {
 
           {/* Exchanges */}
           <Route path="/exchanges/hyperliquid" element={<Investing />} />
+          <Route path="/exchanges/mexc" element={<Mexc />} />
           <Route path="/exchanges/kraken" element={<Kraken />} />
           <Route path="/exchanges/aster" element={<Aster />} />
           <Route path="/settings" element={<Settings />} />

@@ -227,6 +227,7 @@ function Sidebar() {
                 {[
                   // Use Google's favicon service for reliability (many sites don't expose /favicon.ico)
                   { name: 'Hyperliquid', path: '/exchanges/hyperliquid', iconSrc: 'https://www.google.com/s2/favicons?domain=hyperfoundation.org&sz=32' },
+                  { name: 'MEXC', path: '/exchanges/mexc', iconSrc: 'https://www.google.com/s2/favicons?domain=mexc.com&sz=32' },
                   { name: 'Kraken', path: '/exchanges/kraken', iconSrc: 'https://www.google.com/s2/favicons?domain=kraken.com&sz=32' },
                   { name: 'Aster', path: '/exchanges/aster', iconSrc: 'https://www.google.com/s2/favicons?domain=asterdex.com&sz=32' },
                 ].map((child) => {
