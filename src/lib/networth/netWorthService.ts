@@ -9,7 +9,6 @@ import type { CurrencyCode } from '../currency'
 import { computeNetWorthSummary, type ComputeOptions } from './netWorthCompute'
 import type { NetWorthSummary } from './types'
 import { loadNetWorthItems, loadNetWorthTransactions } from '../../services/storageService'
-import { fetchAsterPerpetualsData } from '../../services/asterService'
 import { fetchHyperliquidPerpetualsData } from '../../services/hyperliquidService'
 
 /**
@@ -64,21 +63,16 @@ async function fetchItemsForUid(uid: string): Promise<NetWorthItem[]> {
   const perpetualsItem = items.find(item => item.category === 'Perpetuals')
   if (perpetualsItem) {
     try {
-      // Fetch both Aster and Hyperliquid data in parallel
-      const [asterData, hyperliquidData] = await Promise.all([
-        fetchAsterPerpetualsData(uid).catch(() => null),
-        fetchHyperliquidPerpetualsData(uid).catch(() => null),
-      ])
+      // Fetch Hyperliquid data (Kraken handled in DataContext via WebSocket)
+      const hyperliquidData = await fetchHyperliquidPerpetualsData(uid).catch(() => null)
 
       // Merge perpetuals data
-      if (asterData || hyperliquidData) {
+      if (hyperliquidData) {
         const mergedData = {
           openPositions: [
-            ...(asterData?.openPositions || []),
             ...(hyperliquidData?.openPositions || []),
           ],
           openOrders: [
-            ...(asterData?.openOrders || []),
             ...(hyperliquidData?.openOrders || []),
           ],
         }

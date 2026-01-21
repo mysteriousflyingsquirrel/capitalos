@@ -10,8 +10,6 @@ import {
 // Refs to store keys persistently (survive remounts)
 interface ApiKeysRefs {
   rapidApiKey: string | null
-  asterApiKey: string | null
-  asterApiSecretKey: string | null
   hyperliquidWalletAddress: string | null
   krakenApiKey: string | null
   krakenApiSecretKey: string | null
@@ -20,10 +18,6 @@ interface ApiKeysRefs {
 interface ApiKeysContextType {
   rapidApiKey: string | null
   setRapidApiKey: (key: string) => Promise<void>
-  asterApiKey: string | null
-  setAsterApiKey: (key: string) => Promise<void>
-  asterApiSecretKey: string | null
-  setAsterApiSecretKey: (key: string) => Promise<void>
   hyperliquidWalletAddress: string | null
   setHyperliquidWalletAddress: (address: string) => Promise<void>
   krakenApiKey: string | null
@@ -45,8 +39,6 @@ interface ApiKeysProviderProps {
 function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const { uid } = useAuth()
   const [rapidApiKey, setRapidApiKeyState] = useState<string | null>(null)
-  const [asterApiKey, setAsterApiKeyState] = useState<string | null>(null)
-  const [asterApiSecretKey, setAsterApiSecretKeyState] = useState<string | null>(null)
   const [hyperliquidWalletAddress, setHyperliquidWalletAddressState] = useState<string | null>(null)
   const [krakenApiKey, setKrakenApiKeyState] = useState<string | null>(null)
   const [krakenApiSecretKey, setKrakenApiSecretKeyState] = useState<string | null>(null)
@@ -56,8 +48,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   // Refs to store keys persistently (survive remounts) - ALWAYS available
   const keysRef = useRef<ApiKeysRefs>({
     rapidApiKey: null,
-    asterApiKey: null,
-    asterApiSecretKey: null,
     hyperliquidWalletAddress: null,
     krakenApiKey: null,
     krakenApiSecretKey: null,
@@ -74,8 +64,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     keysRef.current = { ...keysRef.current, ...updates }
     // Update state (for reactivity)
     if (updates.rapidApiKey !== undefined) setRapidApiKeyState(updates.rapidApiKey)
-    if (updates.asterApiKey !== undefined) setAsterApiKeyState(updates.asterApiKey)
-    if (updates.asterApiSecretKey !== undefined) setAsterApiSecretKeyState(updates.asterApiSecretKey)
     if (updates.hyperliquidWalletAddress !== undefined) setHyperliquidWalletAddressState(updates.hyperliquidWalletAddress)
     if (updates.krakenApiKey !== undefined) setKrakenApiKeyState(updates.krakenApiKey)
     if (updates.krakenApiSecretKey !== undefined) setKrakenApiSecretKeyState(updates.krakenApiSecretKey)
@@ -90,8 +78,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
       // Clear all in-memory state
       updateKeys({
         rapidApiKey: null,
-        asterApiKey: null,
-        asterApiSecretKey: null,
         hyperliquidWalletAddress: null,
         krakenApiKey: null,
         krakenApiSecretKey: null,
@@ -141,8 +127,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
             hasSettings: !!settings,
             hasApiKeys: !!settings?.apiKeys,
             apiKeysKeys: settings?.apiKeys ? Object.keys(settings.apiKeys) : [],
-            hasAsterKey: !!settings?.apiKeys?.asterApiKey,
-            hasAsterSecret: !!settings?.apiKeys?.asterApiSecretKey,
             hasHyperliquidKey: !!settings?.apiKeys?.hyperliquidWalletAddress,
             hasKrakenKey: !!settings?.apiKeys?.krakenApiKey,
             hasKrakenSecret: !!settings?.apiKeys?.krakenApiSecretKey,
@@ -156,8 +140,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           // Update both ref and state (ref persists, state is reactive)
           updateKeys({
             rapidApiKey: rapidKey,
-            asterApiKey: settings.apiKeys.asterApiKey || null,
-            asterApiSecretKey: settings.apiKeys.asterApiSecretKey || null,
             hyperliquidWalletAddress: settings.apiKeys.hyperliquidWalletAddress || null,
             krakenApiKey: settings.apiKeys.krakenApiKey || null,
             krakenApiSecretKey: settings.apiKeys.krakenApiSecretKey || null,
@@ -169,8 +151,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           // Update both ref and state
           updateKeys({
             rapidApiKey: envKey,
-            asterApiKey: null,
-            asterApiSecretKey: null,
             hyperliquidWalletAddress: null,
             krakenApiKey: null,
             krakenApiSecretKey: null,
@@ -191,8 +171,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           console.log('[ApiKeysContext] API keys loading complete:', {
             uid,
             apiKeysLoaded: true,
-            hasAsterKey: !!keysRef.current.asterApiKey,
-            hasAsterSecret: !!keysRef.current.asterApiSecretKey,
             hasHyperliquidKey: !!keysRef.current.hyperliquidWalletAddress,
           })
         }
@@ -220,52 +198,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
       }
       
       updateKeys({ rapidApiKey: trimmedKey || null })
-    } catch (error) {
-      console.error('[ApiKeysContext] Error saving API key:', error)
-      throw error
-    }
-  }
-
-  // Save Aster API key using UserSettingsRepository
-  const setAsterApiKey = async (key: string) => {
-    if (!uid) {
-      console.error('Cannot save API key: user not authenticated')
-      return
-    }
-
-    try {
-      const trimmedKey = key.trim()
-      
-      if (trimmedKey) {
-        await saveApiKeys(uid, { asterApiKey: trimmedKey })
-      } else {
-        await saveApiKeys(uid, { asterApiKey: deleteField() })
-      }
-      
-      updateKeys({ asterApiKey: trimmedKey || null })
-    } catch (error) {
-      console.error('[ApiKeysContext] Error saving API key:', error)
-      throw error
-    }
-  }
-
-  // Save Aster API Secret key using UserSettingsRepository
-  const setAsterApiSecretKey = async (key: string) => {
-    if (!uid) {
-      console.error('Cannot save API key: user not authenticated')
-      return
-    }
-
-    try {
-      const trimmedKey = key.trim()
-      
-      if (trimmedKey) {
-        await saveApiKeys(uid, { asterApiSecretKey: trimmedKey })
-      } else {
-        await saveApiKeys(uid, { asterApiSecretKey: deleteField() })
-      }
-      
-      updateKeys({ asterApiSecretKey: trimmedKey || null })
     } catch (error) {
       console.error('[ApiKeysContext] Error saving API key:', error)
       throw error
@@ -349,10 +281,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
       value={{
         rapidApiKey,
         setRapidApiKey,
-        asterApiKey,
-        setAsterApiKey,
-        asterApiSecretKey,
-        setAsterApiSecretKey,
         hyperliquidWalletAddress,
         setHyperliquidWalletAddress,
         krakenApiKey,

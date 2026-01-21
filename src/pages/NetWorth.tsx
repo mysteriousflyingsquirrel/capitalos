@@ -117,7 +117,7 @@ export interface NetWorthTransaction {
 // Empty data - user will add their own data
 const mockNetWorthItems: NetWorthItem[] = []
 
-// Empty data for Perpetuals category (will be populated from Aster API)
+// Empty data for Perpetuals category (populated from exchange integrations)
 const defaultPerpetualsData: PerpetualsData = {
   exchangeBalance: [
     {
@@ -615,7 +615,7 @@ function NetWorthCategorySection({
                         <div className="flex items-center justify-end -space-x-[12px]">
                           <button
                             onClick={() => onAddTransaction(item.id)}
-                            className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
+                            className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors -translate-x-1.5"
                             title="Add Transaction"
                           >
                             <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">

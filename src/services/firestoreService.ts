@@ -467,8 +467,6 @@ export interface UserSettings {
   baseCurrency?: string
   apiKeys?: {
     rapidApiKey?: string
-    asterApiKey?: string
-    asterApiSecretKey?: string
     hyperliquidWalletAddress?: string
   }
   analyticsSafetyBuffer?: number

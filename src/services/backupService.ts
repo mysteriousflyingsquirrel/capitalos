@@ -333,7 +333,9 @@ export async function restoreBackup(
       }
 
       if (settings.apiKeys) {
-        settingsData.apiKeys = settings.apiKeys
+        // Strip deprecated keys from older backups (Aster removed)
+        const { asterApiKey, asterApiSecretKey, ...rest } = settings.apiKeys as any
+        settingsData.apiKeys = rest
       }
 
       if (settings.themeId) {

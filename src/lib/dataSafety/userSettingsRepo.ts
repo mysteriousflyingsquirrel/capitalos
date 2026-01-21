@@ -11,8 +11,6 @@
  *   themeId: string,
  *   apiKeys: {
  *     rapidApiKey?: string,
- *     asterApiKey?: string,
- *     asterApiSecretKey?: string,
  *     hyperliquidWalletAddress?: string,
  *     krakenApiKey?: string,
  *     krakenApiSecretKey?: string
@@ -39,8 +37,6 @@ function getUserSettingsDocPath(uid: string) {
 
 export interface ApiKeys {
   rapidApiKey?: string | null
-  asterApiKey?: string | null
-  asterApiSecretKey?: string | null
   hyperliquidWalletAddress?: string | null
   krakenApiKey?: string | null
   krakenApiSecretKey?: string | null

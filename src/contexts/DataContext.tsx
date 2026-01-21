@@ -12,7 +12,6 @@ import {
 import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotService'
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
-import { fetchAsterPerpetualsData } from '../services/asterService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
 import { KrakenFuturesWs, type KrakenWsState } from '../services/krakenFuturesWs'
 import type { PerpetualsData } from '../pages/NetWorth'
@@ -65,8 +64,6 @@ export function DataProvider({ children }: DataProviderProps) {
     rapidApiKey, 
     krakenApiKey, 
     krakenApiSecretKey,
-    asterApiKey,
-    asterApiSecretKey,
     hyperliquidWalletAddress,
     apiKeysLoaded,
     getCurrentKeys,
@@ -205,28 +202,22 @@ export function DataProvider({ children }: DataProviderProps) {
     }
   }
 
-  // Fetch Aster Perpetuals data
+  // Fetch Perpetuals data (Hyperliquid via REST, Kraken via WebSocket)
   // Accepts optional keys parameter - if not provided, uses closure values
   // This allows refreshAllData to pass ref keys (always current) while other callers use closure
   const fetchPerpetualsData = async (
     items: NetWorthItem[],
     providedKeys?: {
-      asterApiKey: string | null
-      asterApiSecretKey: string | null
       hyperliquidWalletAddress: string | null
     }
   ): Promise<NetWorthItem[]> => {
     // Use provided keys if available, otherwise use closure values
     const keys = providedKeys || {
-      asterApiKey,
-      asterApiSecretKey,
       hyperliquidWalletAddress,
     }
     // Always log (not just dev mode) to diagnose production issues
     console.log('[DataContext] fetchPerpetualsData called:', {
       apiKeysLoaded,
-      hasAsterKey: !!keys.asterApiKey,
-      hasAsterSecretKey: !!keys.asterApiSecretKey,
       hasHyperliquidKey: !!keys.hyperliquidWalletAddress,
       krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
       hasUid: !!uid,
@@ -257,26 +248,13 @@ export function DataProvider({ children }: DataProviderProps) {
     const itemsWithoutPerpetuals = items.filter(item => item.category !== 'Perpetuals')
 
     try {
-      console.log('[DataContext] fetchPerpetualsData: Fetching Aster, Hyperliquid, and Kraken data...')
-      
-      // Fetch Aster and Hyperliquid data (Kraken uses WebSocket only)
-      // Pass keys explicitly from parameters - services will return null if keys are missing
-      const fetchPromises: Promise<PerpetualsData | null>[] = []
-      
-      // Fetch Aster - pass keys explicitly from parameters
-      fetchPromises.push(fetchAsterPerpetualsData({
-        uid,
-        apiKey: keys.asterApiKey || '',
-        apiSecret: keys.asterApiSecretKey || null,
-      }))
-      
+      console.log('[DataContext] fetchPerpetualsData: Fetching Hyperliquid and Kraken data...')
+
       // Fetch Hyperliquid - pass wallet address explicitly from parameters
-      fetchPromises.push(fetchHyperliquidPerpetualsData({
+      const hyperliquidData = await fetchHyperliquidPerpetualsData({
         uid,
         walletAddress: keys.hyperliquidWalletAddress || '',
-      }))
-      
-      const [asterData, hyperliquidData] = await Promise.all(fetchPromises)
+      })
       
       // Get Kraken data from WebSocket (only source)
       // Convert current WebSocket state to PerpetualsData format
@@ -286,9 +264,6 @@ export function DataProvider({ children }: DataProviderProps) {
 
       // Always log fetch results (not just dev mode)
       console.log('[DataContext] fetchPerpetualsData: Fetch results:', {
-        asterData: !!asterData,
-        asterPositions: asterData?.openPositions?.length || 0,
-        asterExchangeBalance: asterData?.exchangeBalance?.length || 0,
         hyperliquidData: !!hyperliquidData,
         hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
         hyperliquidExchangeBalance: hyperliquidData?.exchangeBalance?.length || 0,
@@ -297,32 +272,29 @@ export function DataProvider({ children }: DataProviderProps) {
         krakenPositions: finalKrakenData?.openPositions?.length || 0,
         krakenExchangeBalance: finalKrakenData?.exchangeBalance?.length || 0,
         krakenOrders: (finalKrakenData as any)?.openOrders?.length || 0,
-        totalPositions: [...(asterData?.openPositions || []), ...(hyperliquidData?.openPositions || []), ...(finalKrakenData?.openPositions || [])].length,
-        totalExchangeBalance: [...(asterData?.exchangeBalance || []), ...(hyperliquidData?.exchangeBalance || []), ...(finalKrakenData?.exchangeBalance || [])].length,
+        totalPositions: [...(hyperliquidData?.openPositions || []), ...(finalKrakenData?.openPositions || [])].length,
+        totalExchangeBalance: [...(hyperliquidData?.exchangeBalance || []), ...(finalKrakenData?.exchangeBalance || [])].length,
       })
 
-      // Merge Aster, Hyperliquid, and Kraken data
+      // Merge Hyperliquid and Kraken data
       // Create defensive copies to prevent mutation
-      const asterPositions = Array.isArray(asterData?.openPositions) ? [...asterData.openPositions] : []
       const hyperliquidPositions = Array.isArray(hyperliquidData?.openPositions) ? [...hyperliquidData.openPositions] : []
       const krakenPositions = Array.isArray(finalKrakenData?.openPositions) ? [...finalKrakenData.openPositions] : []
       // Note: openOrders may not be in PerpetualsData interface, but APIs may return it
       // We'll handle it safely by checking if it exists
-      const asterOrders = (asterData as any)?.openOrders && Array.isArray((asterData as any).openOrders) ? [...(asterData as any).openOrders] : []
       const hyperliquidOrders = (hyperliquidData as any)?.openOrders && Array.isArray((hyperliquidData as any).openOrders) ? [...(hyperliquidData as any).openOrders] : []
       const krakenOrders = (finalKrakenData as any)?.openOrders && Array.isArray((finalKrakenData as any).openOrders) ? [...(finalKrakenData as any).openOrders] : []
-      const asterExchangeBalance = Array.isArray(asterData?.exchangeBalance) ? [...asterData.exchangeBalance] : []
       const hyperliquidExchangeBalance = Array.isArray(hyperliquidData?.exchangeBalance) ? [...hyperliquidData.exchangeBalance] : []
       const krakenExchangeBalance = Array.isArray(finalKrakenData?.exchangeBalance) ? [...finalKrakenData.exchangeBalance] : []
       
       const mergedData = {
-        openPositions: [...asterPositions, ...hyperliquidPositions, ...krakenPositions],
+        openPositions: [...hyperliquidPositions, ...krakenPositions],
         // Note: openOrders are not part of PerpetualsData interface, but we track them for logging
-        openOrders: [...asterOrders, ...hyperliquidOrders, ...krakenOrders],
+        openOrders: [...hyperliquidOrders, ...krakenOrders],
       }
 
       // Merge exchangeBalance from API sources
-      const apiExchangeBalance = [...asterExchangeBalance, ...hyperliquidExchangeBalance, ...krakenExchangeBalance]
+      const apiExchangeBalance = [...hyperliquidExchangeBalance, ...krakenExchangeBalance]
       
       // Extract portfolioPnL from hyperliquidData
       const portfolioPnL = hyperliquidData?.portfolioPnL
@@ -452,8 +424,6 @@ export function DataProvider({ children }: DataProviderProps) {
       // Use getCurrentKeys() to ensure we always have the latest keys, not stale closure values
       const currentKeys = getCurrentKeys()
       const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items, {
-        asterApiKey: currentKeys.asterApiKey,
-        asterApiSecretKey: currentKeys.asterApiSecretKey,
         hyperliquidWalletAddress: currentKeys.hyperliquidWalletAddress,
       })
       
@@ -575,8 +545,6 @@ export function DataProvider({ children }: DataProviderProps) {
       // Use getCurrentKeys() to ensure we always have the latest keys
       const currentKeys = getCurrentKeys()
       const itemsWithPerpetuals = await fetchPerpetualsData(currentItems, {
-        asterApiKey: currentKeys.asterApiKey,
-        asterApiSecretKey: currentKeys.asterApiSecretKey,
         hyperliquidWalletAddress: currentKeys.hyperliquidWalletAddress,
       })
 
@@ -708,8 +676,6 @@ export function DataProvider({ children }: DataProviderProps) {
       console.log('[DataContext] refreshAllData: Fetched crypto/stock prices, about to fetch perpetuals', {
         currentItemsCount: currentItems.length,
         apiKeysLoaded,
-        hasAsterKey: !!currentKeys.asterApiKey,
-        hasAsterSecret: !!currentKeys.asterApiSecretKey,
         hasHyperliquidKey: !!currentKeys.hyperliquidWalletAddress,
         krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
       })
@@ -717,8 +683,6 @@ export function DataProvider({ children }: DataProviderProps) {
       // Step 3: Fetch perpetuals data (reads from WebSocket state for Kraken)
       // Pass keys from ref (always current) instead of using closure values
       const itemsWithPerpetuals = await fetchPerpetualsData(currentItems, {
-        asterApiKey: currentKeys.asterApiKey,
-        asterApiSecretKey: currentKeys.asterApiSecretKey,
         hyperliquidWalletAddress: currentKeys.hyperliquidWalletAddress,
       })
       
