@@ -1,4 +1,4 @@
-export type ThemeId = 'galaxy' | 'fire' | 'emerald' | 'mono'
+export type ThemeId = 'galaxy' | 'fire' | 'emerald' | 'mono' | 'obsidian' | 'dawn' | 'moss' | 'inferno'
 
 export interface Theme {
   id: ThemeId
@@ -50,42 +50,40 @@ export const THEMES: Theme[] = [
     id: "fire",
     label: "Fire",
     colors: {
-      // Backgrounds (charcoal → ember)
-      "bg-page": "#140A05",
-      "bg-frame": "#231107",
-      "bg-surface-1": "#2F1609",
-      "bg-surface-2": "#3A1C0B",
-      "bg-surface-3": "#47230E",
+      // Backgrounds (anchored exactly)
+      "bg-page": "#7E210F",     // brick red
+      "bg-frame": "#6E2D1E",    // burnt sienna
+      "bg-surface-1": "#7A3A2A",
+      "bg-surface-2": "#874634",
+      "bg-surface-3": "#945240",
   
-      // Borders (warm ember lines)
-      "border-subtle": "#5A2C12",
-      "border-strong": "#6F3716",
+      // Borders (darker clay lines for structure)
+      "border-subtle": "#5A2418",
+      "border-strong": "#471A11",
   
-      // Text (warm white → muted amber)
-      "text-primary": "#FFF3E6",
-      "text-secondary": "#FFD6B0",
-      "text-muted": "#C99A6A",
-      "text-disabled": "#8A623E",
+      // Text (warm ivory → muted clay)
+      "text-primary": "#FFF2EB",
+      "text-secondary": "#FFD2C1",
+      "text-muted": "#D6A08A",
+      "text-disabled": "#A26E5B",
   
       // Neon Accents (molten orange)
       "accent-blue": "#FF7A18",
       "accent-purple": "#FF7A18",
   
-      // Neon Highlights (fire spectrum)
+      // Neon Highlights (fire spectrum, controlled)
       "highlight-yellow": "#FFD166",
       "highlight-blue": "#FF9A3C",
       "highlight-turquoise": "#FFB703",
       "highlight-purple": "#FF6A3D",
       "highlight-pink": "#FF3D3D",
   
-      // Status (semantic but warm-aligned)
+      // Status (semantic but harmonized)
       success: "#3DDC97",
       warning: "#FFD166",
       danger: "#FF3D3D",
       info: "#FF9A3C",
     },
-  
-  
   },
   {
     id: 'emerald',
@@ -163,6 +161,162 @@ export const THEMES: Theme[] = [
       warning: '#F6C453',
       danger: '#FF8A8A',
       info: '#7EA6FF',
+    },
+  },
+  {
+    id: 'obsidian',
+    label: 'Obsidian',
+    colors: {
+      // Backgrounds (true neutral dark)
+      'bg-page': '#0B0D12',
+      'bg-frame': '#131720',
+      'bg-surface-1': '#191E2A',
+      'bg-surface-2': '#202637',
+      'bg-surface-3': '#28304A',
+
+      // Borders
+      'border-subtle': '#323A52',
+      'border-strong': '#3F4A6A',
+
+      // Text
+      'text-primary': '#F2F4F8',
+      'text-secondary': '#D1D6E2',
+      'text-muted': '#9AA3B8',
+      'text-disabled': '#69728A',
+
+      // Accents (muted steel)
+      'accent-blue': '#A7B0C6',
+      'accent-purple': '#A7B0C6',
+
+      // Highlights
+      'highlight-yellow': '#F6C453',
+      'highlight-blue': '#7EA6FF',
+      'highlight-turquoise': '#7FE3D4',
+      'highlight-purple': '#B7A6FF',
+      'highlight-pink': '#FF8DD6',
+
+      // Status
+      success: '#7FE3D4',
+      warning: '#F6C453',
+      danger: '#FF8A8A',
+      info: '#7EA6FF',
+    },
+  },
+  {
+    id: 'dawn',
+    label: 'Dawn',
+    colors: {
+      // Backgrounds (warm sand → soft amber)
+      'bg-page': '#1A120D',
+      'bg-frame': '#2A1C14',
+      'bg-surface-1': '#3A261B',
+      'bg-surface-2': '#4A3123',
+      'bg-surface-3': '#5B3D2B',
+
+      // Borders (warm clay)
+      'border-subtle': '#6F4A36',
+      'border-strong': '#875A41',
+
+      // Text (soft ivory → muted bronze)
+      'text-primary': '#FFF4EC',
+      'text-secondary': '#EFD6C3',
+      'text-muted': '#C4A089',
+      'text-disabled': '#8F6D59',
+
+      // Accents (soft sunrise orange)
+      'accent-blue': '#FF9A3C',
+      'accent-purple': '#FF9A3C',
+
+      // Highlights (sunrise spectrum)
+      'highlight-yellow': '#FFD166',
+      'highlight-blue': '#7EA6FF',
+      'highlight-turquoise': '#7FE3D4',
+      'highlight-purple': '#B085FF',
+      'highlight-pink': '#FF8DD6',
+
+      // Status (semantic, warm-compatible)
+      success: '#7FE3D4',
+      warning: '#FFD166',
+      danger: '#FF8A8A',
+      info: '#7EA6FF',
+    },
+  },
+  {
+    id: 'moss',
+    label: 'Moss',
+    colors: {
+      // Backgrounds (olive stone)
+      'bg-page': '#0F1A14',
+      'bg-frame': '#1B2A21',
+      'bg-surface-1': '#26382C',
+      'bg-surface-2': '#314838',
+      'bg-surface-3': '#3D5A45',
+
+      // Borders
+      'border-subtle': '#4E6D56',
+      'border-strong': '#65896D',
+
+      // Text
+      'text-primary': '#F1FFF6',
+      'text-secondary': '#CDEAD9',
+      'text-muted': '#96B7A4',
+      'text-disabled': '#5F7F6C',
+
+      // Accents (muted green glow)
+      'accent-blue': '#7DDC9C',
+      'accent-purple': '#7DDC9C',
+
+      // Highlights
+      'highlight-yellow': '#E6C453',
+      'highlight-blue': '#7EA6FF',
+      'highlight-turquoise': '#7DDC9C',
+      'highlight-purple': '#9A8BFF',
+      'highlight-pink': '#FF8DD6',
+
+      // Status
+      success: '#7DDC9C',
+      warning: '#E6C453',
+      danger: '#FF8A8A',
+      info: '#7EA6FF',
+    },
+  },
+  {
+    id: 'inferno',
+    label: 'Inferno',
+    colors: {
+      // Backgrounds (blood red → dark ash)
+      'bg-page': '#1A0505',
+      'bg-frame': '#2A0B0B',
+      'bg-surface-1': '#3A1212',
+      'bg-surface-2': '#4A1818',
+      'bg-surface-3': '#5C1F1F',
+
+      // Borders
+      'border-subtle': '#6E2A2A',
+      'border-strong': '#8A3535',
+
+      // Text
+      'text-primary': '#FFF0F0',
+      'text-secondary': '#F2C1C1',
+      'text-muted': '#B88383',
+      'text-disabled': '#7A4F4F',
+
+      // Accents (hot crimson)
+      'accent-blue': '#FF3B3B',
+      'accent-purple': '#FF3B3B',
+
+      // Highlights
+      'highlight-yellow': '#FFD166',
+      'highlight-blue': '#FF6A6A',
+      'highlight-turquoise': '#FF8F8F',
+      'highlight-purple': '#B085FF',
+      'highlight-pink': '#FF5FA2',
+
+      // Status
+      success: '#3DDC97',
+      warning: '#FFD166',
+      danger: '#FF3B3B',
+      info: '#FF6A6A',
     },
   },
 ]

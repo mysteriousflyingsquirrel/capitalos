@@ -53,8 +53,8 @@ function ThemeProviderInner({ children }: ThemeProviderProps) {
 
       try {
         const settings = await loadUserSettings(uid)
-        const loadedThemeId = (settings?.themeId || 'galaxy') as ThemeId
-        setThemeIdLocal(getThemeById(loadedThemeId).id)
+        const loadedTheme = getThemeById(settings?.themeId || 'galaxy')
+        setThemeIdLocal(loadedTheme.id)
 
         // If missing, write back once so it becomes explicit
         if (!settings?.themeId) {

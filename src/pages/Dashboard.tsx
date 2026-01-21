@@ -649,10 +649,18 @@ function Dashboard() {
   const formatCurrencyTick = (value: number) => {
     if (isIncognito) return '****'
     const converted = convert(value, 'CHF')
-    if (converted >= 1000) {
-      return `${(converted / 1000).toFixed(0)}'k`
+    if (!Number.isFinite(converted)) return ''
+
+    const abs = Math.abs(converted)
+    const formatScaled = (n: number) => {
+      const absN = Math.abs(n)
+      const fixed = absN >= 10 ? n.toFixed(0) : n.toFixed(1)
+      return fixed.replace(/\.0$/, '')
     }
-    return converted.toString()
+
+    if (abs >= 1_000_000) return `${formatScaled(converted / 1_000_000)}M`
+    if (abs >= 1_000) return `${formatScaled(converted / 1_000)}k`
+    return `${Math.round(converted)}`
   }
 
   // Calculate asset allocation from net worth items using shared calculation service
@@ -1090,7 +1098,10 @@ function Dashboard() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={netWorthData}>
+            <LineChart
+              data={netWorthData}
+              margin={{ top: 6, right: 8, left: 0, bottom: 0 }}
+            >
               <XAxis
                 dataKey="month"
                 stroke={CHART_COLORS.muted1}
@@ -1105,6 +1116,7 @@ function Dashboard() {
                 stroke={CHART_COLORS.muted1}
                 tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
                 tickFormatter={formatCurrencyTick}
+                width={44}
               />
               <Tooltip
                 contentStyle={{

@@ -203,10 +203,18 @@ function Analytics() {
   const formatCurrencyTick = (value) => {
     if (isIncognito) return '****'
     const converted = convert(value, 'CHF')
-    if (converted >= 1000) {
-      return `${(converted / 1000).toFixed(0)}'k`
+    if (!Number.isFinite(converted)) return ''
+
+    const abs = Math.abs(converted)
+    const formatScaled = (n) => {
+      const absN = Math.abs(n)
+      const fixed = absN >= 10 ? n.toFixed(0) : n.toFixed(1)
+      return fixed.replace(/\.0$/, '')
     }
-    return converted.toString()
+
+    if (abs >= 1_000_000) return `${formatScaled(converted / 1_000_000)}M`
+    if (abs >= 1_000) return `${formatScaled(converted / 1_000)}k`
+    return `${Math.round(converted)}`
   }
 
   const handleAddEntry = (type, entryData) => {
@@ -555,6 +563,7 @@ function Analytics() {
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart 
                         data={forecastResult.monthlyProjections}
+                        margin={{ top: 6, right: 8, left: 0, bottom: 0 }}
                       >
                         <XAxis
                           dataKey="month"
@@ -565,6 +574,7 @@ function Analytics() {
                           stroke={CHART_COLORS.muted1}
                           tick={{ fill: CHART_COLORS.muted1, fontSize: '0.648rem' }}
                           tickFormatter={formatCurrencyTick}
+                          width={44}
                         />
                         <Tooltip
                           contentStyle={{
