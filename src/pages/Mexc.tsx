@@ -3,22 +3,24 @@ import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useData } from '../contexts/DataContext'
-import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney, formatNumber } from '../lib/currency'
 import type { PerpetualsOpenOrder, PerpetualsOpenPosition } from './NetWorth'
-import { useMexcWsPositions } from '../hooks/valuation/useMexcWsPositions'
 
 // Helper component: SectionCard
 interface SectionCardProps {
   title: string
+  titleRight?: React.ReactNode
   children: React.ReactNode
 }
 
-function SectionCard({ title, children }: SectionCardProps) {
+function SectionCard({ title, titleRight, children }: SectionCardProps) {
   return (
     <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
-        <Heading level={2}>{title}</Heading>
+        <div className="flex items-center justify-between gap-3">
+          <Heading level={2}>{title}</Heading>
+          {titleRight ? <div className="text-xs text-text-muted whitespace-nowrap">{titleRight}</div> : null}
+        </div>
       </div>
       {children}
     </div>
@@ -83,14 +85,8 @@ interface OpenOrderRow {
 
 export default function Mexc() {
   const { isIncognito } = useIncognito()
-  const { data } = useData()
-  const { mexcApiKey, mexcSecretKey } = useApiKeys()
+  const { data, mexcPositionsWs, mexcPositionsWsStatus, mexcPositionsWsError } = useData()
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
-
-  const { positions: mexcWsPositions } = useMexcWsPositions({
-    apiKey: mexcApiKey,
-    secretKey: mexcSecretKey,
-  })
 
   const mexcItem = useMemo(() => {
     return data.netWorthItems.find(item => item.category === 'Perpetuals' && item.platform === 'MEXC') || null
@@ -111,7 +107,7 @@ export default function Mexc() {
     const basePositions: PerpetualsOpenPosition[] = Array.isArray(mexcItem?.perpetualsData?.openPositions)
       ? (mexcItem!.perpetualsData!.openPositions as PerpetualsOpenPosition[])
       : []
-    const merged = mexcWsPositions.length > 0 ? mexcWsPositions : basePositions
+    const merged = mexcPositionsWs.length > 0 ? mexcPositionsWs : basePositions
 
     return merged.map((pos) => {
       const side = pos.positionSide === 'SHORT' ? 'Short' : 'Long'
@@ -139,7 +135,7 @@ export default function Mexc() {
         fundingFee: pos.fundingFeeUsd ?? null,
       }
     })
-  }, [mexcWsPositions, mexcItem])
+  }, [mexcPositionsWs, mexcItem])
 
   const openOrders: OpenOrderRow[] = useMemo(() => {
     return openOrdersData.map((order) => {
@@ -176,7 +172,14 @@ export default function Mexc() {
         </SectionCard>
 
         {/* Positions Frame */}
-        <SectionCard title="Positions">
+        <SectionCard
+          title="Positions"
+          titleRight={
+            mexcPositionsWsStatus === 'error'
+              ? `WS: error${mexcPositionsWsError ? ` (${mexcPositionsWsError})` : ''}`
+              : `WS: ${mexcPositionsWsStatus}`
+          }
+        >
           <div className="overflow-x-auto -mx-3 px-3 lg:-mx-6 lg:px-6">
             <table className="w-full" style={{ minWidth: '1070px', tableLayout: 'fixed' }}>
               <colgroup>

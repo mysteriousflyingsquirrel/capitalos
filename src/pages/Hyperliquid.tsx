@@ -12,14 +12,18 @@ import { useHyperliquidWsPositions } from '../hooks/valuation/useHyperliquidWsPo
 // Helper component: SectionCard
 interface SectionCardProps {
   title: string
+  titleRight?: React.ReactNode
   children: React.ReactNode
 }
 
-function SectionCard({ title, children }: SectionCardProps) {
+function SectionCard({ title, titleRight, children }: SectionCardProps) {
   return (
     <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
       <div className="mb-6 pb-4 border-b border-border-strong">
-        <Heading level={2}>{title}</Heading>
+        <div className="flex items-center justify-between gap-3">
+          <Heading level={2}>{title}</Heading>
+          {titleRight ? <div className="text-xs text-text-muted whitespace-nowrap">{titleRight}</div> : null}
+        </div>
       </div>
       {children}
     </div>
@@ -87,7 +91,7 @@ function Hyperliquid() {
   const { isIncognito } = useIncognito()
   const { data } = useData()
   const { hyperliquidWalletAddress } = useApiKeys()
-  const { positions: hlWsPositions } = useHyperliquidWsPositions({
+  const { positions: hlWsPositions, status: hlWsStatus, error: hlWsError } = useHyperliquidWsPositions({
     walletAddress: hyperliquidWalletAddress,
     dex: null, // default dex (future-proof: allow multiple dex clients later)
   })
@@ -202,7 +206,14 @@ function Hyperliquid() {
         </SectionCard>
 
         {/* Positions Frame */}
-        <SectionCard title="Positions">
+        <SectionCard
+          title="Positions"
+          titleRight={
+            hlWsStatus === 'error'
+              ? `WS: error${hlWsError ? ` (${hlWsError})` : ''}`
+              : `WS: ${hlWsStatus}`
+          }
+        >
           <div className="overflow-x-auto -mx-3 px-3 lg:-mx-6 lg:px-6">
             <table className="w-full" style={{ minWidth: '1070px', tableLayout: 'fixed' }}>
               <colgroup>

@@ -40,6 +40,9 @@ interface DataContextType {
   loading: boolean
   error: string | null
   isInitialLoad: boolean // True only during the very first load, false for refreshes
+  mexcPositionsWs: PerpetualsOpenPosition[]
+  mexcPositionsWsStatus: MexcWsStatus
+  mexcPositionsWsError: string | null
   refreshData: () => Promise<void>
   refreshPrices: () => Promise<void>
   refreshPerpetuals: () => Promise<void>
@@ -93,6 +96,10 @@ export function DataProvider({ children }: DataProviderProps) {
   const krakenWsStateRef = useRef<KrakenWsState | null>(null)
   const mexcWsStatusRef = useRef<MexcWsStatus>('disconnected')
   const mexcWsPositionsMapRef = useRef<Map<string, PerpetualsOpenPosition>>(new Map())
+  // Reactive MEXC WS state for pages (positions table + status label)
+  const [mexcPositionsWs, setMexcPositionsWs] = useState<PerpetualsOpenPosition[]>([])
+  const [mexcPositionsWsStatus, setMexcPositionsWsStatus] = useState<MexcWsStatus>('disconnected')
+  const [mexcPositionsWsError, setMexcPositionsWsError] = useState<string | null>(null)
   // Track if we're currently saving summary to avoid infinite loops
   const isSavingSummaryRef = useRef(false)
   // Track if data has ever been loaded (to distinguish initial load from refreshes)
@@ -858,6 +865,9 @@ export function DataProvider({ children }: DataProviderProps) {
       mexcWsStatusRef.current = 'disconnected'
       mexcWsPositionsMapRef.current = new Map()
       mexcWsSubscribedRef.current = false
+      setMexcPositionsWsStatus('disconnected')
+      setMexcPositionsWsError(null)
+      setMexcPositionsWs([])
       return
     }
 
@@ -868,9 +878,13 @@ export function DataProvider({ children }: DataProviderProps) {
         for (const p of incoming) {
           mexcWsPositionsMapRef.current.set(p.id, p)
         }
+        // Reactive: update table state (positions only)
+        setMexcPositionsWs(Array.from(mexcWsPositionsMapRef.current.values()))
       },
-      onStatus: (status) => {
+      onStatus: (status, err) => {
         mexcWsStatusRef.current = status
+        setMexcPositionsWsStatus(status)
+        setMexcPositionsWsError(err ?? null)
 
         // When first subscribed and data has loaded, trigger a single perpetuals refresh
         if (
@@ -891,6 +905,7 @@ export function DataProvider({ children }: DataProviderProps) {
     return () => {
       ws.disconnect()
       mexcWsSubscribedRef.current = false
+      setMexcPositionsWsStatus('disconnected')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, mexcApiKey, mexcSecretKey, apiKeysLoaded])
@@ -902,6 +917,9 @@ export function DataProvider({ children }: DataProviderProps) {
         loading,
         error,
         isInitialLoad: loading && !hasLoadedDataRef.current,
+        mexcPositionsWs,
+        mexcPositionsWsStatus,
+        mexcPositionsWsError,
         refreshData,
         refreshPrices,
         refreshPerpetuals,
