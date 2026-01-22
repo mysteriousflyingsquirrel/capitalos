@@ -307,119 +307,106 @@ function NetWorthCategorySection({
             
             return (
               <div className="space-y-6">
-                {perpetualsItems.map((perpetualsItem) => {
-                  const perpetualsData = perpetualsItem.perpetualsData
-                  return (
-                    <div key={perpetualsItem.id} className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
-                      <div className="mb-4 pb-3 border-b border-border-strong flex items-center justify-between">
-                        <Heading level={3} className="text-text-secondary">
-                          {perpetualsItem.platform || perpetualsItem.name || 'Perpetuals'}
-                        </Heading>
-                      </div>
-
-                      {/* Account Equity Table */}
-                      <div>
-                        <Heading level={4} className="mb-3 text-text-secondary">Account Equity</Heading>
-                        {!perpetualsData ? (
-                          <div className="text-text-muted text-[0.567rem] md:text-xs">
-                            No Perpetuals data available for this exchange. Please configure your API credentials in Settings.
-                          </div>
+                {/* Account Equity Table (one row per exchange) */}
+                <div>
+                  <Heading level={3} className="mb-3 text-text-secondary">Account Equity</Heading>
+                  <div className="w-full overflow-hidden">
+                    <style>{`
+                      @media (max-width: 767px) {
+                        .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
+                        .perp-table-holdings-col { width: calc((100% - 55px) * 1 / 6) !important; }
+                        .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
+                        .perp-table-actions-col { width: 55px !important; }
+                        .perp-table-balance-cell { padding-right: 0.25rem !important; }
+                      }
+                      @media (min-width: 768px) {
+                        .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
+                        .perp-table-holdings-col { width: calc((100% - 85px) * 1 / 8) !important; }
+                        .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
+                        .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
+                        .perp-table-actions-col { width: 85px !important; }
+                      }
+                    `}</style>
+                    <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
+                      <colgroup>
+                        <col className="perp-table-item-col" />
+                        <col className="perp-table-holdings-col" />
+                        <col className="perp-table-balance-col" />
+                        <col className="perp-table-platform-col hidden md:table-column" />
+                        <col className="perp-table-actions-col" />
+                      </colgroup>
+                      <thead>
+                        <tr className="border-b border-border-subtle">
+                          <th className="text-left pb-2">
+                            <Heading level={4}>Item</Heading>
+                          </th>
+                          <th className="text-right pb-2">
+                            <Heading level={4}>Holdings</Heading>
+                          </th>
+                          <th className="text-right pb-2">
+                            <Heading level={4}>Balance</Heading>
+                          </th>
+                          <th className="text-right pb-2 hidden md:table-cell">
+                            <Heading level={4}>Platform</Heading>
+                          </th>
+                          <th className="text-right pb-2">
+                            <Heading level={4}>Actions</Heading>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {perpetualsItems.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                              No account equity data
+                            </td>
+                          </tr>
                         ) : (
-                          <div className="w-full overflow-hidden">
-                            <style>{`
-                              @media (max-width: 767px) {
-                                .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
-                                .perp-table-holdings-col { width: calc((100% - 55px) * 1 / 6) !important; }
-                                .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
-                                .perp-table-actions-col { width: 55px !important; }
-                                .perp-table-balance-cell { padding-right: 0.25rem !important; }
-                              }
-                              @media (min-width: 768px) {
-                                .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
-                                .perp-table-holdings-col { width: calc((100% - 85px) * 1 / 8) !important; }
-                                .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
-                                .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
-                                .perp-table-actions-col { width: 85px !important; }
-                              }
-                            `}</style>
-                            <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
-                              <colgroup>
-                                <col className="perp-table-item-col" />
-                                <col className="perp-table-holdings-col" />
-                                <col className="perp-table-balance-col" />
-                                <col className="perp-table-platform-col hidden md:table-column" />
-                                <col className="perp-table-actions-col" />
-                              </colgroup>
-                              <thead>
-                                <tr className="border-b border-border-subtle">
-                                  <th className="text-left pb-2">
-                                    <Heading level={4}>Item</Heading>
-                                  </th>
-                                  <th className="text-right pb-2">
-                                    <Heading level={4}>Holdings</Heading>
-                                  </th>
-                                  <th className="text-right pb-2">
-                                    <Heading level={4}>Balance</Heading>
-                                  </th>
-                                  <th className="text-right pb-2 hidden md:table-cell">
-                                    <Heading level={4}>Platform</Heading>
-                                  </th>
-                                  <th className="text-right pb-2">
-                                    <Heading level={4}>Actions</Heading>
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(perpetualsData.exchangeBalance || []).length === 0 ? (
-                                  <tr>
-                                    <td colSpan={5} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
-                                      No account equity data
-                                    </td>
-                                  </tr>
-                                ) : (
-                                  (perpetualsData.exchangeBalance || []).map((balance) => {
-                                    const balanceChf = usdToChfRate && usdToChfRate > 0 
-                                      ? balance.holdings * usdToChfRate 
-                                      : convert(balance.holdings, 'USD')
-                                    return (
-                                      <tr key={balance.id} className="border-b border-border-subtle last:border-b-0">
-                                        <td className="py-2 pr-2">
-                                          <div className="text2 truncate">
-                                            {balance.item}
-                                          </div>
-                                        </td>
-                                        <td className="py-2 text-right px-2">
-                                          <div className="text2 whitespace-nowrap">
-                                            {formatNumber(balance.holdings, 'ch', { incognito: isIncognito })}
-                                          </div>
-                                        </td>
-                                        <td className="py-2 text-right px-2 perp-table-balance-cell">
-                                          <div className="text2 whitespace-nowrap">
-                                            {formatCurrency(balanceChf)}
-                                          </div>
-                                        </td>
-                                        <td className="py-2 text-right pr-2 hidden md:table-cell">
-                                          <div className="flex items-center justify-end gap-2">
-                                            <span className="text2 truncate">
-                                              {balance.platform}
-                                            </span>
-                                          </div>
-                                        </td>
-                                        <td className="py-2">
-                                          {/* Actions column - empty */}
-                                        </td>
-                                      </tr>
-                                    )
-                                  })
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
+                          perpetualsItems.map((perpetualsItem) => {
+                            const exchangeName = perpetualsItem.platform || perpetualsItem.name || 'Perpetuals'
+                            const exchangeBalance = perpetualsItem.perpetualsData?.exchangeBalance
+                            const holdingsUsd = Array.isArray(exchangeBalance)
+                              ? exchangeBalance.reduce((sum, b) => sum + (typeof b?.holdings === 'number' ? b.holdings : 0), 0)
+                              : 0
+                            const balanceChf = usdToChfRate && usdToChfRate > 0
+                              ? holdingsUsd * usdToChfRate
+                              : convert(holdingsUsd, 'USD')
+
+                            return (
+                              <tr key={perpetualsItem.id} className="border-b border-border-subtle last:border-b-0">
+                                <td className="py-2 pr-2">
+                                  <div className="text2 truncate">
+                                    {exchangeName}
+                                  </div>
+                                </td>
+                                <td className="py-2 text-right px-2">
+                                  <div className="text2 whitespace-nowrap">
+                                    {formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })}
+                                  </div>
+                                </td>
+                                <td className="py-2 text-right px-2 perp-table-balance-cell">
+                                  <div className="text2 whitespace-nowrap">
+                                    {formatCurrency(balanceChf)}
+                                  </div>
+                                </td>
+                                <td className="py-2 text-right pr-2 hidden md:table-cell">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <span className="text2 truncate">
+                                      {exchangeName}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-2">
+                                  {/* Actions column - empty */}
+                                </td>
+                              </tr>
+                            )
+                          })
                         )}
-                      </div>
-                    </div>
-                  )
-                })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
               </div>
             )
