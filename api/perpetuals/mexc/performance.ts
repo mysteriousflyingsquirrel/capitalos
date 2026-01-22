@@ -65,6 +65,46 @@ async function mexcPrivateGet<T>(args: {
   return (await resp.json()) as T
 }
 
+async function mexcPrivatePost<T>(args: {
+  path: string
+  body: Record<string, any>
+  apiKey: string
+  secretKey: string
+}): Promise<T> {
+  const baseUrl = 'https://contract.mexc.com'
+  const requestTime = Date.now().toString()
+
+  // Exclude null/undefined fields (per MEXC docs guidance)
+  const cleanedBody: Record<string, any> = {}
+  for (const [k, v] of Object.entries(args.body || {})) {
+    if (v !== null && v !== undefined) cleanedBody[k] = v
+  }
+
+  const bodyString = JSON.stringify(cleanedBody)
+  const signaturePayload = `${args.apiKey}${requestTime}${bodyString}`
+  const signature = hmacSha256Hex(args.secretKey, signaturePayload)
+
+  const url = new URL(args.path, baseUrl)
+  const resp = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      ApiKey: args.apiKey,
+      'Request-Time': requestTime,
+      Signature: signature,
+      'Recv-Window': '60000',
+      'Content-Type': 'application/json',
+    },
+    body: bodyString,
+  })
+
+  if (!resp.ok) {
+    const text = await resp.text()
+    throw new Error(`MEXC REST error (${resp.status}): ${text}`)
+  }
+
+  return (await resp.json()) as T
+}
+
 function toNumber(v: any): number | null {
   if (v === null || v === undefined) return null
   if (typeof v === 'number') return Number.isFinite(v) ? v : null
@@ -73,11 +113,6 @@ function toNumber(v: any): number | null {
     return Number.isFinite(n) ? n : null
   }
   return null
-}
-
-function roundTo5Min(tsMs: number): number {
-  const bucket = 5 * 60 * 1000
-  return Math.floor(tsMs / bucket) * bucket
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -99,47 +134,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ success: false, error: 'MEXC API keys not configured' })
     }
 
-    // Fetch current total unrealized PnL from account assets
-    const assetsJson: any = await mexcPrivateGet({
-      path: '/api/v1/private/account/assets',
-      apiKey,
-      secretKey,
-    })
-
-    // Try common locations for unrealized field
-    const currentUnrealized =
-      toNumber(assetsJson?.data?.unrealized) ??
-      toNumber(assetsJson?.data?.unRealized) ??
-      toNumber(assetsJson?.unrealized) ??
-      0
-
     const now = Date.now()
-    const nowBucket = roundTo5Min(now)
+    const startTime = now - 365 * 24 * 60 * 60 * 1000
 
-    // Store snapshot as document keyed by bucket timestamp (no indexes needed)
-    const snapDoc = db.collection('users').doc(uid).collection('mexcUnrealizedPnlSnapshots').doc(String(nowBucket))
-    await snapDoc.set({ ts: nowBucket, totalUnrealizedPnl: currentUnrealized }, { merge: true })
-
-    const readBucket = async (deltaMs: number): Promise<number | null> => {
-      const targetBucket = roundTo5Min(now - deltaMs)
-      const doc = await db.collection('users').doc(uid).collection('mexcUnrealizedPnlSnapshots').doc(String(targetBucket)).get()
-      if (!doc.exists) return null
-      const v = toNumber(doc.data()?.totalUnrealizedPnl)
-      return v === null ? null : v
-    }
-
-    const [p24, p7, p30, p90] = await Promise.all([
-      readBucket(24 * 60 * 60 * 1000),
-      readBucket(7 * 24 * 60 * 60 * 1000),
-      readBucket(30 * 24 * 60 * 60 * 1000),
-      readBucket(90 * 24 * 60 * 60 * 1000),
+    // Use MEXC's PnL analysis endpoints with includeUnrealisedPnl=1 (unrealized included).
+    // Note: "24-Hour" in UI will be mapped to "todayPnl" per user approval.
+    const [todayJson, analysisJson, recentJson] = await Promise.all([
+      mexcPrivateGet<any>({
+        path: '/api/v1/private/account/asset/analysis/today_pnl',
+        query: { reverse: 1, includeUnrealisedPnl: 1 },
+        apiKey,
+        secretKey,
+      }),
+      mexcPrivatePost<any>({
+        path: '/api/v1/private/account/asset/analysis/v3',
+        body: { startTime, endTime: now, reverse: 1, includeUnrealisedPnl: 1 },
+        apiKey,
+        secretKey,
+      }),
+      mexcPrivatePost<any>({
+        path: '/api/v1/private/account/asset/analysis/recent/v3',
+        body: { reverse: 1, includeUnrealisedPnl: 1 },
+        apiKey,
+        secretKey,
+      }),
     ])
 
+    const todayPnl = toNumber(todayJson?.data?.todayPnl)
+    const pnl7d = toNumber(analysisJson?.data?.recentPnl)
+    const pnl30d = toNumber(analysisJson?.data?.recentPnl30)
+    const pnl90d = toNumber(recentJson?.data?.recentPnl90)
+
     const data = {
-      pnl24hUsd: p24 === null ? null : currentUnrealized - p24,
-      pnl7dUsd: p7 === null ? null : currentUnrealized - p7,
-      pnl30dUsd: p30 === null ? null : currentUnrealized - p30,
-      pnl90dUsd: p90 === null ? null : currentUnrealized - p90,
+      pnl24hUsd: todayPnl === null ? null : todayPnl,
+      pnl7dUsd: pnl7d === null ? null : pnl7d,
+      pnl30dUsd: pnl30d === null ? null : pnl30d,
+      pnl90dUsd: pnl90d === null ? null : pnl90d,
     }
 
     return res.status(200).json({ success: true, data })
