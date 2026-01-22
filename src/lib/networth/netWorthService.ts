@@ -10,6 +10,7 @@ import { computeNetWorthSummary, type ComputeOptions } from './netWorthCompute'
 import type { NetWorthSummary } from './types'
 import { loadNetWorthItems, loadNetWorthTransactions } from '../../services/storageService'
 import { fetchHyperliquidPerpetualsData } from '../../services/hyperliquidService'
+import { loadUserSettings } from '../dataSafety/userSettingsRepo'
 
 /**
  * Cache entry with TTL
@@ -64,7 +65,14 @@ async function fetchItemsForUid(uid: string): Promise<NetWorthItem[]> {
   if (perpetualsItem) {
     try {
       // Fetch Hyperliquid data (Kraken handled in DataContext via WebSocket)
-      const hyperliquidData = await fetchHyperliquidPerpetualsData(uid).catch(() => null)
+      // This client-side service is not part of DataContext, so it loads the wallet address from user settings.
+      const settings = await loadUserSettings(uid).catch(() => null)
+      const walletAddress = settings?.apiKeys?.hyperliquidWalletAddress || ''
+
+      const hyperliquidData = await fetchHyperliquidPerpetualsData({
+        uid,
+        walletAddress,
+      }).catch(() => null)
 
       // Merge perpetuals data
       if (hyperliquidData) {
