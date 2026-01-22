@@ -14,7 +14,9 @@ import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
 import { KrakenFuturesWs, type KrakenWsState } from '../services/krakenFuturesWs'
-import type { PerpetualsData } from '../pages/NetWorth'
+import { MexcFuturesPositionsWs, type MexcWsStatus } from '../services/mexcFuturesPositionsWs'
+import { fetchMexcEquityUsd, fetchMexcOpenOrders, fetchMexcUnrealizedPnlWindows } from '../services/mexcFuturesService'
+import type { ExchangeBalance, PerpetualsData, PerpetualsOpenPosition, PortfolioPnL } from '../pages/NetWorth'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
 import { calculationResultToSummary } from '../lib/networth/netWorthSummaryService'
 import { saveNetWorthSummaryFirestore } from '../services/firestoreService'
@@ -65,6 +67,8 @@ export function DataProvider({ children }: DataProviderProps) {
     krakenApiKey, 
     krakenApiSecretKey,
     hyperliquidWalletAddress,
+    mexcApiKey,
+    mexcSecretKey,
     apiKeysLoaded,
     getCurrentKeys,
   } = useApiKeys()
@@ -87,6 +91,8 @@ export function DataProvider({ children }: DataProviderProps) {
   const [error, setError] = useState<string | null>(null)
   // Use ref for WebSocket state to prevent re-renders on every update
   const krakenWsStateRef = useRef<KrakenWsState | null>(null)
+  const mexcWsStatusRef = useRef<MexcWsStatus>('disconnected')
+  const mexcWsPositionsMapRef = useRef<Map<string, PerpetualsOpenPosition>>(new Map())
   // Track if we're currently saving summary to avoid infinite loops
   const isSavingSummaryRef = useRef(false)
   // Track if data has ever been loaded (to distinguish initial load from refreshes)
@@ -248,7 +254,7 @@ export function DataProvider({ children }: DataProviderProps) {
     const itemsWithoutPerpetuals = items.filter(item => item.category !== 'Perpetuals')
 
     try {
-      console.log('[DataContext] fetchPerpetualsData: Fetching Hyperliquid and Kraken data...')
+      console.log('[DataContext] fetchPerpetualsData: Fetching Hyperliquid, Kraken, and MEXC data...')
 
       // Fetch Hyperliquid - pass wallet address explicitly from parameters
       const hyperliquidData = await fetchHyperliquidPerpetualsData({
@@ -262,6 +268,33 @@ export function DataProvider({ children }: DataProviderProps) {
         ? convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
         : null
 
+      // MEXC: positions from WS state ref (if subscribed), orders/performance/equity via REST endpoints
+      const mexcPositions = mexcWsStatusRef.current === 'subscribed'
+        ? Array.from(mexcWsPositionsMapRef.current.values()).map(p => ({ ...p }))
+        : []
+
+      const [mexcOpenOrders, mexcPortfolioPnL, mexcEquityUsd] = await Promise.all([
+        fetchMexcOpenOrders({ uid }),
+        fetchMexcUnrealizedPnlWindows({ uid }),
+        fetchMexcEquityUsd({ uid }),
+      ])
+
+      const mexcExchangeBalance: ExchangeBalance[] = mexcEquityUsd !== null
+        ? [{
+            id: 'mexc-account-equity',
+            item: 'MEXC',
+            holdings: mexcEquityUsd,
+            platform: 'MEXC',
+          }]
+        : []
+
+      const mexcData: PerpetualsData = {
+        exchangeBalance: mexcExchangeBalance,
+        openPositions: mexcPositions,
+        openOrders: mexcOpenOrders,
+        ...(mexcPortfolioPnL && { portfolioPnL: mexcPortfolioPnL as PortfolioPnL }),
+      }
+
       // Always log fetch results (not just dev mode)
       console.log('[DataContext] fetchPerpetualsData: Fetch results:', {
         hyperliquidData: !!hyperliquidData,
@@ -272,82 +305,59 @@ export function DataProvider({ children }: DataProviderProps) {
         krakenPositions: finalKrakenData?.openPositions?.length || 0,
         krakenExchangeBalance: finalKrakenData?.exchangeBalance?.length || 0,
         krakenOrders: (finalKrakenData as any)?.openOrders?.length || 0,
-        totalPositions: [...(hyperliquidData?.openPositions || []), ...(finalKrakenData?.openPositions || [])].length,
-        totalExchangeBalance: [...(hyperliquidData?.exchangeBalance || []), ...(finalKrakenData?.exchangeBalance || [])].length,
+        mexcPositions: mexcData.openPositions?.length || 0,
+        mexcExchangeBalance: mexcData.exchangeBalance?.length || 0,
+        mexcOpenOrders: (mexcData as any)?.openOrders?.length || 0,
       })
 
-      // Merge Hyperliquid and Kraken data
-      // Create defensive copies to prevent mutation
-      const hyperliquidPositions = Array.isArray(hyperliquidData?.openPositions) ? [...hyperliquidData.openPositions] : []
-      const krakenPositions = Array.isArray(finalKrakenData?.openPositions) ? [...finalKrakenData.openPositions] : []
-      // Note: openOrders may not be in PerpetualsData interface, but APIs may return it
-      // We'll handle it safely by checking if it exists
-      const hyperliquidOrders = (hyperliquidData as any)?.openOrders && Array.isArray((hyperliquidData as any).openOrders) ? [...(hyperliquidData as any).openOrders] : []
-      const krakenOrders = (finalKrakenData as any)?.openOrders && Array.isArray((finalKrakenData as any).openOrders) ? [...(finalKrakenData as any).openOrders] : []
-      const hyperliquidExchangeBalance = Array.isArray(hyperliquidData?.exchangeBalance) ? [...hyperliquidData.exchangeBalance] : []
-      const krakenExchangeBalance = Array.isArray(finalKrakenData?.exchangeBalance) ? [...finalKrakenData.exchangeBalance] : []
-      
-      const mergedData = {
-        openPositions: [...hyperliquidPositions, ...krakenPositions],
-        // Note: openOrders are not part of PerpetualsData interface, but we track them for logging
-        openOrders: [...hyperliquidOrders, ...krakenOrders],
-      }
+      // Create one Perpetuals item per exchange (no cross-exchange merging)
+      const perpItems: NetWorthItem[] = []
 
-      // Merge exchangeBalance from API sources
-      const apiExchangeBalance = [...hyperliquidExchangeBalance, ...krakenExchangeBalance]
-      
-      // Extract portfolioPnL from hyperliquidData
-      const portfolioPnL = hyperliquidData?.portfolioPnL
-      console.log('[DataContext] fetchPerpetualsData: Extracted portfolioPnL from hyperliquidData:', portfolioPnL)
-      
-      // Create perpetualsData structure
-      const perpetualsData: PerpetualsData = {
-        exchangeBalance: apiExchangeBalance.map(b => ({ ...b })),
-        openPositions: mergedData.openPositions.map(p => ({ ...p })),
-        openOrders: mergedData.openOrders.map(o => ({ ...o })),
-        ...(portfolioPnL && { portfolioPnL }),
-      }
-      
-      console.log('[DataContext] fetchPerpetualsData: Created perpetualsData with portfolioPnL:', {
-        hasPortfolioPnL: !!perpetualsData.portfolioPnL,
-        portfolioPnL: perpetualsData.portfolioPnL,
-      })
+      const hasHyperliquidConfigured = !!keys.hyperliquidWalletAddress
+      const hasKrakenConfigured = !!krakenApiKey && !!krakenApiSecretKey
+      const hasMexcConfigured = !!mexcApiKey && !!mexcSecretKey
 
-      // Only create Perpetuals item if we have any data
-      if (hyperliquidData || finalKrakenData || apiExchangeBalance.length > 0) {
-        // Create Perpetuals item dynamically
-        const perpetualsItem: NetWorthItem = {
-          id: 'perpetuals-dynamic', // Special ID to indicate it's not from Firebase
+      if (hasHyperliquidConfigured) {
+        const hl: PerpetualsData = hyperliquidData || { exchangeBalance: [], openPositions: [], openOrders: [] }
+        perpItems.push({
+          id: 'perpetuals-hyperliquid',
           category: 'Perpetuals',
-          name: 'Perpetuals',
-          platform: 'Multiple',
+          name: 'Hyperliquid',
+          platform: 'Hyperliquid',
           currency: 'USD',
-          perpetualsData: perpetualsData,
-        }
-
-        console.log('[DataContext] fetchPerpetualsData: Created dynamic Perpetuals item:', {
-          hasPerpetualsData: !!perpetualsItem.perpetualsData,
-          exchangeBalanceCount: perpetualsItem.perpetualsData?.exchangeBalance?.length || 0,
-          positionsCount: perpetualsItem.perpetualsData?.openPositions?.length || 0,
-          hasPortfolioPnL: !!perpetualsItem.perpetualsData?.portfolioPnL,
-          portfolioPnL: perpetualsItem.perpetualsData?.portfolioPnL,
-          itemsWithoutPerpetualsCount: itemsWithoutPerpetuals.length,
-          returningItemsCount: itemsWithoutPerpetuals.length + 1,
+          perpetualsData: hl,
         })
-
-        // Add Perpetuals item to items array
-        return [...itemsWithoutPerpetuals, perpetualsItem]
-      } else {
-        // No data, return items without Perpetuals
-        console.warn('[DataContext] fetchPerpetualsData: No perpetuals data available, returning items without Perpetuals', {
-          hyperliquidData: !!hyperliquidData,
-          finalKrakenData: !!finalKrakenData,
-          apiExchangeBalanceLength: apiExchangeBalance.length,
-          itemsWithoutPerpetualsCount: itemsWithoutPerpetuals.length,
-          willReturnEmpty: itemsWithoutPerpetuals.length === 0,
-        })
-        return itemsWithoutPerpetuals
       }
+
+      if (hasKrakenConfigured) {
+        const k: PerpetualsData = finalKrakenData || { exchangeBalance: [], openPositions: [], openOrders: [] }
+        perpItems.push({
+          id: 'perpetuals-kraken',
+          category: 'Perpetuals',
+          name: 'Kraken',
+          platform: 'Kraken',
+          currency: 'USD',
+          perpetualsData: k,
+        })
+      }
+
+      if (hasMexcConfigured) {
+        perpItems.push({
+          id: 'perpetuals-mexc',
+          category: 'Perpetuals',
+          name: 'MEXC',
+          platform: 'MEXC',
+          currency: 'USD',
+          perpetualsData: mexcData,
+        })
+      }
+
+      // Return without Perpetuals plus per-exchange Perpetuals items
+      if (perpItems.length > 0) {
+        return [...itemsWithoutPerpetuals, ...perpItems]
+      }
+
+      return itemsWithoutPerpetuals
     } catch (error) {
       console.error('[DataContext] fetchPerpetualsData: Error fetching Perpetuals data:', error, {
         errorMessage: error instanceof Error ? error.message : String(error),
@@ -780,6 +790,7 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Track if we've already triggered refresh on first Kraken WS subscription
   const krakenWsSubscribedRef = useRef(false)
+  const mexcWsSubscribedRef = useRef(false)
 
   // Set up Kraken Futures WebSocket connection
   useEffect(() => {
@@ -827,6 +838,49 @@ export function DataProvider({ children }: DataProviderProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, krakenApiKey, krakenApiSecretKey, apiKeysLoaded])
+
+  // Set up MEXC Futures WebSocket connection (positions only)
+  useEffect(() => {
+    if (!uid || !mexcApiKey || !mexcSecretKey || !apiKeysLoaded) {
+      mexcWsStatusRef.current = 'disconnected'
+      mexcWsPositionsMapRef.current = new Map()
+      mexcWsSubscribedRef.current = false
+      return
+    }
+
+    const ws = new MexcFuturesPositionsWs({
+      apiKey: mexcApiKey,
+      secretKey: mexcSecretKey,
+      onPositions: (incoming) => {
+        for (const p of incoming) {
+          mexcWsPositionsMapRef.current.set(p.id, p)
+        }
+      },
+      onStatus: (status) => {
+        mexcWsStatusRef.current = status
+
+        // When first subscribed and data has loaded, trigger a single perpetuals refresh
+        if (
+          status === 'subscribed' &&
+          !mexcWsSubscribedRef.current &&
+          hasLoadedDataRef.current
+        ) {
+          mexcWsSubscribedRef.current = true
+          setTimeout(() => {
+            refreshPerpetuals()
+          }, 500)
+        }
+      },
+    })
+
+    ws.connect()
+
+    return () => {
+      ws.disconnect()
+      mexcWsSubscribedRef.current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, mexcApiKey, mexcSecretKey, apiKeysLoaded])
 
   return (
     <DataContext.Provider

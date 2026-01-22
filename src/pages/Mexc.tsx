@@ -1,13 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useIncognito } from '../contexts/IncognitoContext'
-import { useAuth } from '../lib/dataSafety/authGateCompat'
+import { useData } from '../contexts/DataContext'
 import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney, formatNumber } from '../lib/currency'
-import type { PerpetualsOpenOrder } from './NetWorth'
+import type { PerpetualsOpenOrder, PerpetualsOpenPosition } from './NetWorth'
 import { useMexcWsPositions } from '../hooks/valuation/useMexcWsPositions'
-import { fetchMexcOpenOrders, fetchMexcUnrealizedPnlWindows } from '../services/mexcFuturesService'
 
 // Helper component: SectionCard
 interface SectionCardProps {
@@ -84,7 +83,7 @@ interface OpenOrderRow {
 
 export default function Mexc() {
   const { isIncognito } = useIncognito()
-  const { uid } = useAuth()
+  const { data } = useData()
   const { mexcApiKey, mexcSecretKey } = useApiKeys()
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
 
@@ -93,43 +92,28 @@ export default function Mexc() {
     secretKey: mexcSecretKey,
   })
 
-  const [portfolioPnL, setPortfolioPnL] = useState({
-    pnl24hUsd: null as number | null,
-    pnl7dUsd: null as number | null,
-    pnl30dUsd: null as number | null,
-    pnl90dUsd: null as number | null,
-  })
-  const [openOrdersData, setOpenOrdersData] = useState<PerpetualsOpenOrder[]>([])
+  const mexcItem = useMemo(() => {
+    return data.netWorthItems.find(item => item.category === 'Perpetuals' && item.platform === 'MEXC') || null
+  }, [data.netWorthItems])
 
-  // REST refresh every 5 minutes (and on mount)
-  useEffect(() => {
-    if (!uid) return
-    let cancelled = false
+  const portfolioPnL = mexcItem?.perpetualsData?.portfolioPnL || {
+    pnl24hUsd: null,
+    pnl7dUsd: null,
+    pnl30dUsd: null,
+    pnl90dUsd: null,
+  }
 
-    const run = async () => {
-      try {
-        const [pnl, orders] = await Promise.all([
-          fetchMexcUnrealizedPnlWindows({ uid }),
-          fetchMexcOpenOrders({ uid }),
-        ])
-        if (cancelled) return
-        setPortfolioPnL(pnl)
-        setOpenOrdersData(orders)
-      } catch {
-        // keep previous values
-      }
-    }
-
-    run()
-    const id = setInterval(run, 5 * 60 * 1000)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [uid])
+  const openOrdersData: PerpetualsOpenOrder[] = Array.isArray(mexcItem?.perpetualsData?.openOrders)
+    ? (mexcItem!.perpetualsData!.openOrders as PerpetualsOpenOrder[])
+    : []
 
   const positions: PositionRow[] = useMemo(() => {
-    return mexcWsPositions.map((pos) => {
+    const basePositions: PerpetualsOpenPosition[] = Array.isArray(mexcItem?.perpetualsData?.openPositions)
+      ? (mexcItem!.perpetualsData!.openPositions as PerpetualsOpenPosition[])
+      : []
+    const merged = mexcWsPositions.length > 0 ? mexcWsPositions : basePositions
+
+    return merged.map((pos) => {
       const side = pos.positionSide === 'SHORT' ? 'Short' : 'Long'
       const leverageStr = pos.leverage !== null && pos.leverage !== undefined ? `${Math.round(pos.leverage)}x` : '1x'
       const size = pos.margin + pos.pnl
@@ -155,7 +139,7 @@ export default function Mexc() {
         fundingFee: pos.fundingFeeUsd ?? null,
       }
     })
-  }, [mexcWsPositions])
+  }, [mexcWsPositions, mexcItem])
 
   const openOrders: OpenOrderRow[] = useMemo(() => {
     return openOrdersData.map((order) => {

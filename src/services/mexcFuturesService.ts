@@ -25,3 +25,20 @@ export async function fetchMexcUnrealizedPnlWindows(args: { uid: string }): Prom
   return { pnl24hUsd: null, pnl7dUsd: null, pnl30dUsd: null, pnl90dUsd: null }
 }
 
+export async function fetchMexcEquityUsd(args: { uid: string }): Promise<number | null> {
+  const resp = await fetch('/api/perpetuals/mexc/equity', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uid: args.uid }),
+  })
+  if (!resp.ok) return null
+  const json = await resp.json().catch(() => null)
+  const equity = json?.data?.equityUsd
+  if (typeof equity === 'number') return equity
+  if (typeof equity === 'string') {
+    const n = parseFloat(equity)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+

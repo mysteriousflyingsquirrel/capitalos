@@ -95,57 +95,30 @@ function Hyperliquid() {
 
   // Extract PnL values from Hyperliquid portfolio data
   const portfolioPnL = useMemo(() => {
-    console.log('[Investing] Extracting portfolioPnL:', {
-      netWorthItemsCount: data.netWorthItems.length,
-      perpetualsItems: data.netWorthItems.filter(item => item.category === 'Perpetuals').map(item => ({
-        id: item.id,
-        name: item.name,
-        hasPerpetualsData: !!item.perpetualsData,
-        hasPortfolioPnL: !!item.perpetualsData?.portfolioPnL,
-      })),
-    })
-    
-    // Find the first Hyperliquid perpetuals item with portfolioPnL data
     const hyperliquidItem = data.netWorthItems.find(
-      item => item.category === 'Perpetuals' && 
-      item.perpetualsData?.portfolioPnL
+      item => item.category === 'Perpetuals' && item.platform === 'Hyperliquid'
     )
-    
+
     const result = hyperliquidItem?.perpetualsData?.portfolioPnL || {
       pnl24hUsd: null,
       pnl7dUsd: null,
       pnl30dUsd: null,
       pnl90dUsd: null,
     }
-    
-    console.log('[Investing] PortfolioPnL result:', {
-      foundItem: !!hyperliquidItem,
-      itemId: hyperliquidItem?.id,
-      portfolioPnL: result,
-    })
-    
     return result
   }, [data.netWorthItems])
 
   // Extract open positions from all perpetuals items
   const positions: PositionRow[] = useMemo(() => {
-    const allOpenPositions: PerpetualsOpenPosition[] = []
-    
-    // Collect all open positions from all perpetuals items
-    data.netWorthItems
-      .filter(item => item.category === 'Perpetuals' && item.perpetualsData)
-      .forEach(item => {
-        if (item.perpetualsData?.openPositions) {
-          allOpenPositions.push(...item.perpetualsData.openPositions)
-        }
-      })
+    const hyperliquidItem = data.netWorthItems.find(
+      item => item.category === 'Perpetuals' && item.platform === 'Hyperliquid'
+    )
+    const basePositions: PerpetualsOpenPosition[] = Array.isArray(hyperliquidItem?.perpetualsData?.openPositions)
+      ? hyperliquidItem!.perpetualsData!.openPositions
+      : []
 
     // Replace Hyperliquid positions with WS stream (positions table only)
-    const nonHyperliquid = allOpenPositions.filter(p => p.platform !== 'Hyperliquid')
-    const mergedPositions: PerpetualsOpenPosition[] =
-      hlWsPositions.length > 0
-        ? [...nonHyperliquid, ...hlWsPositions]
-        : allOpenPositions
+    const mergedPositions: PerpetualsOpenPosition[] = hlWsPositions.length > 0 ? hlWsPositions : basePositions
 
     // Map to PositionRow format
     return mergedPositions.map((pos) => {
@@ -183,16 +156,12 @@ function Hyperliquid() {
 
   // Extract open orders from all perpetuals items
   const openOrders: OpenOrderRow[] = useMemo(() => {
-    const allOpenOrders: PerpetualsOpenOrder[] = []
-    
-    // Collect all open orders from all perpetuals items
-    data.netWorthItems
-      .filter(item => item.category === 'Perpetuals' && item.perpetualsData)
-      .forEach(item => {
-        if (item.perpetualsData?.openOrders) {
-          allOpenOrders.push(...item.perpetualsData.openOrders)
-        }
-      })
+    const hyperliquidItem = data.netWorthItems.find(
+      item => item.category === 'Perpetuals' && item.platform === 'Hyperliquid'
+    )
+    const allOpenOrders: PerpetualsOpenOrder[] = Array.isArray(hyperliquidItem?.perpetualsData?.openOrders)
+      ? hyperliquidItem!.perpetualsData!.openOrders
+      : []
 
     // Map to OpenOrderRow format
     return allOpenOrders.map((order) => {
