@@ -76,6 +76,51 @@ function toNumber(v: any): number | null {
   return null
 }
 
+function mapMexcOrderType(orderType: any): string {
+  // orderType	int	1 limit, 2 Post Only, 3 IOC, 4 FOK, 5 market
+  const n =
+    typeof orderType === 'number'
+      ? orderType
+      : typeof orderType === 'string'
+        ? parseInt(orderType, 10)
+        : NaN
+
+  switch (n) {
+    case 1: return 'Limit'
+    case 2: return 'Post Only'
+    case 3: return 'IOC'
+    case 4: return 'FOK'
+    case 5: return 'Market'
+    default:
+      return orderType === null || orderType === undefined ? 'Limit' : String(orderType)
+  }
+}
+
+function normalizeMexcVol(rawVol: any): number {
+  // Some MEXC payloads encode vol as fixed-point integer scaled by 10,000.
+  // But other payloads (e.g. WS `push.personal.order`) can legitimately use small integers like `10`.
+  // So only normalize when it *clearly* looks like fixed-point: integer, large, and divisible by 10,000.
+  const v = toNumber(rawVol) ?? 0
+  if (!Number.isFinite(v) || v === 0) return 0
+
+  const isIntegerEncoding =
+    (typeof rawVol === 'number' && Number.isInteger(rawVol)) ||
+    (typeof rawVol === 'string' &&
+      rawVol.trim() !== '' &&
+      !rawVol.includes('.') &&
+      !rawVol.includes('e') &&
+      !rawVol.includes('E'))
+
+  if (!isIntegerEncoding) return v
+
+  const abs = Math.abs(v)
+  if (abs >= 10000 && abs % 10000 === 0) {
+    return v / 10000
+  }
+
+  return v
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed. Use POST.' })
@@ -116,13 +161,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : null
 
       const price = toNumber(o.price ?? o.limitPrice ?? o.orderPrice) ?? 0
-      const vol = toNumber(o.vol ?? o.volume ?? o.quantity ?? o.qty) ?? 0
+      const volRaw = o.vol ?? o.volume ?? o.quantity ?? o.qty
+      const vol = normalizeMexcVol(volRaw)
       const notional = toNumber(o.amount ?? o.dealAmount ?? o.orderAmount ?? o.quoteVol) ?? null
 
       return {
         id: `mexc-order-${o.orderId ?? o.id ?? idx}`,
         token: symbol || 'UNKNOWN',
-        activity: String(o.orderType ?? o.type ?? o.category ?? 'Limit'),
+        activity: mapMexcOrderType(o.orderType ?? o.type ?? o.category),
         side: side || 'Buy',
         price,
         priceDisplay: String(price),
