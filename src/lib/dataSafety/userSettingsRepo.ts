@@ -40,6 +40,8 @@ export interface ApiKeys {
   hyperliquidWalletAddress?: string | null
   krakenApiKey?: string | null
   krakenApiSecretKey?: string | null
+  mexcApiKey?: string | null
+  mexcSecretKey?: string | null
 }
 
 export interface UserSettingsData {

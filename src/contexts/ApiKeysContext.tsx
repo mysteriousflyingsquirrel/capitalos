@@ -13,6 +13,8 @@ interface ApiKeysRefs {
   hyperliquidWalletAddress: string | null
   krakenApiKey: string | null
   krakenApiSecretKey: string | null
+  mexcApiKey: string | null
+  mexcSecretKey: string | null
 }
 
 interface ApiKeysContextType {
@@ -24,6 +26,10 @@ interface ApiKeysContextType {
   setKrakenApiKey: (key: string) => Promise<void>
   krakenApiSecretKey: string | null
   setKrakenApiSecretKey: (key: string) => Promise<void>
+  mexcApiKey: string | null
+  setMexcApiKey: (key: string) => Promise<void>
+  mexcSecretKey: string | null
+  setMexcSecretKey: (key: string) => Promise<void>
   isLoading: boolean
   apiKeysLoaded: boolean
   // Get current keys from ref (always available, even if state resets)
@@ -42,6 +48,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const [hyperliquidWalletAddress, setHyperliquidWalletAddressState] = useState<string | null>(null)
   const [krakenApiKey, setKrakenApiKeyState] = useState<string | null>(null)
   const [krakenApiSecretKey, setKrakenApiSecretKeyState] = useState<string | null>(null)
+  const [mexcApiKey, setMexcApiKeyState] = useState<string | null>(null)
+  const [mexcSecretKey, setMexcSecretKeyState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [apiKeysLoaded, setApiKeysLoaded] = useState(false)
   
@@ -51,6 +59,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     hyperliquidWalletAddress: null,
     krakenApiKey: null,
     krakenApiSecretKey: null,
+    mexcApiKey: null,
+    mexcSecretKey: null,
   })
   
   // Track previous uid to detect uid changes
@@ -67,6 +77,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     if (updates.hyperliquidWalletAddress !== undefined) setHyperliquidWalletAddressState(updates.hyperliquidWalletAddress)
     if (updates.krakenApiKey !== undefined) setKrakenApiKeyState(updates.krakenApiKey)
     if (updates.krakenApiSecretKey !== undefined) setKrakenApiSecretKeyState(updates.krakenApiSecretKey)
+    if (updates.mexcApiKey !== undefined) setMexcApiKeyState(updates.mexcApiKey)
+    if (updates.mexcSecretKey !== undefined) setMexcSecretKeyState(updates.mexcSecretKey)
   }
 
   // Auth boundary reset: Clear all state synchronously when uid changes
@@ -81,6 +93,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         hyperliquidWalletAddress: null,
         krakenApiKey: null,
         krakenApiSecretKey: null,
+        mexcApiKey: null,
+        mexcSecretKey: null,
       })
       
       // Reset loaded flags
@@ -143,6 +157,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
             hyperliquidWalletAddress: settings.apiKeys.hyperliquidWalletAddress || null,
             krakenApiKey: settings.apiKeys.krakenApiKey || null,
             krakenApiSecretKey: settings.apiKeys.krakenApiSecretKey || null,
+            mexcApiKey: settings.apiKeys.mexcApiKey || null,
+            mexcSecretKey: settings.apiKeys.mexcSecretKey || null,
           })
         } else {
           // No settings found, try environment variable for RapidAPI
@@ -154,6 +170,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
             hyperliquidWalletAddress: null,
             krakenApiKey: null,
             krakenApiSecretKey: null,
+            mexcApiKey: null,
+            mexcSecretKey: null,
           })
         }
       } catch (error) {
@@ -273,6 +291,52 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     }
   }
 
+  // Save MEXC API key using UserSettingsRepository
+  const setMexcApiKey = async (key: string) => {
+    if (!uid) {
+      console.error('Cannot save API key: user not authenticated')
+      return
+    }
+
+    try {
+      const trimmedKey = key.trim()
+      
+      if (trimmedKey) {
+        await saveApiKeys(uid, { mexcApiKey: trimmedKey })
+      } else {
+        await saveApiKeys(uid, { mexcApiKey: deleteField() })
+      }
+      
+      updateKeys({ mexcApiKey: trimmedKey || null })
+    } catch (error) {
+      console.error('[ApiKeysContext] Error saving API key:', error)
+      throw error
+    }
+  }
+
+  // Save MEXC API Secret key using UserSettingsRepository
+  const setMexcSecretKey = async (key: string) => {
+    if (!uid) {
+      console.error('Cannot save API key: user not authenticated')
+      return
+    }
+
+    try {
+      const trimmedKey = key.trim()
+      
+      if (trimmedKey) {
+        await saveApiKeys(uid, { mexcSecretKey: trimmedKey })
+      } else {
+        await saveApiKeys(uid, { mexcSecretKey: deleteField() })
+      }
+      
+      updateKeys({ mexcSecretKey: trimmedKey || null })
+    } catch (error) {
+      console.error('[ApiKeysContext] Error saving API key:', error)
+      throw error
+    }
+  }
+
   // Get current keys from ref (always available, even if state resets)
   const getCurrentKeys = () => keysRef.current
 
@@ -287,6 +351,10 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         setKrakenApiKey,
         krakenApiSecretKey,
         setKrakenApiSecretKey,
+        mexcApiKey,
+        setMexcApiKey,
+        mexcSecretKey,
+        setMexcSecretKey,
         isLoading,
         apiKeysLoaded,
         getCurrentKeys,
