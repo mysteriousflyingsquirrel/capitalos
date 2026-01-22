@@ -13,7 +13,6 @@ import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotServic
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
-import { KrakenFuturesWs, type KrakenWsState } from '../services/krakenFuturesWs'
 import { MexcFuturesPositionsWs, type MexcWsStatus } from '../services/mexcFuturesPositionsWs'
 import { fetchMexcEquityUsd, fetchMexcOpenOrders, fetchMexcOpenPositions, fetchMexcUnrealizedPnlWindows } from '../services/mexcFuturesService'
 import type { ExchangeBalance, PerpetualsData, PerpetualsOpenPosition, PortfolioPnL } from '../pages/NetWorth'
@@ -67,8 +66,6 @@ export function DataProvider({ children }: DataProviderProps) {
   const { convert } = useCurrency()
   const { 
     rapidApiKey, 
-    krakenApiKey, 
-    krakenApiSecretKey,
     hyperliquidWalletAddress,
     mexcApiKey,
     mexcSecretKey,
@@ -93,7 +90,6 @@ export function DataProvider({ children }: DataProviderProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // Use ref for WebSocket state to prevent re-renders on every update
-  const krakenWsStateRef = useRef<KrakenWsState | null>(null)
   const mexcWsStatusRef = useRef<MexcWsStatus>('disconnected')
   const mexcWsPositionsMapRef = useRef<Map<string, PerpetualsOpenPosition>>(new Map())
   // Reactive MEXC WS state for pages (positions table + status label)
@@ -180,42 +176,7 @@ export function DataProvider({ children }: DataProviderProps) {
     }
   }
 
-  // Convert Kraken WebSocket state to PerpetualsData format
-  const convertKrakenWsStateToPerpetualsData = (wsState: KrakenWsState): PerpetualsData => {
-    const positions: import('../pages/NetWorth').PerpetualsOpenPosition[] = (wsState.positions || []).map((pos, index) => ({
-      id: `kraken-${pos.instrument}-${index}`,
-      ticker: pos.instrument,
-      margin: pos.initialMargin || 0,
-      pnl: pos.pnl || 0,
-      platform: 'Kraken',
-      positionSide: pos.balance > 0 ? 'LONG' : pos.balance < 0 ? 'SHORT' : null,
-      leverage: pos.effectiveLeverage !== undefined && pos.effectiveLeverage !== null ? pos.effectiveLeverage : null,
-    }))
-
-    // Extract Account Equity from totalBalance (canonical field)
-    const exchangeBalance: import('../pages/NetWorth').ExchangeBalance[] = []
-    if (wsState.balances?.totalBalance !== undefined && wsState.balances.totalBalance !== null) {
-      const accountValue = typeof wsState.balances.totalBalance === 'number' 
-        ? wsState.balances.totalBalance 
-        : parseFloat(String(wsState.balances.totalBalance)) || 0
-      
-      if (accountValue > 0) {
-        exchangeBalance.push({
-          id: 'kraken-account-equity',
-          item: 'Kraken',
-          holdings: accountValue,
-          platform: 'Kraken',
-        })
-      }
-    }
-
-    return {
-      exchangeBalance,
-      openPositions: positions,
-    }
-  }
-
-  // Fetch Perpetuals data (Hyperliquid via REST, Kraken via WebSocket)
+  // Fetch Perpetuals data (Hyperliquid + MEXC)
   // Accepts optional keys parameter - if not provided, uses closure values
   // This allows refreshAllData to pass ref keys (always current) while other callers use closure
   const fetchPerpetualsData = async (
@@ -232,7 +193,6 @@ export function DataProvider({ children }: DataProviderProps) {
     console.log('[DataContext] fetchPerpetualsData called:', {
       apiKeysLoaded,
       hasHyperliquidKey: !!keys.hyperliquidWalletAddress,
-      krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
       hasUid: !!uid,
       uid: uid,
       itemsCount: items.length,
@@ -261,19 +221,13 @@ export function DataProvider({ children }: DataProviderProps) {
     const itemsWithoutPerpetuals = items.filter(item => item.category !== 'Perpetuals')
 
     try {
-      console.log('[DataContext] fetchPerpetualsData: Fetching Hyperliquid, Kraken, and MEXC data...')
+      console.log('[DataContext] fetchPerpetualsData: Fetching Hyperliquid and MEXC data...')
 
       // Fetch Hyperliquid - pass wallet address explicitly from parameters
       const hyperliquidData = await fetchHyperliquidPerpetualsData({
         uid,
         walletAddress: keys.hyperliquidWalletAddress || '',
       })
-      
-      // Get Kraken data from WebSocket (only source)
-      // Convert current WebSocket state to PerpetualsData format
-      const finalKrakenData = krakenWsStateRef.current && krakenWsStateRef.current.status === 'subscribed'
-        ? convertKrakenWsStateToPerpetualsData(krakenWsStateRef.current)
-        : null
 
       // MEXC: positions from WS state ref (if subscribed), orders/performance/equity via REST endpoints
       const mexcWsPositions = mexcWsStatusRef.current === 'subscribed'
@@ -320,11 +274,6 @@ export function DataProvider({ children }: DataProviderProps) {
         hyperliquidData: !!hyperliquidData,
         hyperliquidPositions: hyperliquidData?.openPositions?.length || 0,
         hyperliquidExchangeBalance: hyperliquidData?.exchangeBalance?.length || 0,
-        krakenData: !!finalKrakenData,
-        krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
-        krakenPositions: finalKrakenData?.openPositions?.length || 0,
-        krakenExchangeBalance: finalKrakenData?.exchangeBalance?.length || 0,
-        krakenOrders: (finalKrakenData as any)?.openOrders?.length || 0,
         mexcPositions: mexcData.openPositions?.length || 0,
         mexcExchangeBalance: mexcData.exchangeBalance?.length || 0,
         mexcOpenOrders: (mexcData as any)?.openOrders?.length || 0,
@@ -336,7 +285,6 @@ export function DataProvider({ children }: DataProviderProps) {
       const hasHyperliquidConfigured = !!keys.hyperliquidWalletAddress
       // Use ref-backed keys for stability (avoid transient null state during refresh)
       const currentKeys = getCurrentKeys()
-      const hasKrakenConfigured = !!currentKeys.krakenApiKey && !!currentKeys.krakenApiSecretKey
       const hasMexcConfigured = !!currentKeys.mexcApiKey && !!currentKeys.mexcSecretKey
 
       if (hasHyperliquidConfigured) {
@@ -348,18 +296,6 @@ export function DataProvider({ children }: DataProviderProps) {
           platform: 'Hyperliquid',
           currency: 'USD',
           perpetualsData: hl,
-        })
-      }
-
-      if (hasKrakenConfigured) {
-        const k: PerpetualsData = finalKrakenData || { exchangeBalance: [], openPositions: [], openOrders: [] }
-        perpItems.push({
-          id: 'perpetuals-kraken',
-          category: 'Perpetuals',
-          name: 'Kraken',
-          platform: 'Kraken',
-          currency: 'USD',
-          perpetualsData: k,
         })
       }
 
@@ -708,10 +644,9 @@ export function DataProvider({ children }: DataProviderProps) {
         currentItemsCount: currentItems.length,
         apiKeysLoaded,
         hasHyperliquidKey: !!currentKeys.hyperliquidWalletAddress,
-        krakenWsStatus: krakenWsStateRef.current?.status || 'disconnected',
       })
       
-      // Step 3: Fetch perpetuals data (reads from WebSocket state for Kraken)
+      // Step 3: Fetch perpetuals data
       // Pass keys from ref (always current) instead of using closure values
       const itemsWithPerpetuals = await fetchPerpetualsData(currentItems, {
         hyperliquidWalletAddress: currentKeys.hyperliquidWalletAddress,
@@ -810,56 +745,7 @@ export function DataProvider({ children }: DataProviderProps) {
     return () => clearInterval(interval)
   }, [uid, loading])
 
-  // Track if we've already triggered refresh on first Kraken WS subscription
-  const krakenWsSubscribedRef = useRef(false)
   const mexcWsSubscribedRef = useRef(false)
-
-  // Set up Kraken Futures WebSocket connection
-  useEffect(() => {
-    if (!uid || !krakenApiKey || !krakenApiSecretKey || !apiKeysLoaded) {
-      // Disconnect if credentials are not available or keys not loaded
-      krakenWsStateRef.current = { status: 'disconnected' }
-      krakenWsSubscribedRef.current = false
-      return
-    }
-
-    // Create WebSocket instance with onState callback
-    // WebSocket only stores state in ref - UI updates happen every 5 minutes via refreshAllData
-    const ws = new KrakenFuturesWs({
-      apiKey: krakenApiKey,
-      apiSecret: krakenApiSecretKey,
-      onState: (state) => {
-        // Only store WebSocket state in ref - does NOT trigger re-renders
-        // UI will be updated every 5 minutes via the periodic refresh cycle
-        krakenWsStateRef.current = state
-        
-        // When WS reaches "subscribed" for the first time AND apiKeysLoaded is true,
-        // trigger a single refreshPerpetuals (debounced, one-shot)
-        if (
-          state.status === 'subscribed' && 
-          !krakenWsSubscribedRef.current && 
-          apiKeysLoaded &&
-          hasLoadedDataRef.current
-        ) {
-          krakenWsSubscribedRef.current = true
-          // Debounce: wait a short moment to ensure WS data is ready
-          setTimeout(() => {
-            refreshPerpetuals()
-          }, 500)
-        }
-      },
-    })
-
-    // Connect to WebSocket
-    ws.connect()
-
-    // Cleanup on unmount or when credentials change
-    return () => {
-      ws.disconnect()
-      krakenWsSubscribedRef.current = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, krakenApiKey, krakenApiSecretKey, apiKeysLoaded])
 
   // Set up MEXC Futures WebSocket connection (positions only)
   useEffect(() => {

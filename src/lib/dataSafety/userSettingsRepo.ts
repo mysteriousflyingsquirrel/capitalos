@@ -12,8 +12,8 @@
  *   apiKeys: {
  *     rapidApiKey?: string,
  *     hyperliquidWalletAddress?: string,
- *     krakenApiKey?: string,
- *     krakenApiSecretKey?: string
+ *     mexcApiKey?: string,
+ *     mexcSecretKey?: string
  *   }
  * }
  * 
@@ -38,8 +38,6 @@ function getUserSettingsDocPath(uid: string) {
 export interface ApiKeys {
   rapidApiKey?: string | null
   hyperliquidWalletAddress?: string | null
-  krakenApiKey?: string | null
-  krakenApiSecretKey?: string | null
   mexcApiKey?: string | null
   mexcSecretKey?: string | null
 }

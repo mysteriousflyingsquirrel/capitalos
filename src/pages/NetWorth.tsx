@@ -124,7 +124,7 @@ const defaultPerpetualsData: PerpetualsData = {
       id: 'exchange-balance-total-equity',
       item: 'Total equity',
       holdings: 10000,
-      platform: 'Kraken',
+      platform: 'MEXC',
     },
   ],
   openPositions: [],

@@ -64,7 +64,7 @@ async function fetchItemsForUid(uid: string): Promise<NetWorthItem[]> {
   const perpetualsItem = items.find(item => item.category === 'Perpetuals')
   if (perpetualsItem) {
     try {
-      // Fetch Hyperliquid data (Kraken handled in DataContext via WebSocket)
+      // Fetch Hyperliquid data (Perpetuals via REST)
       // This client-side service is not part of DataContext, so it loads the wallet address from user settings.
       const settings = await loadUserSettings(uid).catch(() => null)
       const walletAddress = settings?.apiKeys?.hyperliquidWalletAddress || ''

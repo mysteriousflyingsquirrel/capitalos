@@ -11,8 +11,6 @@ import {
 interface ApiKeysRefs {
   rapidApiKey: string | null
   hyperliquidWalletAddress: string | null
-  krakenApiKey: string | null
-  krakenApiSecretKey: string | null
   mexcApiKey: string | null
   mexcSecretKey: string | null
 }
@@ -22,10 +20,6 @@ interface ApiKeysContextType {
   setRapidApiKey: (key: string) => Promise<void>
   hyperliquidWalletAddress: string | null
   setHyperliquidWalletAddress: (address: string) => Promise<void>
-  krakenApiKey: string | null
-  setKrakenApiKey: (key: string) => Promise<void>
-  krakenApiSecretKey: string | null
-  setKrakenApiSecretKey: (key: string) => Promise<void>
   mexcApiKey: string | null
   setMexcApiKey: (key: string) => Promise<void>
   mexcSecretKey: string | null
@@ -46,8 +40,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const { uid } = useAuth()
   const [rapidApiKey, setRapidApiKeyState] = useState<string | null>(null)
   const [hyperliquidWalletAddress, setHyperliquidWalletAddressState] = useState<string | null>(null)
-  const [krakenApiKey, setKrakenApiKeyState] = useState<string | null>(null)
-  const [krakenApiSecretKey, setKrakenApiSecretKeyState] = useState<string | null>(null)
   const [mexcApiKey, setMexcApiKeyState] = useState<string | null>(null)
   const [mexcSecretKey, setMexcSecretKeyState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -57,8 +49,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const keysRef = useRef<ApiKeysRefs>({
     rapidApiKey: null,
     hyperliquidWalletAddress: null,
-    krakenApiKey: null,
-    krakenApiSecretKey: null,
     mexcApiKey: null,
     mexcSecretKey: null,
   })
@@ -75,8 +65,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     // Update state (for reactivity)
     if (updates.rapidApiKey !== undefined) setRapidApiKeyState(updates.rapidApiKey)
     if (updates.hyperliquidWalletAddress !== undefined) setHyperliquidWalletAddressState(updates.hyperliquidWalletAddress)
-    if (updates.krakenApiKey !== undefined) setKrakenApiKeyState(updates.krakenApiKey)
-    if (updates.krakenApiSecretKey !== undefined) setKrakenApiSecretKeyState(updates.krakenApiSecretKey)
     if (updates.mexcApiKey !== undefined) setMexcApiKeyState(updates.mexcApiKey)
     if (updates.mexcSecretKey !== undefined) setMexcSecretKeyState(updates.mexcSecretKey)
   }
@@ -91,8 +79,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
       updateKeys({
         rapidApiKey: null,
         hyperliquidWalletAddress: null,
-        krakenApiKey: null,
-        krakenApiSecretKey: null,
         mexcApiKey: null,
         mexcSecretKey: null,
       })
@@ -142,8 +128,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
             hasApiKeys: !!settings?.apiKeys,
             apiKeysKeys: settings?.apiKeys ? Object.keys(settings.apiKeys) : [],
             hasHyperliquidKey: !!settings?.apiKeys?.hyperliquidWalletAddress,
-            hasKrakenKey: !!settings?.apiKeys?.krakenApiKey,
-            hasKrakenSecret: !!settings?.apiKeys?.krakenApiSecretKey,
           })
         }
         
@@ -155,8 +139,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           updateKeys({
             rapidApiKey: rapidKey,
             hyperliquidWalletAddress: settings.apiKeys.hyperliquidWalletAddress || null,
-            krakenApiKey: settings.apiKeys.krakenApiKey || null,
-            krakenApiSecretKey: settings.apiKeys.krakenApiSecretKey || null,
             mexcApiKey: settings.apiKeys.mexcApiKey || null,
             mexcSecretKey: settings.apiKeys.mexcSecretKey || null,
           })
@@ -168,8 +150,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
           updateKeys({
             rapidApiKey: envKey,
             hyperliquidWalletAddress: null,
-            krakenApiKey: null,
-            krakenApiSecretKey: null,
             mexcApiKey: null,
             mexcSecretKey: null,
           })
@@ -245,52 +225,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     }
   }
 
-  // Save Kraken API key using UserSettingsRepository
-  const setKrakenApiKey = async (key: string) => {
-    if (!uid) {
-      console.error('Cannot save API key: user not authenticated')
-      return
-    }
-
-    try {
-      const trimmedKey = key.trim()
-      
-      if (trimmedKey) {
-        await saveApiKeys(uid, { krakenApiKey: trimmedKey })
-      } else {
-        await saveApiKeys(uid, { krakenApiKey: deleteField() })
-      }
-      
-      updateKeys({ krakenApiKey: trimmedKey || null })
-    } catch (error) {
-      console.error('[ApiKeysContext] Error saving API key:', error)
-      throw error
-    }
-  }
-
-  // Save Kraken API Secret key using UserSettingsRepository
-  const setKrakenApiSecretKey = async (key: string) => {
-    if (!uid) {
-      console.error('Cannot save API key: user not authenticated')
-      return
-    }
-
-    try {
-      const trimmedKey = key.trim()
-      
-      if (trimmedKey) {
-        await saveApiKeys(uid, { krakenApiSecretKey: trimmedKey })
-      } else {
-        await saveApiKeys(uid, { krakenApiSecretKey: deleteField() })
-      }
-      
-      updateKeys({ krakenApiSecretKey: trimmedKey || null })
-    } catch (error) {
-      console.error('[ApiKeysContext] Error saving API key:', error)
-      throw error
-    }
-  }
-
   // Save MEXC API key using UserSettingsRepository
   const setMexcApiKey = async (key: string) => {
     if (!uid) {
@@ -347,10 +281,6 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         setRapidApiKey,
         hyperliquidWalletAddress,
         setHyperliquidWalletAddress,
-        krakenApiKey,
-        setKrakenApiKey,
-        krakenApiSecretKey,
-        setKrakenApiSecretKey,
         mexcApiKey,
         setMexcApiKey,
         mexcSecretKey,

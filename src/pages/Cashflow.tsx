@@ -2128,7 +2128,6 @@ function Cashflow() {
           { id: 'revolut', name: 'Revolut', order: 0 },
           { id: 'yuh', name: 'yuh!', order: 0 },
           { id: 'saxo', name: 'SAXO', order: 0 },
-          { id: 'kraken', name: 'Kraken', order: 0 },
           { id: 'mexc', name: 'MEXC', order: 0 },
           { id: 'bingx', name: 'BingX', order: 0 },
           { id: 'exodus', name: 'Exodus', order: 0 },
