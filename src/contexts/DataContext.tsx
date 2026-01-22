@@ -15,7 +15,7 @@ import { fetchStockPrices } from '../services/yahooFinanceService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
 import { KrakenFuturesWs, type KrakenWsState } from '../services/krakenFuturesWs'
 import { MexcFuturesPositionsWs, type MexcWsStatus } from '../services/mexcFuturesPositionsWs'
-import { fetchMexcEquityUsd, fetchMexcOpenOrders, fetchMexcUnrealizedPnlWindows } from '../services/mexcFuturesService'
+import { fetchMexcEquityUsd, fetchMexcOpenOrders, fetchMexcOpenPositions, fetchMexcUnrealizedPnlWindows } from '../services/mexcFuturesService'
 import type { ExchangeBalance, PerpetualsData, PerpetualsOpenPosition, PortfolioPnL } from '../pages/NetWorth'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
 import { calculationResultToSummary } from '../lib/networth/netWorthSummaryService'
@@ -269,15 +269,28 @@ export function DataProvider({ children }: DataProviderProps) {
         : null
 
       // MEXC: positions from WS state ref (if subscribed), orders/performance/equity via REST endpoints
-      const mexcPositions = mexcWsStatusRef.current === 'subscribed'
+      const mexcWsPositions = mexcWsStatusRef.current === 'subscribed'
         ? Array.from(mexcWsPositionsMapRef.current.values()).map(p => ({ ...p }))
         : []
 
-      const [mexcOpenOrders, mexcPortfolioPnL, mexcEquityUsd] = await Promise.all([
+      const [mexcOpenOrders, mexcPortfolioPnL, mexcEquityUsd, mexcRestPositions] = await Promise.all([
         fetchMexcOpenOrders({ uid }),
         fetchMexcUnrealizedPnlWindows({ uid }),
         fetchMexcEquityUsd({ uid }),
+        fetchMexcOpenPositions({ uid }),
       ])
+
+      // Baseline from REST + overlay WS updates (WS may be sparse/non-snapshot)
+      const mexcPositionsById = new Map<string, PerpetualsOpenPosition>()
+      if (Array.isArray(mexcRestPositions)) {
+        for (const p of mexcRestPositions as any[]) {
+          if (p && typeof p.id === 'string') mexcPositionsById.set(p.id, p as PerpetualsOpenPosition)
+        }
+      }
+      for (const p of mexcWsPositions) {
+        mexcPositionsById.set(p.id, p)
+      }
+      const mexcPositions = Array.from(mexcPositionsById.values())
 
       const mexcExchangeBalance: ExchangeBalance[] = mexcEquityUsd !== null
         ? [{

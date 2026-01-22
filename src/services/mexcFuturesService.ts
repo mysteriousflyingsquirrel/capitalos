@@ -42,3 +42,14 @@ export async function fetchMexcEquityUsd(args: { uid: string }): Promise<number 
   return null
 }
 
+export async function fetchMexcOpenPositions(args: { uid: string }) {
+  const resp = await fetch('/api/perpetuals/mexc/positions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uid: args.uid }),
+  })
+  if (!resp.ok) return []
+  const json = await resp.json().catch(() => null)
+  return (json?.success && Array.isArray(json.data)) ? json.data : []
+}
+
