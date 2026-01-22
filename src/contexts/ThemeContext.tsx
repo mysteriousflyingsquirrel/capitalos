@@ -53,12 +53,19 @@ function ThemeProviderInner({ children }: ThemeProviderProps) {
 
       try {
         const settings = await loadUserSettings(uid)
-        const loadedTheme = getThemeById(settings?.themeId || 'galaxy')
+        const requestedThemeId = settings?.themeId || 'galaxy'
+        const loadedTheme = getThemeById(requestedThemeId)
         setThemeIdLocal(loadedTheme.id)
 
         // If missing, write back once so it becomes explicit
         if (!settings?.themeId) {
           await saveThemeId(uid, 'galaxy')
+        }
+
+        // If stored themeId is no longer supported (e.g. removed themes),
+        // migrate it to the resolved fallback once to keep Settings consistent.
+        if (settings?.themeId && loadedTheme.id !== requestedThemeId) {
+          await saveThemeId(uid, loadedTheme.id)
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load theme'

@@ -1,4 +1,4 @@
-export type ThemeId = 'galaxy' | 'fire' | 'emerald' | 'mono' | 'obsidian' | 'dawn' | 'moss' | 'inferno'
+export type ThemeId = 'galaxy' | 'emerald' | 'obsidian' | 'dawn' | 'moss' | 'inferno'
 
 export interface Theme {
   id: ThemeId
@@ -47,45 +47,6 @@ export const THEMES: Theme[] = [
     },
   },
   {
-    id: "fire",
-    label: "Fire",
-    colors: {
-      // Backgrounds (anchored exactly)
-      "bg-page": "#7E210F",     // brick red
-      "bg-frame": "#6E2D1E",    // burnt sienna
-      "bg-surface-1": "#7A3A2A",
-      "bg-surface-2": "#874634",
-      "bg-surface-3": "#945240",
-  
-      // Borders (darker clay lines for structure)
-      "border-subtle": "#5A2418",
-      "border-strong": "#471A11",
-  
-      // Text (warm ivory → muted clay)
-      "text-primary": "#FFF2EB",
-      "text-secondary": "#FFD2C1",
-      "text-muted": "#D6A08A",
-      "text-disabled": "#A26E5B",
-  
-      // Neon Accents (molten orange)
-      "accent-blue": "#FF7A18",
-      "accent-purple": "#FF7A18",
-  
-      // Neon Highlights (fire spectrum, controlled)
-      "highlight-yellow": "#FFD166",
-      "highlight-blue": "#FF9A3C",
-      "highlight-turquoise": "#FFB703",
-      "highlight-purple": "#FF6A3D",
-      "highlight-pink": "#FF3D3D",
-  
-      // Status (semantic but harmonized)
-      success: "#3DDC97",
-      warning: "#FFD166",
-      danger: "#FF3D3D",
-      info: "#FF9A3C",
-    },
-  },
-  {
     id: 'emerald',
     label: 'Emerald',
     colors: {
@@ -122,45 +83,6 @@ export const THEMES: Theme[] = [
       warning: '#F6C453',
       danger: '#FF5C5C',
       info: '#5AA2FF',
-    },
-  },
-  {
-    id: 'mono',
-    label: 'Mono',
-    colors: {
-      // Backgrounds
-      'bg-page': '#0A0B10',
-      'bg-frame': '#12141C',
-      'bg-surface-1': '#171A24',
-      'bg-surface-2': '#1D2130',
-      'bg-surface-3': '#242A3D',
-
-      // Borders
-      'border-subtle': '#2F364A',
-      'border-strong': '#3C4660',
-
-      // Text
-      'text-primary': '#F2F4F8',
-      'text-secondary': '#D0D6E2',
-      'text-muted': '#97A1B5',
-      'text-disabled': '#667088',
-
-      // Neon Accents
-      'accent-blue': '#A7B0C6',
-      'accent-purple': '#A7B0C6',
-
-      // Neon Highlights
-      'highlight-yellow': '#F6C453',
-      'highlight-blue': '#7EA6FF',
-      'highlight-turquoise': '#7FE3D4',
-      'highlight-purple': '#B7A6FF',
-      'highlight-pink': '#FF8DD6',
-
-      // Status
-      success: '#7FE3D4',
-      warning: '#F6C453',
-      danger: '#FF8A8A',
-      info: '#7EA6FF',
     },
   },
   {
