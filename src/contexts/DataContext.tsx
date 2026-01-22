@@ -334,8 +334,10 @@ export function DataProvider({ children }: DataProviderProps) {
       const perpItems: NetWorthItem[] = []
 
       const hasHyperliquidConfigured = !!keys.hyperliquidWalletAddress
-      const hasKrakenConfigured = !!krakenApiKey && !!krakenApiSecretKey
-      const hasMexcConfigured = !!mexcApiKey && !!mexcSecretKey
+      // Use ref-backed keys for stability (avoid transient null state during refresh)
+      const currentKeys = getCurrentKeys()
+      const hasKrakenConfigured = !!currentKeys.krakenApiKey && !!currentKeys.krakenApiSecretKey
+      const hasMexcConfigured = !!currentKeys.mexcApiKey && !!currentKeys.mexcSecretKey
 
       if (hasHyperliquidConfigured) {
         const hl: PerpetualsData = hyperliquidData || { exchangeBalance: [], openPositions: [], openOrders: [] }
