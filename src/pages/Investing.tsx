@@ -4,8 +4,10 @@ import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useData } from '../contexts/DataContext'
+import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney, formatNumber } from '../lib/currency'
 import type { PerpetualsOpenPosition, PerpetualsOpenOrder } from './NetWorth'
+import { useHyperliquidWsPositions } from '../hooks/valuation/useHyperliquidWsPositions'
 
 // Helper component: SectionCard
 interface SectionCardProps {
@@ -57,6 +59,7 @@ function PnLBox({ title, value }: PnLBoxProps) {
 
 // Position row data interface
 interface PositionRow {
+  id: string
   token: string
   side: 'Long' | 'Short'
   leverage: string
@@ -83,6 +86,11 @@ interface OpenOrderRow {
 function Investing() {
   const { isIncognito } = useIncognito()
   const { data } = useData()
+  const { hyperliquidWalletAddress } = useApiKeys()
+  const { positions: hlWsPositions } = useHyperliquidWsPositions({
+    walletAddress: hyperliquidWalletAddress,
+    dex: null, // default dex (future-proof: allow multiple dex clients later)
+  })
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
 
   // Extract PnL values from Hyperliquid portfolio data
@@ -132,8 +140,15 @@ function Investing() {
         }
       })
 
+    // Replace Hyperliquid positions with WS stream (positions table only)
+    const nonHyperliquid = allOpenPositions.filter(p => p.platform !== 'Hyperliquid')
+    const mergedPositions: PerpetualsOpenPosition[] =
+      hlWsPositions.length > 0
+        ? [...nonHyperliquid, ...hlWsPositions]
+        : allOpenPositions
+
     // Map to PositionRow format
-    return allOpenPositions.map((pos) => {
+    return mergedPositions.map((pos) => {
       const side = pos.positionSide === 'LONG' ? 'Long' : pos.positionSide === 'SHORT' ? 'Short' : 'Long'
       const leverageStr = pos.leverage !== null && pos.leverage !== undefined 
         ? `${Math.round(pos.leverage)}x` 
@@ -151,6 +166,7 @@ function Investing() {
       }
 
       return {
+        id: pos.id,
         token: pos.ticker,
         side: side,
         leverage: leverageStr,
@@ -163,7 +179,7 @@ function Investing() {
         fundingFee: pos.fundingFeeUsd ?? null,
       }
     })
-  }, [data.netWorthItems])
+  }, [data.netWorthItems, hlWsPositions])
 
   // Extract open orders from all perpetuals items
   const openOrders: OpenOrderRow[] = useMemo(() => {
@@ -270,12 +286,12 @@ function Investing() {
                     </td>
                   </tr>
                 ) : (
-                  positions.map((position, index) => {
+                  positions.map((position) => {
                     const isLong = position.side === 'Long'
                     const pnlIsPositive = position.pnl >= 0
 
                     return (
-                      <tr key={index} className="border-b border-border-subtle last:border-b-0">
+                      <tr key={position.id} className="border-b border-border-subtle last:border-b-0">
                       <td className="py-3 pr-4 whitespace-nowrap">
                         <div className="text2 text-text-primary font-medium">{position.token}</div>
                       </td>
