@@ -876,7 +876,11 @@ export function DataProvider({ children }: DataProviderProps) {
       secretKey: mexcSecretKey,
       onPositions: (incoming) => {
         for (const p of incoming) {
-          mexcWsPositionsMapRef.current.set(p.id, p)
+          if (p.amountToken === 0) {
+            mexcWsPositionsMapRef.current.delete(p.id)
+          } else {
+            mexcWsPositionsMapRef.current.set(p.id, p)
+          }
         }
         // Reactive: update table state (positions only)
         setMexcPositionsWs(Array.from(mexcWsPositionsMapRef.current.values()))
