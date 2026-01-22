@@ -314,7 +314,7 @@ export function DataProvider({ children }: DataProviderProps) {
       })
 
       // Only create Perpetuals item if we have any data
-      if (asterData || hyperliquidData || finalKrakenData || apiExchangeBalance.length > 0) {
+      if (hyperliquidData || finalKrakenData || apiExchangeBalance.length > 0) {
         // Create Perpetuals item dynamically
         const perpetualsItem: NetWorthItem = {
           id: 'perpetuals-dynamic', // Special ID to indicate it's not from Firebase
@@ -340,7 +340,6 @@ export function DataProvider({ children }: DataProviderProps) {
       } else {
         // No data, return items without Perpetuals
         console.warn('[DataContext] fetchPerpetualsData: No perpetuals data available, returning items without Perpetuals', {
-          asterData: !!asterData,
           hyperliquidData: !!hyperliquidData,
           finalKrakenData: !!finalKrakenData,
           apiExchangeBalanceLength: apiExchangeBalance.length,
