@@ -4,7 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Cashflow from './pages/Cashflow'
 import NetWorth from './pages/NetWorth'
 import Analytics from './pages/Analytics'
-import Investing from './pages/Investing'
+import Hyperliquid from './pages/Hyperliquid'
 import Kraken from './pages/Kraken'
 import Mexc from './pages/Mexc'
 import Settings from './pages/Settings'
@@ -63,7 +63,7 @@ function ProtectedRoutes() {
           <Route path="/investing/*" element={<Navigate to="/exchanges/hyperliquid" replace />} />
 
           {/* Exchanges */}
-          <Route path="/exchanges/hyperliquid" element={<Investing />} />
+          <Route path="/exchanges/hyperliquid" element={<Hyperliquid />} />
           <Route path="/exchanges/mexc" element={<Mexc />} />
           <Route path="/exchanges/kraken" element={<Kraken />} />
           <Route path="/settings" element={<Settings />} />

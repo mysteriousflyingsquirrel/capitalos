@@ -83,7 +83,7 @@ interface OpenOrderRow {
   amount: string
 }
 
-function Investing() {
+function Hyperliquid() {
   const { isIncognito } = useIncognito()
   const { data } = useData()
   const { hyperliquidWalletAddress } = useApiKeys()
@@ -459,4 +459,5 @@ function Investing() {
   )
 }
 
-export default Investing
+export default Hyperliquid
+
