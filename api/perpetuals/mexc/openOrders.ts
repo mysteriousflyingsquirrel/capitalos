@@ -121,6 +121,21 @@ function normalizeMexcVol(rawVol: any): number {
   return v
 }
 
+async function fetchMexcContractSize(symbol: string): Promise<number | null> {
+  // Public endpoint: https://contract.mexc.com/api/v1/contract/detail?symbol=BTC_USDT
+  try {
+    const url = new URL('https://contract.mexc.com/api/v1/contract/detail')
+    url.searchParams.set('symbol', symbol)
+    const resp = await fetch(url.toString(), { method: 'GET' })
+    if (!resp.ok) return null
+    const json: any = await resp.json().catch(() => null)
+    const cs = toNumber(json?.data?.contractSize)
+    return cs !== null && cs > 0 ? cs : null
+  } catch {
+    return null
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed. Use POST.' })
@@ -153,6 +168,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       Array.isArray(json?.orders) ? json.orders :
       []
 
+    // Fetch contractSize per symbol once (needed because vol is in contracts, not base-coin amount).
+    const symbols = Array.from(new Set(ordersRaw.map((o: any) => (o.symbol || o.contractCode || o.contract || o.market)).filter(Boolean)))
+    const contractSizeBySymbol = new Map<string, number>()
+    await Promise.all(symbols.map(async (s) => {
+      const sym = String(s)
+      const cs = await fetchMexcContractSize(sym)
+      if (cs !== null) contractSizeBySymbol.set(sym, cs)
+    }))
+
     const mapped = ordersRaw.map((o: any, idx: number) => {
       const symbol = (o.symbol || o.contractCode || o.contract || o.market) as string | undefined
       const sideRaw = (o.side ?? o.direction ?? o.tradeType ?? o.orderSide) as any
@@ -161,9 +185,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : null
 
       const price = toNumber(o.price ?? o.limitPrice ?? o.orderPrice) ?? 0
-      const volRaw = o.vol ?? o.volume ?? o.quantity ?? o.qty
-      const vol = normalizeMexcVol(volRaw)
+      const volContractsRaw = o.remainVol ?? o.vol ?? o.volume ?? o.quantity ?? o.qty
+      const volContracts = normalizeMexcVol(volContractsRaw) // contracts count
+      const contractSize = symbol ? (contractSizeBySymbol.get(symbol) ?? null) : null
+      const baseAmount = contractSize !== null ? volContracts * contractSize : volContracts
       const notional = toNumber(o.amount ?? o.dealAmount ?? o.orderAmount ?? o.quoteVol) ?? null
+      const computedNotional = price * baseAmount
 
       return {
         id: `mexc-order-${o.orderId ?? o.id ?? idx}`,
@@ -172,8 +199,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         side: side || 'Buy',
         price,
         priceDisplay: String(price),
-        size: notional !== null ? notional : price * vol,
-        amount: vol,
+        // Prefer computed notional (price * (contracts * contractSize)) to avoid 10,000x scaling issues.
+        // Fall back to notional field if computation isn't possible.
+        size: Number.isFinite(computedNotional) && computedNotional > 0 ? computedNotional : (notional ?? 0),
+        // amount should represent base-coin amount (e.g. BTC), not contract count
+        amount: baseAmount,
         platform: 'MEXC',
       }
     })
