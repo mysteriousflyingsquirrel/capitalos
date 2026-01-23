@@ -1392,7 +1392,7 @@ interface AddNetWorthItemModalProps {
   onSubmit: (
     category: NetWorthCategory,
     data: { name: string; currency: string; platform: string; monthlyDepreciationChf?: number }
-  ) => string | void // Returns itemId if available
+  ) => Promise<string> | string | void // Returns itemId if available
   onSaveTransaction?: (itemId: string, transaction: Omit<NetWorthTransaction, 'id' | 'itemId'>) => void
 }
 
@@ -1513,7 +1513,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
     return parsedAmount * parsedPrice
   }, [amount, pricePerItem, hidePricePerItem])
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
 
@@ -1559,12 +1559,13 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
     }
 
     // Create the item first and get its ID
-    const newItemId = onSubmit(category, {
+    const newItemIdResult = onSubmit(category, {
       name: name.trim(),
       currency: itemCurrency,
       platform,
       ...(isDepreciatingAsset && { monthlyDepreciationChf: Number(monthlyDepreciationChf) }),
     })
+    const newItemId = newItemIdResult instanceof Promise ? await newItemIdResult : newItemIdResult
 
     // Create the initial transaction
     if (onSaveTransaction && newItemId) {
