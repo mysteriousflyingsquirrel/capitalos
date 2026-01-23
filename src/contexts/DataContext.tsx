@@ -17,8 +17,6 @@ import { MexcFuturesPositionsWs, type MexcWsStatus } from '../services/mexcFutur
 import { fetchMexcEquityUsd, fetchMexcOpenOrders, fetchMexcOpenPositions, fetchMexcUnrealizedPnlWindows } from '../services/mexcFuturesService'
 import type { ExchangeBalance, PerpetualsData, PerpetualsOpenPosition, PortfolioPnL } from '../pages/NetWorth'
 import { NetWorthCalculationService, type NetWorthCalculationResult } from '../services/netWorthCalculationService'
-import { calculationResultToSummary } from '../lib/networth/netWorthSummaryService'
-import { saveNetWorthSummaryFirestore } from '../services/firestoreService'
 import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
 import type { InflowItem, OutflowItem } from '../pages/Cashflow'
 
@@ -96,8 +94,6 @@ export function DataProvider({ children }: DataProviderProps) {
   const [mexcPositionsWs, setMexcPositionsWs] = useState<PerpetualsOpenPosition[]>([])
   const [mexcPositionsWsStatus, setMexcPositionsWsStatus] = useState<MexcWsStatus>('disconnected')
   const [mexcPositionsWsError, setMexcPositionsWsError] = useState<string | null>(null)
-  // Track if we're currently saving summary to avoid infinite loops
-  const isSavingSummaryRef = useRef(false)
   // Track if data has ever been loaded (to distinguish initial load from refreshes)
   const hasLoadedDataRef = useRef(false)
 
@@ -403,20 +399,7 @@ export function DataProvider({ children }: DataProviderProps) {
         cryptoData.usdToChfRate
       )
       
-      // Step 5: Convert to summary and save to Firestore (for snapshot API)
-      if (uid && !isSavingSummaryRef.current) {
-        isSavingSummaryRef.current = true
-        try {
-          const summary = calculationResultToSummary(calculationResult, uid, 'CHF')
-          await saveNetWorthSummaryFirestore(uid, summary)
-        } catch (err) {
-          console.error('[DataContext] Error saving net worth summary:', err)
-        } finally {
-          isSavingSummaryRef.current = false
-        }
-      }
-      
-      // Step 6: Update frontend (single state update)
+      // Step 5: Update frontend (single state update)
       setData({
         netWorthItems: itemsWithPerpetuals,
         transactions: firebaseData.transactions,
@@ -473,14 +456,6 @@ export function DataProvider({ children }: DataProviderProps) {
           cryptoData.usdToChfRate
         )
 
-        // Save summary to Firestore (for snapshot API)
-        if (uid && !isSavingSummaryRef.current) {
-          isSavingSummaryRef.current = true
-          saveNetWorthSummaryFirestore(uid, calculationResultToSummary(calculationResult, uid, 'CHF'))
-            .catch(err => console.error('[DataContext] Error saving net worth summary:', err))
-            .finally(() => { isSavingSummaryRef.current = false })
-        }
-
         return {
           ...prev,
           cryptoPrices: cryptoData.cryptoPrices,
@@ -527,14 +502,6 @@ export function DataProvider({ children }: DataProviderProps) {
           prev.stockPrices,
           prev.usdToChfRate
         )
-
-        // Save summary to Firestore (for snapshot API)
-        if (uid && !isSavingSummaryRef.current) {
-          isSavingSummaryRef.current = true
-          saveNetWorthSummaryFirestore(uid, calculationResultToSummary(calculationResult, uid, 'CHF'))
-            .catch(err => console.error('[DataContext] Error saving net worth summary:', err))
-            .finally(() => { isSavingSummaryRef.current = false })
-        }
 
         return {
           ...prev,
@@ -668,19 +635,6 @@ export function DataProvider({ children }: DataProviderProps) {
         cryptoData.usdToChfRate
       )
 
-      // Step 4: Save summary to Firestore (for snapshot API)
-      if (uid && !isSavingSummaryRef.current) {
-        isSavingSummaryRef.current = true
-        try {
-          const summary = calculationResultToSummary(calculationResult, uid, 'CHF')
-          await saveNetWorthSummaryFirestore(uid, summary)
-        } catch (err) {
-          console.error('[DataContext] Error saving net worth summary:', err)
-        } finally {
-          isSavingSummaryRef.current = false
-        }
-      }
-
       // Step 5: Update frontend (single state update)
       setData((prev) => {
         console.log('[DataContext] refreshAllData: Updating state', {
@@ -719,20 +673,6 @@ export function DataProvider({ children }: DataProviderProps) {
       })
     }
   }
-
-  // Save summary to Firestore whenever calculationResult changes
-  // This ensures summary is always up-to-date for snapshot API
-  useEffect(() => {
-    if (!uid || loading || !data.calculationResult || isSavingSummaryRef.current) {
-      return
-    }
-
-    isSavingSummaryRef.current = true
-    const summary = calculationResultToSummary(data.calculationResult, uid, 'CHF')
-    saveNetWorthSummaryFirestore(uid, summary)
-      .catch(err => console.error('[DataContext] Error saving net worth summary:', err))
-      .finally(() => { isSavingSummaryRef.current = false })
-  }, [uid, loading, data.calculationResult])
 
   // Set up periodic refresh (every 5 minutes)
   useEffect(() => {

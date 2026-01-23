@@ -10,7 +10,6 @@ import {
   deleteField,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import type { NetWorthSummary } from '../lib/networth/types'
 import { safeWrite, safeDelete } from '../lib/dataSafety/repository'
 import { safeUpsertDoc, safeUpdateDoc, safeDeleteDoc } from '../lib/firestoreSafeWrite'
 
@@ -547,35 +546,6 @@ export async function saveSnapshotsFirestore<T extends { date: string }>(
 
 export async function loadSnapshotsFirestore<T>(uid: string): Promise<T[]> {
   return loadDocuments<T>(uid, 'snapshots')
-}
-
-/**
- * Saves NetWorthSummary to Firestore as a single document.
- * This is the computed summary that gets updated on every calculation.
- */
-export async function saveNetWorthSummaryFirestore(
-  uid: string,
-  summary: NetWorthSummary
-): Promise<void> {
-  const docRef = doc(db, `users/${uid}/netWorthSummary/current`)
-  // Use safe write with merge to prevent overwrites
-  await safeWrite(docRef, summary, { 
-    origin: 'system', 
-    domain: 'netWorthSummary', 
-    merge: true 
-  })
-}
-
-/**
- * Loads NetWorthSummary from Firestore.
- */
-export async function loadNetWorthSummaryFirestore(uid: string): Promise<NetWorthSummary | null> {
-  const docRef = doc(db, `users/${uid}/netWorthSummary/current`)
-  const docSnap = await getDoc(docRef)
-  if (docSnap.exists()) {
-    return docSnap.data() as NetWorthSummary
-  }
-  return null
 }
 
 /**

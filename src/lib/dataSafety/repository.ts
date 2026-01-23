@@ -23,12 +23,6 @@ interface WriteOptions {
 function isFullStoreDump(payload: any, domain: string): boolean {
   if (!payload || typeof payload !== 'object') return false
   
-  // Allow aggregate/summary documents - they are intentionally structured this way
-  const allowedAggregateDomains = ['netWorthSummary']
-  if (allowedAggregateDomains.includes(domain)) {
-    return false
-  }
-  
   // Check for common full-store patterns
   const keys = Object.keys(payload)
   
