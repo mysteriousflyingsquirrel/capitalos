@@ -97,6 +97,10 @@ function Hyperliquid() {
   })
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
 
+  // Column widths - easily adjustable per column
+  const positionsColumnWidths = ['100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px']
+  const openOrdersColumnWidths = ['100px', '100px', '100px', '100px', '100px']
+
   // Extract PnL values from Hyperliquid portfolio data
   const portfolioPnL = useMemo(() => {
     const hyperliquidItem = data.netWorthItems.find(
@@ -215,17 +219,11 @@ function Hyperliquid() {
           }
         >
           <div className="overflow-x-auto -mx-3 px-3 lg:-mx-6 lg:px-6">
-            <table className="w-full" style={{ minWidth: '1070px', tableLayout: 'fixed' }}>
+            <table className="w-full" style={{ minWidth: `${positionsColumnWidths.length * 100}px`, tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: '120px' }} />
-                <col style={{ width: '70px' }} />
-                <col style={{ width: '40px' }} />
-                <col />
-                <col />
-                <col />
-                <col />
-                <col />
-                <col />
+                {positionsColumnWidths.map((width, idx) => (
+                  <col key={idx} style={idx === positionsColumnWidths.length - 1 ? {} : { width }} />
+                ))}
               </colgroup>
               <thead>
                 <tr className="border-b border-border-strong">
@@ -238,22 +236,22 @@ function Hyperliquid() {
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Leverage</Heading>
                   </th>
-                  <th className="text-right pb-3 pr-4 whitespace-nowrap">
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>PnL</Heading>
                   </th>
-                  <th className="text-right pb-3 pr-4 whitespace-nowrap">
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Size</Heading>
                   </th>
-                  <th className="text-right pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Amount</Heading>
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Price</Heading>
                   </th>
-                  <th className="text-right pb-3 pr-4 whitespace-nowrap">
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Entry Price</Heading>
                   </th>
-                  <th className="text-right pb-3 pr-4 whitespace-nowrap">
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Liq. Price</Heading>
                   </th>
-                  <th className="text-right pb-3 whitespace-nowrap">
+                  <th className="text-left pb-3 whitespace-nowrap">
                     <Heading level={4}>Funding Fee</Heading>
                   </th>
                 </tr>
@@ -289,8 +287,8 @@ function Hyperliquid() {
                       <td className="py-3 pr-4 whitespace-nowrap">
                         <div className="text2 text-text-primary">{position.leverage}</div>
                       </td>
-                      <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="flex flex-col items-end">
+                      <td className="py-3 pr-4 text-left whitespace-nowrap">
+                        <div className="flex flex-col items-start">
                           <div className="text2" style={{ color: pnlIsPositive ? '#2ECC71' : '#E74C3C' }}>
                             {formatCurrency(position.pnl)}
                           </div>
@@ -299,27 +297,30 @@ function Hyperliquid() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{formatCurrency(position.size)}</div>
+                      <td className="py-3 pr-4 text-left whitespace-nowrap">
+                        <div className="flex flex-col items-start">
+                          <div className="text2 text-text-primary">{formatCurrency(position.size)}</div>
+                          <div className="text2 mt-0.5 text-text-muted">{position.amount || '-'}</div>
+                        </div>
                       </td>
-                      <td className="py-3 pr-4 text-right whitespace-nowrap">
-                        <div className="text2 text-text-primary">{position.amount || '-'}</div>
+                      <td className="py-3 pr-4 text-left whitespace-nowrap">
+                        <div className="text2 text-text-primary">-</div>
                       </td>
-                      <td className="py-3 pr-4 text-right whitespace-nowrap">
+                      <td className="py-3 pr-4 text-left whitespace-nowrap">
                         <div className="text2 text-text-primary">
                           {position.entryPrice !== null && position.entryPrice > 0 
                             ? `$${formatNumber(position.entryPrice, 'us', { incognito: isIncognito })}` 
                             : '-'}
                         </div>
                       </td>
-                      <td className="py-3 pr-4 text-right whitespace-nowrap">
+                      <td className="py-3 pr-4 text-left whitespace-nowrap">
                         <div className="text2 text-text-primary">
                           {position.liqPrice !== null && position.liqPrice > 0 
                             ? `$${formatNumber(position.liqPrice, 'us', { incognito: isIncognito })}` 
                             : '-'}
                         </div>
                       </td>
-                      <td className="py-3 text-right whitespace-nowrap">
+                      <td className="py-3 text-left whitespace-nowrap">
                         <div className="text2" style={{ 
                           color: position.fundingFee !== null && position.fundingFee !== 0 
                             ? (position.fundingFee > 0 ? '#2ECC71' : '#E74C3C') 
@@ -342,14 +343,11 @@ function Hyperliquid() {
         {/* Open Orders Frame */}
         <SectionCard title="Open Orders">
           <div className="overflow-x-auto -mx-3 px-3 lg:-mx-6 lg:px-6">
-            <table className="w-full" style={{ minWidth: '700px', tableLayout: 'fixed' }}>
+            <table className="w-full" style={{ minWidth: `${openOrdersColumnWidths.length * 100}px`, tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: '120px' }} />
-                <col style={{ width: '70px' }} />
-                <col style={{ width: '40px' }} />
-                <col />
-                <col />
-                <col />
+                {openOrdersColumnWidths.map((width, idx) => (
+                  <col key={idx} style={idx === openOrdersColumnWidths.length - 1 ? {} : { width }} />
+                ))}
               </colgroup>
               <thead>
                 <tr className="border-b border-border-strong">
@@ -362,21 +360,18 @@ function Hyperliquid() {
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Activity</Heading>
                   </th>
-                  <th className="text-right pb-3 pr-4 whitespace-nowrap">
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Price</Heading>
                   </th>
-                  <th className="text-right pb-3 pr-4 whitespace-nowrap">
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Size</Heading>
-                  </th>
-                  <th className="text-right pb-3 whitespace-nowrap">
-                    <Heading level={4}>Amount</Heading>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {openOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center">
+                    <td colSpan={5} className="py-8 text-center">
                       <div className="text2 text-text-muted">No open orders</div>
                     </td>
                   </tr>
@@ -403,7 +398,7 @@ function Hyperliquid() {
                         <td className="py-3 pr-4 whitespace-nowrap">
                           <div className="text2 text-text-primary">{order.activity}</div>
                         </td>
-                        <td className="py-3 pr-4 text-right whitespace-nowrap">
+                        <td className="py-3 pr-4 text-left whitespace-nowrap">
                           <div className="text2 text-text-primary">
                             {order.priceDisplay && order.priceDisplay.includes('→') 
                               ? order.priceDisplay.split('→').map((p, i) => {
@@ -420,11 +415,11 @@ function Hyperliquid() {
                             }
                           </div>
                         </td>
-                        <td className="py-3 pr-4 text-right whitespace-nowrap">
-                          <div className="text2 text-text-primary">{formatCurrency(order.size)}</div>
-                        </td>
-                        <td className="py-3 text-right whitespace-nowrap">
-                          <div className="text2 text-text-primary">{order.amount || '-'}</div>
+                        <td className="py-3 pr-4 text-left whitespace-nowrap">
+                          <div className="flex flex-col items-start">
+                            <div className="text2 text-text-primary">{formatCurrency(order.size)}</div>
+                            <div className="text2 mt-0.5 text-text-muted">{order.amount || '-'}</div>
+                          </div>
                         </td>
                       </tr>
                     )
