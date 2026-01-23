@@ -71,7 +71,6 @@ interface PositionRow {
   pnlPercent: number
   size: number
   amount: string // Token amount (e.g., "0.0335 ETH")
-  markPrice: number | null // Mark price from WsActiveAssetCtx
   entryPrice: number | null // Entry price
   liqPrice: number | null // Liquidation price
   fundingFee: number | null // Funding fee in USD
@@ -92,7 +91,7 @@ function Hyperliquid() {
   const { isIncognito } = useIncognito()
   const { data } = useData()
   const { hyperliquidWalletAddress } = useApiKeys()
-  const { positions: hlWsPositions, markPrices: hlMarkPrices, status: hlWsStatus, error: hlWsError } = useHyperliquidWsPositions({
+  const { positions: hlWsPositions, status: hlWsStatus, error: hlWsError } = useHyperliquidWsPositions({
     walletAddress: hyperliquidWalletAddress,
     dex: null, // default dex (future-proof: allow multiple dex clients later)
   })
@@ -147,10 +146,6 @@ function Hyperliquid() {
         amountStr = formatted
       }
 
-      // Get mark price from WebSocket data (match coin/ticker)
-      const coinUpper = pos.ticker.toUpperCase()
-      const markPrice = hlMarkPrices[coinUpper] ?? null
-
       return {
         id: pos.id,
         token: pos.ticker,
@@ -160,13 +155,12 @@ function Hyperliquid() {
         pnlPercent: pnlPercent,
         size: size,
         amount: amountStr,
-        markPrice: markPrice,
         entryPrice: pos.entryPrice ?? null,
         liqPrice: pos.liquidationPrice ?? null,
         fundingFee: pos.fundingFeeUsd ?? null,
       }
     })
-  }, [data.netWorthItems, hlWsPositions, hlMarkPrices])
+  }, [data.netWorthItems, hlWsPositions])
 
   // Extract open orders from all perpetuals items
   const openOrders: OpenOrderRow[] = useMemo(() => {
@@ -310,11 +304,7 @@ function Hyperliquid() {
                         </div>
                       </td>
                       <td className="py-3 pr-4 text-left whitespace-nowrap">
-                        <div className="text2 text-text-primary">
-                          {position.markPrice !== null && position.markPrice > 0
-                            ? `$${formatNumber(position.markPrice, 'us', { incognito: isIncognito })}`
-                            : '-'}
-                        </div>
+                        <div className="text2 text-text-primary">-</div>
                       </td>
                       <td className="py-3 pr-4 text-left whitespace-nowrap">
                         <div className="text2 text-text-primary">

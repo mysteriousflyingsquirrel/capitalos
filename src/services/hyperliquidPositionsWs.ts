@@ -12,16 +12,6 @@ type ClearinghouseStateMessage = {
   }
 }
 
-type ActiveAssetCtxMessage = {
-  channel?: string
-  coin?: string
-  data?: {
-    ctx?: {
-      markPx?: number | string
-    }
-  }
-}
-
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
   if (typeof value === 'number') return Number.isFinite(value) ? value : null
@@ -43,23 +33,18 @@ export class HyperliquidPositionsWs {
   private walletAddress: string
   private dex: string | null
   private onPositions: (positions: PerpetualsOpenPosition[]) => void
-  private onMarkPrices?: (markPrices: Record<string, number>) => void
   private onStatus?: (status: HyperliquidWsStatus, error?: string) => void
   private isIntentionallyDisconnected = false
-  private subscribedCoins = new Set<string>()
-  private markPrices = new Map<string, number>()
 
   constructor(args: {
     walletAddress: string
     dex?: string | null
     onPositions: (positions: PerpetualsOpenPosition[]) => void
-    onMarkPrices?: (markPrices: Record<string, number>) => void
     onStatus?: (status: HyperliquidWsStatus, error?: string) => void
   }) {
     this.walletAddress = args.walletAddress
     this.dex = args.dex ?? null
     this.onPositions = args.onPositions
-    this.onMarkPrices = args.onMarkPrices
     this.onStatus = args.onStatus
   }
 
@@ -97,135 +82,53 @@ export class HyperliquidPositionsWs {
 
     this.ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data)
-        
-        // Handle clearinghouseState messages (positions)
-        if (data.channel === 'clearinghouseState') {
-          const message: ClearinghouseStateMessage = data
-          const assetPositions = message.data?.assetPositions
-          if (!Array.isArray(assetPositions)) return
+        const message: ClearinghouseStateMessage = JSON.parse(event.data)
+        if (message.channel !== 'clearinghouseState') return
 
-          const positions: PerpetualsOpenPosition[] = []
-          const currentCoins = new Set<string>()
+        const assetPositions = message.data?.assetPositions
+        if (!Array.isArray(assetPositions)) return
 
-          for (const ap of assetPositions) {
-            const p = ap?.position
-            if (!p) continue
+        const positions: PerpetualsOpenPosition[] = []
 
-            const coin = typeof p.coin === 'string' ? p.coin : null
-            if (!coin) continue
+        for (const ap of assetPositions) {
+          const p = ap?.position
+          if (!p) continue
 
-            const szi = toNumber(p.szi)
-            if (szi === null || szi === 0) continue
+          const coin = typeof p.coin === 'string' ? p.coin : null
+          if (!coin) continue
 
-            const entryPx = toNumber(p.entryPx)
-            const liquidationPx = toNumber(p.liquidationPx)
-            const marginUsed = toNumber(p.marginUsed) ?? 0
-            const unrealizedPnl = toNumber(p.unrealizedPnl) ?? 0
+          const szi = toNumber(p.szi)
+          if (szi === null || szi === 0) continue
 
-            // Leverage is usually an object with a numeric `value`
-            const leverage = toNumber(p.leverage?.value)
+          const entryPx = toNumber(p.entryPx)
+          const liquidationPx = toNumber(p.liquidationPx)
+          const marginUsed = toNumber(p.marginUsed) ?? 0
+          const unrealizedPnl = toNumber(p.unrealizedPnl) ?? 0
 
-            // Funding: match existing REST behavior (invert HL sign)
-            const sinceOpenFunding = toNumber(p.cumFunding?.sinceOpen)
-            const fundingFeeUsd = sinceOpenFunding === null ? null : -sinceOpenFunding
+          // Leverage is usually an object with a numeric `value`
+          const leverage = toNumber(p.leverage?.value)
 
-            const coinUpper = coin.toUpperCase()
-            currentCoins.add(coinUpper)
+          // Funding: match existing REST behavior (invert HL sign)
+          const sinceOpenFunding = toNumber(p.cumFunding?.sinceOpen)
+          const fundingFeeUsd = sinceOpenFunding === null ? null : -sinceOpenFunding
 
-            positions.push({
-              id: `hyperliquid-pos-${coinUpper}-${this.dex || 'default'}`,
-              ticker: coinUpper,
-              margin: marginUsed,
-              pnl: unrealizedPnl,
-              platform: 'Hyperliquid',
-              leverage,
-              positionSide: szi > 0 ? 'LONG' : 'SHORT',
-              amountToken: Math.abs(szi),
-              entryPrice: entryPx,
-              liquidationPrice: liquidationPx,
-              fundingFeeUsd,
-            })
-          }
-
-          // Subscribe to activeAssetCtx for new coins
-          for (const coin of currentCoins) {
-            if (!this.subscribedCoins.has(coin) && this.ws?.readyState === WebSocket.OPEN) {
-              try {
-                this.ws.send(
-                  JSON.stringify({
-                    method: 'subscribe',
-                    subscription: {
-                      type: 'activeAssetCtx',
-                      coin: coin,
-                    },
-                  })
-                )
-                this.subscribedCoins.add(coin)
-              } catch (err) {
-                // ignore subscription errors
-              }
-            }
-          }
-
-          // Unsubscribe from coins that no longer have positions
-          for (const coin of this.subscribedCoins) {
-            if (!currentCoins.has(coin) && this.ws?.readyState === WebSocket.OPEN) {
-              try {
-                this.ws.send(
-                  JSON.stringify({
-                    method: 'unsubscribe',
-                    subscription: {
-                      type: 'activeAssetCtx',
-                      coin: coin,
-                    },
-                  })
-                )
-                this.subscribedCoins.delete(coin)
-                this.markPrices.delete(coin)
-              } catch (err) {
-                // ignore unsubscribe errors
-              }
-            }
-          }
-
-          this.onStatus?.('subscribed')
-          this.onPositions(positions)
-          
-          // Emit current mark prices
-          if (this.onMarkPrices && this.markPrices.size > 0) {
-            const pricesObj: Record<string, number> = {}
-            this.markPrices.forEach((price, coin) => {
-              pricesObj[coin] = price
-            })
-            this.onMarkPrices(pricesObj)
-          }
-          return
+          positions.push({
+            id: `hyperliquid-pos-${coin.toUpperCase()}-${this.dex || 'default'}`,
+            ticker: coin.toUpperCase(),
+            margin: marginUsed,
+            pnl: unrealizedPnl,
+            platform: 'Hyperliquid',
+            leverage,
+            positionSide: szi > 0 ? 'LONG' : 'SHORT',
+            amountToken: Math.abs(szi),
+            entryPrice: entryPx,
+            liquidationPrice: liquidationPx,
+            fundingFeeUsd,
+          })
         }
 
-        // Handle activeAssetCtx messages (mark prices)
-        if (data.channel === 'activeAssetCtx') {
-          const message: ActiveAssetCtxMessage = data
-          const coin = message.coin
-          if (!coin) return
-
-          const coinUpper = coin.toUpperCase()
-          const markPx = toNumber(message.data?.ctx?.markPx)
-          
-          if (markPx !== null && markPx > 0) {
-            this.markPrices.set(coinUpper, markPx)
-            
-            // Emit updated mark prices
-            if (this.onMarkPrices) {
-              const pricesObj: Record<string, number> = {}
-              this.markPrices.forEach((price, c) => {
-                pricesObj[c] = price
-              })
-              this.onMarkPrices(pricesObj)
-            }
-          }
-          return
-        }
+        this.onStatus?.('subscribed')
+        this.onPositions(positions)
       } catch {
         // ignore malformed messages
       }
@@ -248,31 +151,11 @@ export class HyperliquidPositionsWs {
   disconnect(): void {
     this.isIntentionallyDisconnected = true
     try {
-      // Unsubscribe from all activeAssetCtx subscriptions
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        for (const coin of this.subscribedCoins) {
-          try {
-            this.ws.send(
-              JSON.stringify({
-                method: 'unsubscribe',
-                subscription: {
-                  type: 'activeAssetCtx',
-                  coin: coin,
-                },
-              })
-            )
-          } catch {
-            // ignore unsubscribe errors
-          }
-        }
-      }
       this.ws?.close()
     } catch {
       // ignore
     } finally {
       this.ws = null
-      this.subscribedCoins.clear()
-      this.markPrices.clear()
     }
     this.onStatus?.('disconnected')
   }

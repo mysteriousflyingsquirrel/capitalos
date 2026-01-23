@@ -4,7 +4,6 @@ import { HyperliquidPositionsWs, type HyperliquidWsStatus } from '../../services
 
 type UseHyperliquidWsPositionsResult = {
   positions: PerpetualsOpenPosition[]
-  markPrices: Record<string, number> // coin -> markPx
   status: HyperliquidWsStatus
   error: string | null
 }
@@ -19,7 +18,6 @@ export function useHyperliquidWsPositions(args: {
 }): UseHyperliquidWsPositionsResult {
   const { walletAddress, dex = null } = args
   const [positions, setPositions] = useState<PerpetualsOpenPosition[]>([])
-  const [markPrices, setMarkPrices] = useState<Record<string, number>>({})
   const [status, setStatus] = useState<HyperliquidWsStatus>('disconnected')
   const [error, setError] = useState<string | null>(null)
 
@@ -30,7 +28,6 @@ export function useHyperliquidWsPositions(args: {
   useEffect(() => {
     // Reset when wallet changes
     setPositions([])
-    setMarkPrices({})
     setError(null)
     setStatus('disconnected')
 
@@ -46,7 +43,6 @@ export function useHyperliquidWsPositions(args: {
       walletAddress: normalizedWallet,
       dex,
       onPositions: (p) => setPositions(p),
-      onMarkPrices: (prices) => setMarkPrices(prices),
       onStatus: (s, err) => {
         setStatus(s)
         setError(err ?? null)
@@ -62,6 +58,6 @@ export function useHyperliquidWsPositions(args: {
     }
   }, [normalizedWallet, dex])
 
-  return { positions, markPrices, status, error }
+  return { positions, status, error }
 }
 
