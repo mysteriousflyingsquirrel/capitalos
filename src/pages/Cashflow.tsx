@@ -7,13 +7,16 @@ import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { formatMoney, formatNumber, type CurrencyCode } from '../lib/currency'
 import {
-  saveCashflowInflowItems,
+  saveCashflowInflowItem,
+  deleteCashflowInflowItem,
   loadCashflowInflowItems,
-  saveCashflowOutflowItems,
+  saveCashflowOutflowItem,
+  deleteCashflowOutflowItem,
   loadCashflowOutflowItems,
-  saveCashflowAccountflowMappings,
+  saveCashflowAccountflowMapping,
+  deleteCashflowAccountflowMapping,
   loadCashflowAccountflowMappings,
-  savePlatforms,
+  savePlatform,
   loadPlatforms,
   type Platform,
 } from '../services/storageService'
@@ -2161,9 +2164,18 @@ function Cashflow() {
           return true
         })
         
-        // Remove mappings for deleted platforms
+        // Remove mappings for deleted platforms (per-document deletes)
         if (filteredMappings.length !== mappings.length) {
-          await saveCashflowAccountflowMappings(filteredMappings, uid)
+          const filteredIds = new Set(filteredMappings.map(m => m.id))
+          const removed = mappings.filter(m => !filteredIds.has(m.id))
+          await Promise.all(
+            removed.map(async (m) => {
+              const res = await deleteCashflowAccountflowMapping(m.id, uid)
+              if (!res.success) {
+                console.error('[Cashflow] Failed to delete mapping for removed platform:', res.reason)
+              }
+            })
+          )
         }
         
         setAccountflowMappings(filteredMappings)
@@ -2192,7 +2204,18 @@ function Cashflow() {
           return !original || original.order !== p.order
         })
         if (orderChanged) {
-          await savePlatforms(updatedPlatforms, uid)
+          const changed = updatedPlatforms.filter(p => {
+            const original = loadedPlatforms.find(op => op.id === p.id)
+            return !original || original.order !== p.order
+          })
+          await Promise.all(
+            changed.map(async (p) => {
+              const res = await savePlatform(p, uid)
+              if (!res.success) {
+                console.error('[Cashflow] Failed to save platform order:', res.reason)
+              }
+            })
+          )
         }
       } catch (error) {
         console.error('Failed to load data:', error)
@@ -2204,21 +2227,19 @@ function Cashflow() {
     loadData()
   }, [uid])
 
-  // ⚠️ REMOVED: Auto-save useEffect hooks
-  // These caused "last write wins" conflicts when Device B synced stale data.
-  // Now we only save on explicit user actions (add, edit, delete) using per-document saves.
-  // TODO: Update Cashflow.tsx to use per-document saves (saveCashflowInflowItem, saveCashflowOutflowItem)
-  // similar to how NetWorth.tsx was updated.
-
-  useEffect(() => {
-    if (uid && !dataLoading) {
-      saveCashflowAccountflowMappings(accountflowMappings, uid).catch((error) => {
-        console.error('Failed to save accountflow mappings:', error)
-      })
+  const getClientUpdatedAt = (obj: any): Date | null => {
+    const updatedAt = obj?.updatedAt
+    if (!updatedAt) return null
+    try {
+      const millis = (updatedAt as any).toMillis?.()
+      const date = new Date(millis || updatedAt)
+      return Number.isFinite(date.getTime()) ? date : null
+    } catch {
+      return null
     }
-  }, [accountflowMappings, uid, dataLoading])
+  }
 
-  const handleAddInflowItem = (group: InflowGroupName, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => {
+  const handleAddInflowItem = async (group: InflowGroupName, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `inflow-${Date.now()}`
     const newItem: InflowItem = {
       id,
@@ -2230,9 +2251,13 @@ function Cashflow() {
       group,
     }
     setInflowItems(prev => [...prev, newItem])
+    const result = await saveCashflowInflowItem(newItem, uid)
+    if (!result.success) {
+      console.error('[Cashflow] Failed to save new inflow item:', result.reason)
+    }
   }
 
-  const handleAddOutflowItem = (group: OutflowGroupName, data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => {
+  const handleAddOutflowItem = async (group: OutflowGroupName, data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `outflow-${Date.now()}`
     const newItem: OutflowItem = {
       id,
@@ -2244,6 +2269,10 @@ function Cashflow() {
       group,
     }
     setOutflowItems(prev => [...prev, newItem])
+    const result = await saveCashflowOutflowItem(newItem, uid)
+    if (!result.success) {
+      console.error('[Cashflow] Failed to save new outflow item:', result.reason)
+    }
   }
 
   const handleAddAccountflowItem = (platform: AccountPlatform, data: { item: string; inflowChf: number; outflowChf: number; currency: string }) => {
@@ -2260,35 +2289,75 @@ function Cashflow() {
     setAccountflowItems(prev => [...prev, newItem])
   }
 
-  const handleEditInflowItem = (id: string, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => {
-    setInflowItems(prev => prev.map(item => 
-      item.id === id 
+  const handleEditInflowItem = async (id: string, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => {
+    const existingItem = inflowItems.find(item => item.id === id)
+    const clientUpdatedAt = getClientUpdatedAt(existingItem)
+
+    const updatedItem: InflowItem | null = existingItem
+      ? { ...existingItem, item: data.item, amountChf: data.amountChf, amount: data.amount, currency: data.currency, provider: data.provider }
+      : null
+
+    setInflowItems(prev => prev.map(item =>
+      item.id === id
         ? { ...item, item: data.item, amountChf: data.amountChf, amount: data.amount, currency: data.currency, provider: data.provider }
         : item
     ))
+
+    if (updatedItem) {
+      const result = await saveCashflowInflowItem(updatedItem, uid, { clientUpdatedAt })
+      if (!result.success) {
+        console.error('[Cashflow] Failed to save edited inflow item:', result.reason)
+      }
+    }
   }
 
-  const handleEditOutflowItem = (id: string, data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => {
-    setOutflowItems(prev => prev.map(item => 
-      item.id === id 
+  const handleEditOutflowItem = async (id: string, data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => {
+    const existingItem = outflowItems.find(item => item.id === id)
+    const clientUpdatedAt = getClientUpdatedAt(existingItem)
+
+    const updatedItem: OutflowItem | null = existingItem
+      ? { ...existingItem, item: data.item, amountChf: data.amountChf, amount: data.amount, currency: data.currency, receiver: data.receiver }
+      : null
+
+    setOutflowItems(prev => prev.map(item =>
+      item.id === id
         ? { ...item, item: data.item, amountChf: data.amountChf, amount: data.amount, currency: data.currency, receiver: data.receiver }
         : item
     ))
+
+    if (updatedItem) {
+      const result = await saveCashflowOutflowItem(updatedItem, uid, { clientUpdatedAt })
+      if (!result.success) {
+        console.error('[Cashflow] Failed to save edited outflow item:', result.reason)
+      }
+    }
   }
 
   const handleEditAccountflowItem = (id: string) => {
     console.log('Edit accountflow item', id)
   }
 
-  const handleRemoveInflowItem = (id: string) => {
+  const handleRemoveInflowItem = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this item?')) {
+      const existingItem = inflowItems.find(item => item.id === id)
+      const clientUpdatedAt = getClientUpdatedAt(existingItem)
       setInflowItems(prev => prev.filter(item => item.id !== id))
+      const result = await deleteCashflowInflowItem(id, uid, { clientUpdatedAt })
+      if (!result.success) {
+        console.error('[Cashflow] Failed to delete inflow item:', result.reason)
+      }
     }
   }
 
-  const handleRemoveOutflowItem = (id: string) => {
+  const handleRemoveOutflowItem = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this item?')) {
+      const existingItem = outflowItems.find(item => item.id === id)
+      const clientUpdatedAt = getClientUpdatedAt(existingItem)
       setOutflowItems(prev => prev.filter(item => item.id !== id))
+      const result = await deleteCashflowOutflowItem(id, uid, { clientUpdatedAt })
+      if (!result.success) {
+        console.error('[Cashflow] Failed to delete outflow item:', result.reason)
+      }
     }
   }
 
@@ -2298,17 +2367,33 @@ function Cashflow() {
     }
   }
 
-  const handleAddMapping = (mapping: AccountflowMapping) => {
+  const handleAddMapping = async (mapping: AccountflowMapping) => {
     setAccountflowMappings(prev => [...prev, mapping])
+    const result = await saveCashflowAccountflowMapping(mapping, uid)
+    if (!result.success) {
+      console.error('[Cashflow] Failed to save new mapping:', result.reason)
+    }
   }
 
-  const handleEditMapping = (mapping: AccountflowMapping) => {
+  const handleEditMapping = async (mapping: AccountflowMapping) => {
+    const existing = accountflowMappings.find(m => m.id === mapping.id)
+    const clientUpdatedAt = getClientUpdatedAt(existing)
     setAccountflowMappings(prev => prev.map(m => m.id === mapping.id ? mapping : m))
+    const result = await saveCashflowAccountflowMapping(mapping, uid, { clientUpdatedAt })
+    if (!result.success) {
+      console.error('[Cashflow] Failed to save edited mapping:', result.reason)
+    }
   }
 
-  const handleRemoveMapping = (id: string) => {
+  const handleRemoveMapping = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this mapping?')) {
+      const existing = accountflowMappings.find(m => m.id === id)
+      const clientUpdatedAt = getClientUpdatedAt(existing)
       setAccountflowMappings(prev => prev.filter(m => m.id !== id))
+      const result = await deleteCashflowAccountflowMapping(id, uid, { clientUpdatedAt })
+      if (!result.success) {
+        console.error('[Cashflow] Failed to delete mapping:', result.reason)
+      }
     }
   }
 

@@ -46,8 +46,15 @@ import {
   loadCashflowOutflowItems as loadCashflowOutflowItemsFirestore,
   saveCashflowAccountflowMappings as saveCashflowAccountflowMappingsFirestore,
   loadCashflowAccountflowMappings as loadCashflowAccountflowMappingsFirestore,
+  saveCashflowAccountflowMapping as saveCashflowAccountflowMappingFirestore,
+  deleteCashflowAccountflowMapping as deleteCashflowAccountflowMappingFirestore,
   savePlatforms as savePlatformsFirestore,
   loadPlatforms as loadPlatformsFirestore,
+  savePlatform as savePlatformFirestore,
+  deletePlatform as deletePlatformFirestore,
+  saveForecastEntry as saveForecastEntryFirestore,
+  deleteForecastEntry as deleteForecastEntryFirestore,
+  loadForecastEntries as loadForecastEntriesFirestore,
   // Deprecated bulk functions (only for Import/Reset)
   saveNetWorthItems as saveNetWorthItemsBulk,
   saveNetWorthTransactions as saveNetWorthTransactionsBulk,
@@ -512,6 +519,64 @@ export async function saveCashflowOutflowItems<T extends { id: string }>(
   saveToStorage(getStorageKey(uid, 'cashflowOutflowItems'), items)
 }
 
+// Cashflow accountflow mappings (per-document upserts)
+export async function saveCashflowAccountflowMapping<T extends { id: string }>(
+  mapping: T,
+  uid?: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  if (!uid) {
+    // No uid, save to localStorage only (best-effort)
+    const existing = loadFromStorage<T[]>(getStorageKey(uid, 'cashflowAccountflowMappings'), [])
+    const next = [...existing.filter(m => m.id !== mapping.id), mapping]
+    saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), next)
+    return { success: true }
+  }
+
+  try {
+    const result = await saveCashflowAccountflowMappingFirestore(uid, mapping, options)
+    if (result.success) {
+      const mappings = await loadCashflowAccountflowMappingsFirestore<T>(uid)
+      saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), mappings)
+    }
+    return result
+  } catch (error) {
+    console.error('Failed to save cashflow accountflow mapping:', error)
+    return { success: false, reason: 'firestore_error' }
+  }
+}
+
+export async function deleteCashflowAccountflowMapping(
+  mappingId: string,
+  uid?: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  if (!uid) {
+    const existing = loadFromStorage<{ id: string }[]>(getStorageKey(uid, 'cashflowAccountflowMappings'), [])
+    const next = existing.filter(m => m.id !== mappingId)
+    saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), next)
+    return { success: true }
+  }
+
+  try {
+    const result = await deleteCashflowAccountflowMappingFirestore(uid, mappingId, options)
+    if (result.success) {
+      const mappings = await loadCashflowAccountflowMappingsFirestore<{ id: string }>(uid)
+      saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), mappings)
+    }
+    return result
+  } catch (error) {
+    console.error('Failed to delete cashflow accountflow mapping:', error)
+    return { success: false, reason: 'firestore_error' }
+  }
+}
+
 export async function saveCashflowAccountflowMappings<T extends { id: string }>(
   mappings: T[],
   uid?: string,
@@ -522,6 +587,14 @@ export async function saveCashflowAccountflowMappings<T extends { id: string }>(
   if (!uid) {
     saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), mappings)
     return
+  }
+
+  if (!options.allowBulkOverwrite) {
+    throw new Error(
+      `[StorageService] saveCashflowAccountflowMappings performs bulk overwrites. ` +
+        `Use saveCashflowAccountflowMapping/deleteCashflowAccountflowMapping for individual updates. ` +
+        `If you need bulk overwrite (Import/Reset), set allowBulkOverwrite: true.`
+    )
   }
 
   await saveCashflowAccountflowMappingsFirestore(uid, mappings, { allowBulkOverwrite: options.allowBulkOverwrite || false })
@@ -554,6 +627,63 @@ export interface Platform {
   safetyBuffer?: number
 }
 
+// Platforms (per-document upserts)
+export async function savePlatform<T extends { id: string }>(
+  platform: T,
+  uid?: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  if (!uid) {
+    const existing = loadFromStorage<T[]>(getStorageKey(uid, 'platforms'), [])
+    const next = [...existing.filter(p => p.id !== platform.id), platform]
+    saveToStorage(getStorageKey(uid, 'platforms'), next)
+    return { success: true }
+  }
+
+  try {
+    const result = await savePlatformFirestore(uid, platform, options)
+    if (result.success) {
+      const platforms = await loadPlatformsFirestore(uid)
+      saveToStorage(getStorageKey(uid, 'platforms'), platforms)
+    }
+    return result
+  } catch (error) {
+    console.error('Failed to save platform:', error)
+    return { success: false, reason: 'firestore_error' }
+  }
+}
+
+export async function deletePlatform(
+  platformId: string,
+  uid?: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  if (!uid) {
+    const existing = loadFromStorage<{ id: string }[]>(getStorageKey(uid, 'platforms'), [])
+    const next = existing.filter(p => p.id !== platformId)
+    saveToStorage(getStorageKey(uid, 'platforms'), next)
+    return { success: true }
+  }
+
+  try {
+    const result = await deletePlatformFirestore(uid, platformId, options)
+    if (result.success) {
+      const platforms = await loadPlatformsFirestore(uid)
+      saveToStorage(getStorageKey(uid, 'platforms'), platforms)
+    }
+    return result
+  } catch (error) {
+    console.error('Failed to delete platform:', error)
+    return { success: false, reason: 'firestore_error' }
+  }
+}
+
 export async function savePlatforms(
   platforms: Platform[],
   uid?: string,
@@ -564,6 +694,14 @@ export async function savePlatforms(
   if (!uid) {
     saveToStorage(getStorageKey(uid, 'platforms'), platforms)
     return
+  }
+
+  if (!options.allowBulkOverwrite) {
+    throw new Error(
+      `[StorageService] savePlatforms performs bulk overwrites. ` +
+        `Use savePlatform/deletePlatform for individual updates. ` +
+        `If you need bulk overwrite (Import/Reset), set allowBulkOverwrite: true.`
+    )
   }
 
   await savePlatformsFirestore(uid, platforms, { allowBulkOverwrite: options.allowBulkOverwrite || false })
@@ -586,4 +724,90 @@ export async function loadPlatforms(
     }
   }
   return loadFromStorage(getStorageKey(uid, 'platforms'), defaultValue)
+}
+
+// Forecast entries (per-document upserts)
+export interface ForecastEntry {
+  id: string
+  platformId: string
+  type: 'inflow' | 'outflow'
+  date: string
+  title: string
+  amount: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export async function saveForecastEntry(
+  entry: ForecastEntry,
+  uid?: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  if (!uid) {
+    const existing = loadFromStorage<ForecastEntry[]>(getStorageKey(uid, 'forecastEntries'), [])
+    const next = [...existing.filter(e => e.id !== entry.id), entry]
+    saveToStorage(getStorageKey(uid, 'forecastEntries'), next)
+    return { success: true }
+  }
+
+  try {
+    const result = await saveForecastEntryFirestore(uid, entry, options)
+    if (result.success) {
+      const entries = await loadForecastEntriesFirestore<ForecastEntry>(uid)
+      saveToStorage(getStorageKey(uid, 'forecastEntries'), entries)
+    }
+    return result
+  } catch (error) {
+    console.error('Failed to save forecast entry:', error)
+    return { success: false, reason: 'firestore_error' }
+  }
+}
+
+export async function deleteForecastEntry(
+  entryId: string,
+  uid?: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  if (!uid) {
+    const existing = loadFromStorage<ForecastEntry[]>(getStorageKey(uid, 'forecastEntries'), [])
+    const next = existing.filter(e => e.id !== entryId)
+    saveToStorage(getStorageKey(uid, 'forecastEntries'), next)
+    return { success: true }
+  }
+
+  try {
+    const result = await deleteForecastEntryFirestore(uid, entryId, options)
+    if (result.success) {
+      const entries = await loadForecastEntriesFirestore<ForecastEntry>(uid)
+      saveToStorage(getStorageKey(uid, 'forecastEntries'), entries)
+    }
+    return result
+  } catch (error) {
+    console.error('Failed to delete forecast entry:', error)
+    return { success: false, reason: 'firestore_error' }
+  }
+}
+
+export async function loadForecastEntries(
+  defaultValue: ForecastEntry[],
+  uid?: string
+): Promise<ForecastEntry[]> {
+  if (uid) {
+    try {
+      const entries = await loadForecastEntriesFirestore<ForecastEntry>(uid)
+      if (entries.length > 0) {
+        saveToStorage(getStorageKey(uid, 'forecastEntries'), entries)
+        return entries
+      }
+    } catch (error) {
+      console.error('Failed to load forecast entries from Firestore, falling back to localStorage:', error)
+    }
+  }
+  return loadFromStorage(getStorageKey(uid, 'forecastEntries'), defaultValue)
 }

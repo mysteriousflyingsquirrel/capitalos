@@ -14,7 +14,14 @@ import {
   readBackupFile,
   restoreBackup,
 } from '../services/backupService'
-import { savePlatforms, loadPlatforms, saveCashflowAccountflowMappings, loadCashflowAccountflowMappings, type Platform } from '../services/storageService'
+import {
+  loadPlatforms,
+  savePlatform,
+  deletePlatform,
+  loadCashflowAccountflowMappings,
+  deleteCashflowAccountflowMapping,
+  type Platform,
+} from '../services/storageService'
 import { getYearsWithCryptoActivity, generateCryptoTaxReport } from '../services/cryptoTaxReportService'
 import { generateCryptoTaxReportPDF } from '../services/pdfService'
 import { saveSnapshots, hasSnapshotForDate, createSnapshot, getTodayUTCDate, getToday2359UTCTimestamp } from '../services/snapshotService'
@@ -298,6 +305,18 @@ function Settings() {
     loadPlatformsData()
   }, [uid])
 
+  const getClientUpdatedAt = (obj: any): Date | null => {
+    const updatedAt = obj?.updatedAt
+    if (!updatedAt) return null
+    try {
+      const millis = (updatedAt as any).toMillis?.()
+      const date = new Date(millis || updatedAt)
+      return Number.isFinite(date.getTime()) ? date : null
+    } catch {
+      return null
+    }
+  }
+
   const handleAddPlatform = async (e: FormEvent) => {
     e.preventDefault()
     setPlatformError(null)
@@ -318,9 +337,11 @@ function Settings() {
       order: 0,
     }
 
-    const updated = [...platforms, newPlatform]
-    setPlatforms(updated)
-    await savePlatforms(updated, uid)
+    setPlatforms(prev => [...prev, newPlatform])
+    const result = await savePlatform(newPlatform, uid)
+    if (!result.success) {
+      console.error('[Settings] Failed to save new platform:', result.reason)
+    }
     setNewPlatformName('')
   }
 
@@ -335,11 +356,14 @@ function Settings() {
       return
     }
 
-    const updated = platforms.map(p => 
-      p.id === platform.id ? { ...p, name: newName.trim() } : p
-    )
-    setPlatforms(updated)
-    await savePlatforms(updated, uid)
+    const existing = platforms.find(p => p.id === platform.id)
+    const clientUpdatedAt = getClientUpdatedAt(existing)
+    const updatedPlatform: Platform = { ...platform, name: newName.trim() }
+    setPlatforms(prev => prev.map(p => (p.id === platform.id ? updatedPlatform : p)))
+    const result = await savePlatform(updatedPlatform, uid, { clientUpdatedAt })
+    if (!result.success) {
+      console.error('[Settings] Failed to save edited platform:', result.reason)
+    }
     setEditingPlatform(null)
     setPlatformError(null)
   }
@@ -356,28 +380,38 @@ function Settings() {
     if (!confirmed) return
 
     // Remove platform
-    const updated = platforms.filter(p => p.id !== platform.id)
-    setPlatforms(updated)
-    await savePlatforms(updated, uid)
+    const existing = platforms.find(p => p.id === platform.id)
+    const clientUpdatedAt = getClientUpdatedAt(existing)
+    setPlatforms(prev => prev.filter(p => p.id !== platform.id))
+    const result = await deletePlatform(platform.id, uid, { clientUpdatedAt })
+    if (!result.success) {
+      console.error('[Settings] Failed to delete platform:', result.reason)
+    }
 
     // Remove mappings from platformflow
     if (uid) {
       try {
         const mappings = await loadCashflowAccountflowMappings([], uid)
         const platformName = platform.name
-        const filteredMappings = mappings.filter(m => {
+        const removedMappings = mappings.filter(m => {
           if (m.kind === 'inflowToAccount') {
-            return m.account !== platformName
+            return m.account === platformName
           } else if (m.kind === 'accountToOutflow') {
-            return m.account !== platformName
+            return m.account === platformName
           } else if (m.kind === 'accountToAccount') {
-            return m.fromAccount !== platformName && m.toAccount !== platformName
+            return m.fromAccount === platformName || m.toAccount === platformName
           }
-          return true
+          return false
         })
-        if (filteredMappings.length !== mappings.length) {
-          await saveCashflowAccountflowMappings(filteredMappings, uid)
-        }
+
+        await Promise.all(
+          removedMappings.map(async (m) => {
+            const res = await deleteCashflowAccountflowMapping(m.id, uid)
+            if (!res.success) {
+              console.error('[Settings] Failed to delete mapping for removed platform:', res.reason)
+            }
+          })
+        )
       } catch (err) {
         console.error('Failed to remove platform mappings:', err)
       }
@@ -391,7 +425,20 @@ function Settings() {
       isDefault: p.id === platform.id ? !p.isDefault : false
     }))
     setPlatforms(updated)
-    await savePlatforms(updated, uid)
+    const changed = updated.filter(p => {
+      const original = platforms.find(op => op.id === p.id)
+      return (original?.isDefault ?? false) !== (p.isDefault ?? false)
+    })
+    await Promise.all(
+      changed.map(async (p) => {
+        const original = platforms.find(op => op.id === p.id)
+        const clientUpdatedAt = getClientUpdatedAt(original)
+        const res = await savePlatform(p, uid, { clientUpdatedAt })
+        if (!res.success) {
+          console.error('[Settings] Failed to save default platform change:', res.reason)
+        }
+      })
+    )
   }
 
   const handleSaveAllApiKeys = async (e: FormEvent) => {

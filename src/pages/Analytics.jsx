@@ -6,12 +6,14 @@ import { useCurrency } from '../contexts/CurrencyContext'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useData } from '../contexts/DataContext'
 import { formatMoney } from '../lib/currency'
-import { loadPlatforms, savePlatforms } from '../services/storageService'
-import { loadCashflowAccountflowMappings } from '../services/storageService'
-import { 
-  loadForecastEntries, 
-  saveForecastEntries
-} from '../services/forecastService'
+import {
+  loadPlatforms,
+  savePlatform,
+  loadCashflowAccountflowMappings,
+  loadForecastEntries,
+  saveForecastEntry,
+  deleteForecastEntry,
+} from '../services/storageService'
 import {
   calculateForecast,
   getPlatformBalance,
@@ -53,6 +55,18 @@ function Analytics() {
   const [showAddModal, setShowAddModal] = useState(null)
   const [dataLoading, setDataLoading] = useState(true)
 
+  const getClientUpdatedAt = (obj) => {
+    const updatedAt = obj?.updatedAt
+    if (!updatedAt) return null
+    try {
+      const millis = updatedAt?.toMillis?.()
+      const date = new Date(millis || updatedAt)
+      return Number.isFinite(date.getTime()) ? date : null
+    } catch {
+      return null
+    }
+  }
+
   // Load platforms and forecast entries
   useEffect(() => {
     if (!uid) return
@@ -62,7 +76,7 @@ function Analytics() {
         setDataLoading(true)
         const [loadedPlatforms, loadedEntries, loadedMappings] = await Promise.all([
           loadPlatforms([], uid),
-          loadForecastEntries(uid),
+          loadForecastEntries([], uid),
           loadCashflowAccountflowMappings([], uid),
         ])
         setPlatforms(loadedPlatforms)
@@ -88,15 +102,6 @@ function Analytics() {
     loadData()
   }, [uid])
 
-  // Save forecast entries when they change
-  useEffect(() => {
-    if (uid && !dataLoading) {
-      saveForecastEntries(uid, forecastEntries).catch((error) => {
-        console.error('Failed to save forecast entries:', error)
-      })
-    }
-  }, [forecastEntries, uid, dataLoading])
-
   // Load safety buffer when platform changes
   useEffect(() => {
     if (!selectedPlatformId || platforms.length === 0) {
@@ -113,20 +118,19 @@ function Analytics() {
     if (!uid || dataLoading || !selectedPlatformId) return
 
     const timeoutId = setTimeout(() => {
-      const updatedPlatforms = platforms.map(platform => {
-        if (platform.id === selectedPlatformId) {
-          return {
-            ...platform,
-            safetyBuffer: safetyBuffer !== null && safetyBuffer !== undefined ? safetyBuffer : undefined,
-          }
-        }
-        return platform
-      })
-      
-      savePlatforms(updatedPlatforms, uid).then(() => {
-        // Update local state to reflect saved value
-        setPlatforms(updatedPlatforms)
-      }).catch((error) => {
+      const existingPlatform = platforms.find(p => p.id === selectedPlatformId)
+      if (!existingPlatform) return
+
+      const updatedPlatform = {
+        ...existingPlatform,
+        safetyBuffer: safetyBuffer !== null && safetyBuffer !== undefined ? safetyBuffer : undefined,
+      }
+
+      // Optimistic update
+      setPlatforms(prev => prev.map(p => (p.id === selectedPlatformId ? updatedPlatform : p)))
+
+      const clientUpdatedAt = getClientUpdatedAt(existingPlatform)
+      savePlatform(updatedPlatform, uid, { clientUpdatedAt }).catch((error) => {
         console.error('Failed to save safety buffer:', error)
       })
     }, 500) // Debounce: wait 500ms after user stops typing
@@ -217,7 +221,7 @@ function Analytics() {
     return `${Math.round(converted)}`
   }
 
-  const handleAddEntry = (type, entryData) => {
+  const handleAddEntry = async (type, entryData) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto 
       ? crypto.randomUUID() 
       : `forecast-${Date.now()}-${Math.random()}`
@@ -235,29 +239,53 @@ function Analytics() {
 
     setForecastEntries(prev => [...prev, newEntry])
     setShowAddModal(null)
+
+    const result = await saveForecastEntry(newEntry, uid)
+    if (!result.success) {
+      console.error('[Analytics] Failed to save new forecast entry:', result.reason)
+    }
   }
 
-  const handleEditEntry = (entryData) => {
+  const handleEditEntry = async (entryData) => {
     if (!editingEntry) return
+
+    const existingEntry = forecastEntries.find(e => e.id === editingEntry.id)
+    const clientUpdatedAt = getClientUpdatedAt(existingEntry)
+
+    const updatedEntry = {
+      ...(existingEntry || editingEntry),
+      date: entryData.date,
+      title: entryData.title,
+      amount: Math.abs(entryData.amount),
+      updatedAt: new Date().toISOString(),
+    }
 
     setForecastEntries(prev =>
       prev.map(entry =>
         entry.id === editingEntry.id
           ? {
-              ...entry,
-              date: entryData.date,
-              title: entryData.title,
-              amount: Math.abs(entryData.amount),
-              updatedAt: new Date().toISOString(),
+              ...updatedEntry,
             }
           : entry
       )
     )
     setEditingEntry(null)
+
+    const result = await saveForecastEntry(updatedEntry, uid, { clientUpdatedAt })
+    if (!result.success) {
+      console.error('[Analytics] Failed to save edited forecast entry:', result.reason)
+    }
   }
 
-  const handleDeleteEntry = (entryId) => {
+  const handleDeleteEntry = async (entryId) => {
+    const existingEntry = forecastEntries.find(e => e.id === entryId)
+    const clientUpdatedAt = getClientUpdatedAt(existingEntry)
     setForecastEntries(prev => prev.filter(entry => entry.id !== entryId))
+
+    const result = await deleteForecastEntry(entryId, uid, { clientUpdatedAt })
+    if (!result.success) {
+      console.error('[Analytics] Failed to delete forecast entry:', result.reason)
+    }
   }
 
   const selectedPlatformEntries = forecastEntries.filter(

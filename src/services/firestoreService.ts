@@ -435,15 +435,95 @@ export async function loadCashflowAccountflowMappings<T>(uid: string): Promise<T
   return loadDocuments<T>(uid, 'cashflowAccountflowMappings')
 }
 
+// Cashflow accountflow mappings (per-document upserts)
+export async function saveCashflowAccountflowMapping<T extends { id: string }>(
+  uid: string,
+  mapping: T,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/cashflowAccountflowMappings/${mapping.id}`)
+  return await safeUpsertDoc(docRef, mapping, options)
+}
+
+export async function deleteCashflowAccountflowMapping(
+  uid: string,
+  mappingId: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/cashflowAccountflowMappings/${mappingId}`)
+  return await safeDeleteDoc(docRef, options)
+}
+
+// Forecast entries (per-document upserts)
+export async function saveForecastEntry<T extends { id: string }>(
+  uid: string,
+  entry: T,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/forecastEntries/${entry.id}`)
+  return await safeUpsertDoc(docRef, entry, options)
+}
+
+export async function deleteForecastEntry(
+  uid: string,
+  entryId: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/forecastEntries/${entryId}`)
+  return await safeDeleteDoc(docRef, options)
+}
+
+export async function loadForecastEntries<T>(uid: string): Promise<T[]> {
+  return loadDocuments<T>(uid, 'forecastEntries')
+}
+
 export interface Platform {
   id: string
   name: string
   order: number
   isDefault?: boolean
+  safetyBuffer?: number
 }
 
 export async function loadPlatforms(uid: string): Promise<Platform[]> {
   return loadDocuments<Platform>(uid, 'platforms')
+}
+
+// Platforms (per-document upserts)
+export async function savePlatform<T extends { id: string }>(
+  uid: string,
+  platform: T,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/platforms/${platform.id}`)
+  return await safeUpsertDoc(docRef, platform, options)
+}
+
+export async function deletePlatform(
+  uid: string,
+  platformId: string,
+  options: {
+    clientUpdatedAt?: Date | null
+    allowOverwrite?: boolean
+  } = {}
+): Promise<{ success: boolean; reason?: string }> {
+  const docRef = doc(db, `users/${uid}/platforms/${platformId}`)
+  return await safeDeleteDoc(docRef, options)
 }
 
 export async function savePlatforms(
