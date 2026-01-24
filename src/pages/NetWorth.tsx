@@ -313,51 +313,27 @@ function NetWorthCategorySection({
                   <div className="w-full overflow-hidden">
                     <style>{`
                       @media (max-width: 767px) {
-                        .perp-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
-                        .perp-table-holdings-col { width: calc((100% - 55px) * 1 / 6) !important; }
+                        .perp-table-item-col { width: calc((100% - 55px) * 4 / 6) !important; }
                         .perp-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
                         .perp-table-actions-col { width: 55px !important; }
                         .perp-table-balance-cell { padding-right: 0.25rem !important; }
                       }
                       @media (min-width: 768px) {
-                        .perp-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
-                        .perp-table-holdings-col { width: calc((100% - 85px) * 1 / 8) !important; }
-                        .perp-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
-                        .perp-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
+                        .perp-table-item-col { width: calc((100% - 85px) * 5 / 7) !important; }
+                        .perp-table-balance-col { width: calc((100% - 85px) * 1 / 7 - 5px) !important; }
                         .perp-table-actions-col { width: 85px !important; }
                       }
                     `}</style>
-                    <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <table className="w-full border-separate" style={{ tableLayout: 'fixed', width: '100%', borderSpacing: '0 6px' }}>
                       <colgroup>
                         <col className="perp-table-item-col" />
-                        <col className="perp-table-holdings-col" />
                         <col className="perp-table-balance-col" />
-                        <col className="perp-table-platform-col hidden md:table-column" />
                         <col className="perp-table-actions-col" />
                       </colgroup>
-                      <thead>
-                        <tr className="border-b border-border-subtle">
-                          <th className="text-left pb-2">
-                            <Heading level={4}>Item</Heading>
-                          </th>
-                          <th className="text-right pb-2">
-                            <Heading level={4}>Holdings</Heading>
-                          </th>
-                          <th className="text-right pb-2">
-                            <Heading level={4}>Balance</Heading>
-                          </th>
-                          <th className="text-right pb-2 hidden md:table-cell">
-                            <Heading level={4}>Platform</Heading>
-                          </th>
-                          <th className="text-right pb-2">
-                            <Heading level={4}>Actions</Heading>
-                          </th>
-                        </tr>
-                      </thead>
                       <tbody>
                         {perpetualsItems.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                            <td colSpan={3} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
                               No account equity data
                             </td>
                           </tr>
@@ -373,31 +349,21 @@ function NetWorthCategorySection({
                               : convert(holdingsUsd, 'USD')
 
                             return (
-                              <tr key={perpetualsItem.id} className="border-b border-border-subtle last:border-b-0">
-                                <td className="py-2 pr-2">
-                                  <div className="text2 truncate">
-                                    {exchangeName}
+                              <tr key={perpetualsItem.id}>
+                                <td colSpan={3} className="p-0 align-top">
+                                  <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
+                                    <div className="flex-[5] min-w-0 pr-2">
+                                      <div className="text-[0.98rem] truncate">{perpetualsItem.name || exchangeName}</div>
+                                      <div className="text-text-muted text-[0.756rem] md:text-[0.86rem] truncate">{perpetualsItem.platform || exchangeName}</div>
+                                    </div>
+                                    <div className="flex-[1] flex-shrink-0 text-right px-2 perp-table-balance-cell">
+                                      <div className="text-[0.98rem] whitespace-nowrap">{formatCurrency(balanceChf)}</div>
+                                      <div className="text-text-muted text-[0.756rem] md:text-[0.86rem] whitespace-nowrap">{formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })}</div>
+                                    </div>
+                                    <div className="w-[55px] md:w-[85px] flex-shrink-0">
+                                      {/* Actions column - empty */}
+                                    </div>
                                   </div>
-                                </td>
-                                <td className="py-2 text-right px-2">
-                                  <div className="text2 whitespace-nowrap">
-                                    {formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })}
-                                  </div>
-                                </td>
-                                <td className="py-2 text-right px-2 perp-table-balance-cell">
-                                  <div className="text2 whitespace-nowrap">
-                                    {formatCurrency(balanceChf)}
-                                  </div>
-                                </td>
-                                <td className="py-2 text-right pr-2 hidden md:table-cell">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <span className="text2 truncate">
-                                      {exchangeName}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="py-2">
-                                  {/* Actions column - empty */}
                                 </td>
                               </tr>
                             )
@@ -416,66 +382,30 @@ function NetWorthCategorySection({
           <div className="w-full overflow-hidden">
           <style>{`
             @media (max-width: 767px) {
-              .nw-table-item-col { width: calc((100% - 55px) * 3 / 6) !important; }
-              .nw-table-holdings-col { width: calc((100% - 55px) * 1 / 6) !important; }
+              .nw-table-item-col { width: calc((100% - 55px) * 4 / 6) !important; }
               .nw-table-balance-col { width: calc((100% - 55px) * 1 / 6 - 5px) !important; }
               .nw-table-actions-col { width: 55px !important; }
               .nw-table-balance-cell { padding-right: 0.25rem !important; }
             }
             @media (min-width: 768px) {
-              .nw-table-item-col { width: calc((100% - 85px) * 3 / 8) !important; }
-              .nw-table-holdings-col { width: calc((100% - 85px) * 1 / 8) !important; }
-              .nw-table-balance-col { width: calc((100% - 85px) * 2 / 8 - 5px) !important; }
-              .nw-table-platform-col { width: calc((100% - 85px) * 2 / 8) !important; }
+              .nw-table-item-col { width: calc((100% - 85px) * 5 / 7) !important; }
+              .nw-table-balance-col { width: calc((100% - 85px) * 1 / 7 - 5px) !important; }
               .nw-table-actions-col { width: 85px !important; }
             }
           `}</style>
-          <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
+          <table className="w-full border-separate" style={{ tableLayout: 'fixed', width: '100%', borderSpacing: '0 6px' }}>
             <colgroup>
-              {/* Item: stretch 3, flexible, can truncate */}
               <col className="nw-table-item-col" />
-              {/* Holdings: stretch 1, flexible, no truncation */}
-              <col className="nw-table-holdings-col" />
-              {/* Balance: stretch 2, flexible, no truncation */}
               <col className="nw-table-balance-col" />
-              {/* Platform: stretch 2, flexible, can truncate, hidden on mobile */}
-              <col className="nw-table-platform-col hidden md:table-column" />
-              {/* Actions: fixed */}
               <col className="nw-table-actions-col" />
             </colgroup>
-            <thead>
-              <tr className="border-b border-border-subtle">
-                <th className="text-left pb-2">
-                  <Heading level={4}>Item</Heading>
-                </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Holdings</Heading>
-                  </th>
-                <th className="text-right pb-2">
-                  <Heading level={4}>Balance</Heading>
-                </th>
-                <th className="text-right pb-2 hidden md:table-cell">
-                  <Heading level={4}>Platform</Heading>
-                </th>
-                <th className="text-right pb-2">
-                  <Heading level={4}>Actions</Heading>
-                </th>
-              </tr>
-            </thead>
             <tbody>
               {items.length === 0 ? (
-                <>
-                  <tr className="hidden md:table-row">
-                    <td colSpan={5} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                <tr>
+                  <td colSpan={3} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
                     No items yet. Click "Add Item" to get started.
                   </td>
                 </tr>
-                  <tr className="md:hidden">
-                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
-                      No items yet. Click "Add Item" to get started.
-                    </td>
-                  </tr>
-                </>
               ) : (
                 // Sort items by balance (high to low) - all categories converted to CHF
                 [...items].sort((a, b) => {
@@ -578,61 +508,45 @@ function NetWorthCategorySection({
                   }
                   
                   return (
-                    <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
-                      <td className="py-2 pr-2">
-                        <div className="text2 truncate">
-                          {item.name}
-                        </div>
-                      </td>
-                      <td className="py-2 text-right px-2">
-                          <div className="text2 whitespace-nowrap">
-                          {formatCoinAmount(holdings, isIncognito)}
+                    <tr key={item.id}>
+                      <td colSpan={3} className="p-0 align-top">
+                        <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
+                          <div className="flex-[5] min-w-0 pr-2">
+                            <div className="text-[0.98rem] truncate">{item.name}</div>
+                            <div className="text-text-muted text-[0.756rem] md:text-[0.86rem] truncate flex items-center gap-1">
+                              <span>{item.platform}</span>
+                              {platforms.length > 0 && !platforms.some(p => p.name === item.platform) && (
+                                <svg className="w-3.5 h-3.5 text-warning flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                  <title>Platform has been removed. Please update this item.</title>
+                                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
                           </div>
-                        </td>
-                      <td className="py-2 text-right px-2 nw-table-balance-cell">
-                        <div className="text2 whitespace-nowrap">
-                          {formatCurrency(balanceConverted)}
-                        </div>
-                      </td>
-                      <td className="py-2 text-right pr-2 hidden md:table-cell">
-                        <div className="flex items-center justify-end gap-2">
-                          <span className="text2 truncate">
-                          {item.platform}
-                          </span>
-                          {platforms.length > 0 && !platforms.some(p => p.name === item.platform) && (
-                            <svg
-                              className="w-4 h-4 text-warning flex-shrink-0"
-                              fill="currentColor"
-                              viewBox="0 0 20 20"
-                            >
-                              <title>Platform has been removed. Please update this item.</title>
-                              <path
-                                fillRule="evenodd"
-                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                                clipRule="evenodd"
+                          <div className="flex-[1] flex-shrink-0 text-right px-2 nw-table-balance-cell">
+                            <div className="text-[0.98rem] whitespace-nowrap">{formatCurrency(balanceConverted)}</div>
+                            <div className="text-text-muted text-[0.756rem] md:text-[0.86rem] whitespace-nowrap">{formatCoinAmount(holdings, isIncognito)}</div>
+                          </div>
+                          <div className="w-[110px] md:w-[170px] flex-shrink-0 flex items-center justify-end">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => onAddTransaction(item.id)}
+                                className="p-0 hover:bg-bg-surface-2 rounded-input transition-colors"
+                                title="Add Transaction"
+                              >
+                                <svg className="w-6 h-6 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                              </button>
+                              <ItemMenu
+                                itemId={item.id}
+                                onShowMenu={onShowMenu}
+                                onRemoveItem={onRemoveItem}
+                                onShowTransactions={onShowTransactions}
+                                onEditItem={onEditItem}
                               />
-                            </svg>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-2">
-                        <div className="flex items-center justify-end -space-x-[12px]">
-                          <button
-                            onClick={() => onAddTransaction(item.id)}
-                            className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors -translate-x-1.5"
-                            title="Add Transaction"
-                          >
-                            <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                          </button>
-                          <ItemMenu
-                            itemId={item.id}
-                            onShowMenu={onShowMenu}
-                            onRemoveItem={onRemoveItem}
-                            onShowTransactions={onShowTransactions}
-                            onEditItem={onEditItem}
-                          />
+                            </div>
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -712,10 +626,10 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions, onEdit
       <button
         ref={buttonRef}
         onClick={handleClick}
-        className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
+        className="p-0 hover:bg-bg-surface-2 rounded-input transition-colors"
         title="Options"
       >
-        <svg className="w-4 h-4 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
+        <svg className="w-6 h-6 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
         </svg>
       </button>
