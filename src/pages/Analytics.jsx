@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
@@ -38,6 +38,84 @@ const CHART_COLORS = {
   success: '#2ECC71',
   danger: '#E74C3C',
   muted1: '#8B8F99',
+}
+
+// Entry menu (3-dots) with Edit and Remove, same pattern as Net Worth ItemMenu
+function EntryMenu({ entry, onEdit, onRemove }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState(null)
+  const buttonRef = useRef(null)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false)
+        setMenuPosition(null)
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [menuOpen])
+
+  const handleClick = (e) => {
+    e.stopPropagation()
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const menuWidth = 180
+      setMenuOpen(true)
+      setMenuPosition({ x: rect.left - menuWidth - 8, y: rect.top })
+    }
+  }
+
+  const handleEdit = () => {
+    setMenuOpen(false)
+    setMenuPosition(null)
+    onEdit(entry)
+  }
+
+  const handleRemove = () => {
+    setMenuOpen(false)
+    setMenuPosition(null)
+    onRemove(entry.id)
+  }
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={handleClick}
+        className="p-0 hover:bg-bg-surface-2 rounded-input transition-colors"
+        title="Options"
+      >
+        <svg className="w-6 h-6 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+        </svg>
+      </button>
+      {menuOpen && menuPosition && (
+        <div
+          ref={menuRef}
+          className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 min-w-[180px]"
+          style={{ left: menuPosition.x, top: menuPosition.y }}
+        >
+          <button
+            onClick={handleEdit}
+            className="w-full text-left px-4 py-2 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            onClick={handleRemove}
+            className="w-full text-left px-4 py-2 text-danger text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+          >
+            Remove
+          </button>
+        </div>
+      )}
+    </>
+  )
 }
 
 function Analytics() {
@@ -406,7 +484,7 @@ function Analytics() {
                       + Add
                     </button>
                   </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
                     {inflowEntries.length === 0 ? (
                       <div className="text-text-muted text-[0.567rem] md:text-xs text-center py-4">
                         No manual inflows yet
@@ -415,38 +493,28 @@ function Analytics() {
                       inflowEntries.map((entry) => (
                         <div
                           key={entry.id}
-                          className="flex items-center justify-between p-2 bg-bg-surface-1 rounded-input border border-border-subtle"
+                          className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]"
                         >
-                          <div className="flex-1 min-w-0">
-                            <div className="text-text-primary text-xs md:text-sm font-medium truncate">
-                              {entry.title}
-                            </div>
-                            <div className="text-text-secondary text-[0.567rem] md:text-xs">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <div className="text-[0.882rem] truncate">{entry.title}</div>
+                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">
                               {formatDateToDDMMYYYY(entry.date)}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <TotalText variant="inflow" className="text-xs md:text-sm">
+                          <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
+                            <TotalText variant="inflow" className="text-[0.882rem] whitespace-nowrap">
                               {formatCurrency(entry.amount)}
                             </TotalText>
-                            <button
-                              onClick={() => setEditingEntry(entry)}
-                              className="p-1 hover:bg-bg-surface-2 rounded transition-colors"
-                              title="Edit"
-                            >
-                              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteEntry(entry.id)}
-                              className="p-1 hover:bg-bg-surface-2 rounded transition-colors"
-                              title="Delete"
-                            >
-                              <svg className="w-4 h-4 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
+                          </div>
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 flex items-center justify-end">
+                            <EntryMenu
+                              entry={entry}
+                              onEdit={setEditingEntry}
+                              onRemove={handleDeleteEntry}
+                            />
                           </div>
                         </div>
                       ))
@@ -465,7 +533,7 @@ function Analytics() {
                       + Add
                     </button>
                   </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
                     {outflowEntries.length === 0 ? (
                       <div className="text-text-muted text-[0.567rem] md:text-xs text-center py-4">
                         No planned payments yet
@@ -474,38 +542,28 @@ function Analytics() {
                       outflowEntries.map((entry) => (
                         <div
                           key={entry.id}
-                          className="flex items-center justify-between p-2 bg-bg-surface-1 rounded-input border border-border-subtle"
+                          className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]"
                         >
-                          <div className="flex-1 min-w-0">
-                            <div className="text-text-primary text-xs md:text-sm font-medium truncate">
-                              {entry.title}
-                            </div>
-                            <div className="text-text-secondary text-[0.567rem] md:text-xs">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <div className="text-[0.882rem] truncate">{entry.title}</div>
+                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">
                               {formatDateToDDMMYYYY(entry.date)}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <TotalText variant="outflow" className="text-xs md:text-sm">
+                          <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
+                            <TotalText variant="outflow" className="text-[0.882rem] whitespace-nowrap">
                               {formatCurrency(entry.amount)}
                             </TotalText>
-                            <button
-                              onClick={() => setEditingEntry(entry)}
-                              className="p-1 hover:bg-bg-surface-2 rounded transition-colors"
-                              title="Edit"
-                            >
-                              <svg className="w-4 h-4 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteEntry(entry.id)}
-                              className="p-1 hover:bg-bg-surface-2 rounded transition-colors"
-                              title="Delete"
-                            >
-                              <svg className="w-4 h-4 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
+                          </div>
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 flex items-center justify-end">
+                            <EntryMenu
+                              entry={entry}
+                              onEdit={setEditingEntry}
+                              onRemove={handleDeleteEntry}
+                            />
                           </div>
                         </div>
                       ))

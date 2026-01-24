@@ -352,17 +352,18 @@ function NetWorthCategorySection({
                               <tr key={perpetualsItem.id}>
                                 <td colSpan={3} className="p-0 align-top">
                                   <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
-                                    <div className="flex-[5] min-w-0 pr-2">
-                                      <div className="text-[0.98rem] truncate">{perpetualsItem.name || exchangeName}</div>
-                                      <div className="text-text-muted text-[0.756rem] md:text-[0.86rem] truncate">{perpetualsItem.platform || exchangeName}</div>
+                                    <div className="flex-1 min-w-0 pr-2">
+                                      <div className="text-[0.882rem] truncate">{perpetualsItem.name || exchangeName}</div>
+                                      <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">{perpetualsItem.platform || exchangeName}</div>
                                     </div>
-                                    <div className="flex-[1] flex-shrink-0 text-right px-2 perp-table-balance-cell">
-                                      <div className="text-[0.98rem] whitespace-nowrap">{formatCurrency(balanceChf)}</div>
-                                      <div className="text-text-muted text-[0.756rem] md:text-[0.86rem] whitespace-nowrap">{formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })}</div>
+                                    <div className="flex-1 min-w-0 text-right px-2 perp-table-balance-cell">
+                                      <div className="text-[0.882rem] whitespace-nowrap">{formatCurrency(balanceChf)}</div>
+                                      <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">{formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })}</div>
                                     </div>
-                                    <div className="w-[55px] md:w-[85px] flex-shrink-0">
-                                      {/* Actions column - empty */}
-                                    </div>
+                                    <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                                    <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                                    <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                                    <div className="flex-shrink-0 w-14" aria-hidden="true" />
                                   </div>
                                 </td>
                               </tr>
@@ -511,9 +512,9 @@ function NetWorthCategorySection({
                     <tr key={item.id}>
                       <td colSpan={3} className="p-0 align-top">
                         <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
-                          <div className="flex-[5] min-w-0 pr-2">
-                            <div className="text-[0.98rem] truncate">{item.name}</div>
-                            <div className="text-text-muted text-[0.756rem] md:text-[0.86rem] truncate flex items-center gap-1">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <div className="text-[0.882rem] truncate">{item.name}</div>
+                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate flex items-center gap-1">
                               <span>{item.platform}</span>
                               {platforms.length > 0 && !platforms.some(p => p.name === item.platform) && (
                                 <svg className="w-3.5 h-3.5 text-warning flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -523,11 +524,14 @@ function NetWorthCategorySection({
                               )}
                             </div>
                           </div>
-                          <div className="flex-[1] flex-shrink-0 text-right px-2 nw-table-balance-cell">
-                            <div className="text-[0.98rem] whitespace-nowrap">{formatCurrency(balanceConverted)}</div>
-                            <div className="text-text-muted text-[0.756rem] md:text-[0.86rem] whitespace-nowrap">{formatCoinAmount(holdings, isIncognito)}</div>
+                          <div className="flex-1 min-w-0 text-right px-2 nw-table-balance-cell">
+                            <div className="text-[0.882rem] whitespace-nowrap">{formatCurrency(balanceConverted)}</div>
+                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">{formatCoinAmount(holdings, isIncognito)}</div>
                           </div>
-                          <div className="w-[110px] md:w-[170px] flex-shrink-0 flex items-center justify-end">
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 flex items-center justify-end">
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => onAddTransaction(item.id)}

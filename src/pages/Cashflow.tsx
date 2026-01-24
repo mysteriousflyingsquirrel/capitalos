@@ -281,62 +281,45 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
 
           return (
           <div className="overflow-x-auto">
-            <table className="w-full" style={{ tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                <col style={{ width: '80px' }} />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  <th className="text-left pb-2">
-                    <Heading level={4}>Item</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Inflow</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Provider</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Actions</Heading>
-                  </th>
-                </tr>
-              </thead>
+            <table className="w-full border-separate" style={{ tableLayout: 'fixed', width: '100%', borderSpacing: '0 6px' }}>
               <tbody>
                 {sortedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                    <td className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
                       No items yet. Click "Add Item" to get started.
                     </td>
                   </tr>
                 ) : (
                   sortedItems.map((item) => (
-                    <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
-                      <td className="py-2">
-                        <div className="text2 truncate">{item.item}</div>
-                      </td>
-                      <td className="py-2 text-right">
-                        <div className="text-success text2 whitespace-nowrap">
-                          {formatCurrency(
-                            item.amount !== undefined && item.currency
-                              ? convert(item.amount, item.currency as CurrencyCode)
-                              : convert(item.amountChf, 'CHF')
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-2 text-right">
-                        <div className="text2 truncate">{item.provider}</div>
-                      </td>
-                      <td className="py-2">
-                        <div className="flex items-center justify-end">
-                          <CashflowItemMenu
-                            itemId={item.id}
-                            itemType="inflow"
-                            onEdit={() => setEditingItem(item)}
-                            onRemove={() => onRemoveItem(item.id)}
-                          />
+                    <tr key={item.id}>
+                      <td className="p-0 align-top">
+                        <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <div className="text-[0.882rem] truncate">{item.item}</div>
+                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">
+                              {item.provider}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
+                            <TotalText variant="inflow" className="text-[0.882rem] whitespace-nowrap">
+                              {formatCurrency(
+                                item.amount !== undefined && item.currency
+                                  ? convert(item.amount, item.currency as CurrencyCode)
+                                  : convert(item.amountChf, 'CHF')
+                              )}
+                            </TotalText>
+                          </div>
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 flex items-center justify-end">
+                            <CashflowItemMenu
+                              itemId={item.id}
+                              itemType="inflow"
+                              onEdit={() => setEditingItem(item)}
+                              onRemove={() => onRemoveItem(item.id)}
+                            />
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -455,62 +438,45 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
 
           return (
           <div className="overflow-x-auto">
-            <table className="w-full" style={{ tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                <col style={{ width: 'calc((100% - 80px) / 3)' }} />
-                <col style={{ width: '80px' }} />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  <th className="text-left pb-2">
-                    <Heading level={4}>Item</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Outflow</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Receiver</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Actions</Heading>
-                  </th>
-                </tr>
-              </thead>
+            <table className="w-full border-separate" style={{ tableLayout: 'fixed', width: '100%', borderSpacing: '0 6px' }}>
               <tbody>
                 {sortedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                    <td className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
                       No items yet. Click "Add Item" to get started.
                     </td>
                   </tr>
                 ) : (
                   sortedItems.map((item) => (
-                    <tr key={item.id} className="border-b border-border-subtle last:border-b-0">
-                      <td className="py-2">
-                        <div className="text2 truncate">{item.item}</div>
-                      </td>
-                      <td className="py-2 text-right">
-                        <div className="text-danger text2 whitespace-nowrap">
-                          {formatCurrency(
-                            item.amount !== undefined && item.currency
-                              ? convert(item.amount, item.currency as CurrencyCode)
-                              : convert(item.amountChf, 'CHF')
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-2 text-right">
-                        <div className="text2 truncate">{item.receiver}</div>
-                      </td>
-                      <td className="py-2">
-                        <div className="flex items-center justify-end">
-                          <CashflowItemMenu
-                            itemId={item.id}
-                            itemType="outflow"
-                            onEdit={() => setEditingItem(item)}
-                            onRemove={() => onRemoveItem(item.id)}
-                          />
+                    <tr key={item.id}>
+                      <td className="p-0 align-top">
+                        <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <div className="text-[0.882rem] truncate">{item.item}</div>
+                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">
+                              {item.receiver}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
+                            <TotalText variant="outflow" className="text-[0.882rem] whitespace-nowrap">
+                              {formatCurrency(
+                                item.amount !== undefined && item.currency
+                                  ? convert(item.amount, item.currency as CurrencyCode)
+                                  : convert(item.amountChf, 'CHF')
+                              )}
+                            </TotalText>
+                          </div>
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 flex items-center justify-end">
+                            <CashflowItemMenu
+                              itemId={item.id}
+                              itemType="outflow"
+                              onEdit={() => setEditingItem(item)}
+                              onRemove={() => onRemoveItem(item.id)}
+                            />
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -722,66 +688,42 @@ function AccountflowSection({ mappings, platforms, onAddMapping, onEditMapping, 
           </div>
         </div>
 
-        {/* Unified Table with Item, Inflow, Outflow, Actions */}
+        {/* Unified Table with Item, Inflow/Outflow (combined), Actions */}
         {sortedMappings.length === 0 ? (
           <div className="text-text-muted text-[0.567rem] md:text-xs">No mappings</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full" style={{ tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: 'calc((100% - 160px) / 3)' }} />
-                <col style={{ width: 'calc((100% - 160px) / 3)' }} />
-                <col style={{ width: 'calc((100% - 160px) / 3)' }} />
-                <col style={{ width: '80px' }} />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  <th className="text-left pb-2">
-                    <Heading level={4}>Item</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Inflow</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Outflow</Heading>
-                  </th>
-                  <th className="text-right pb-2">
-                    <Heading level={4}>Actions</Heading>
-                  </th>
-                </tr>
-              </thead>
+            <table className="w-full border-separate" style={{ tableLayout: 'fixed', width: '100%', borderSpacing: '0 6px' }}>
               <tbody>
                 {sortedMappings.map(({ mapping, type, label }) => {
                   const amountChf = computeMappingAmount(mapping, inflowItems, outflowItems, convert)
                   const amount = convert(amountChf, 'CHF')
-                  
                   return (
-                    <tr key={mapping.id} className="border-b border-border-subtle last:border-b-0">
-                      <td className="py-2">
-                        <div className="text2 truncate">{label}</div>
-                      </td>
-                      <td className="py-2 text-right">
-                        {type === 'inflow' ? (
-                          <div className="text-success text2 whitespace-nowrap">{formatCurrency(amount)}</div>
-                        ) : (
-                          <div className="text2">—</div>
-                        )}
-                      </td>
-                      <td className="py-2 text-right">
-                        {type === 'outflow' ? (
-                          <div className="text-danger text2 whitespace-nowrap">{formatCurrency(amount)}</div>
-                        ) : (
-                          <div className="text2">—</div>
-                        )}
-                      </td>
-                      <td className="py-2">
-                        <div className="flex items-center justify-end">
-                          <CashflowItemMenu
-                            itemId={mapping.id}
-                            itemType="accountflow"
-                            onEdit={() => setEditingMapping(mapping)}
-                            onRemove={() => onRemoveMapping(mapping.id)}
-                          />
+                    <tr key={mapping.id}>
+                      <td className="p-0 align-top">
+                        <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <div className="text-[0.882rem] truncate">{label}</div>
+                          </div>
+                          <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
+                            <TotalText
+                              variant={type === 'inflow' ? 'inflow' : 'outflow'}
+                              className="text-[0.882rem] whitespace-nowrap"
+                            >
+                              {formatCurrency(amount)}
+                            </TotalText>
+                          </div>
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 flex items-center justify-end">
+                            <CashflowItemMenu
+                              itemId={mapping.id}
+                              itemType="accountflow"
+                              onEdit={() => setEditingMapping(mapping)}
+                              onRemove={() => onRemoveMapping(mapping.id)}
+                            />
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -964,10 +906,10 @@ function CashflowItemMenu({ itemId, onEdit, onRemove }: CashflowItemMenuProps) {
       <button
         ref={buttonRef}
         onClick={handleClick}
-        className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
+        className="p-0 hover:bg-bg-surface-2 rounded-input transition-colors"
         title="Options"
       >
-        <svg className="w-4 h-4 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
+        <svg className="w-6 h-6 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
         </svg>
       </button>
