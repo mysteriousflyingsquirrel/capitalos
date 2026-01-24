@@ -1,9 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import admin from 'firebase-admin'
-import type { NetWorthSummary } from '../../src/lib/networth/types'
-import type { NetWorthItem, NetWorthTransaction, NetWorthCategory } from '../../src/pages/NetWorth'
-import { NetWorthCalculationService } from '../../src/services/netWorthCalculationService'
-import { fetchCryptoData } from '../../src/services/cryptoCompareService'
+import type { NetWorthSummary, NetWorthItem, NetWorthCategory, NetWorthTransaction } from '../../lib/types.js'
+import { NetWorthCalculationService } from '../../lib/netWorthCalculation.js'
+import { fetchCryptoData } from '../../lib/cryptoCompare.js'
 
 // Export config for Vercel (increase timeout if needed)
 export const config = {
