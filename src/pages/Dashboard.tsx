@@ -518,6 +518,25 @@ function Dashboard() {
     })
   }, [snapshots])
 
+  // Find the snapshot used for Weekly PnL (last snapshot before Monday 00:00 UTC of current week; week starts on Monday)
+  const weeklyPnLSnapshot = useMemo(() => {
+    if (snapshots.length === 0) {
+      return null
+    }
+
+    const now = new Date()
+    const d = now.getUTCDay() // 0=Sun, 1=Mon, ..., 6=Sat
+    const offset = d === 0 ? 6 : d - 1
+    const mondayThisWeekUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - offset, 0, 0, 0, 0))
+
+    const beforeThisWeek = snapshots.filter((s) => new Date(s.timestamp) < mondayThisWeekUTC)
+    if (beforeThisWeek.length === 0) {
+      return null
+    }
+
+    return beforeThisWeek.reduce((latest, s) => (s.timestamp > latest.timestamp ? s : latest))
+  }, [snapshots])
+
   // Find the snapshot used for YTD PnL (last snapshot from previous year)
   const ytdPnLSnapshot = useMemo(() => {
     if (snapshots.length === 0) {
@@ -546,8 +565,9 @@ function Dashboard() {
     })
   }, [snapshots])
 
-  // Format timestamps for Monthly and YTD PnL
+  // Format timestamps for Monthly, Weekly, and YTD PnL
   const monthlyPnLSnapshotDateTime = useMemo(() => formatSnapshotDateTime(monthlyPnLSnapshot), [monthlyPnLSnapshot])
+  const weeklyPnLSnapshotDateTime = useMemo(() => formatSnapshotDateTime(weeklyPnLSnapshot), [weeklyPnLSnapshot])
   const ytdPnLSnapshotDateTime = useMemo(() => formatSnapshotDateTime(ytdPnLSnapshot), [ytdPnLSnapshot])
 
   // Calculate monthly PnL (difference between current net worth and last snapshot of previous month)
@@ -584,6 +604,20 @@ function Dashboard() {
     return ((totalNetWorthChf - previousMonthNetWorth) / previousMonthNetWorth) * 100
   }, [totalNetWorthChf, monthlyPnLSnapshot, calculateNetWorthAtDate, convert])
 
+  // Calculate Weekly PnL (current value vs last snapshot before Monday 00:00 UTC of this week)
+  const weeklyPnLChf = useMemo(() => {
+    if (!weeklyPnLSnapshot) return null
+    const baselineChf = convert(weeklyPnLSnapshot.total, 'CHF')
+    return totalNetWorthChf - baselineChf
+  }, [totalNetWorthChf, weeklyPnLSnapshot, convert])
+
+  const weeklyPnLPercentage = useMemo(() => {
+    if (!weeklyPnLSnapshot || weeklyPnLChf === null) return null
+    const baselineChf = convert(weeklyPnLSnapshot.total, 'CHF')
+    if (baselineChf === 0) return 0
+    return (weeklyPnLChf / baselineChf) * 100
+  }, [totalNetWorthChf, weeklyPnLSnapshot, weeklyPnLChf, convert])
+
   // Calculate Year-to-Date (YTD) PnL (compare latest snapshot from previous year to current state)
   const ytdPnLChf = useMemo(() => {
     if (ytdPnLSnapshot) {
@@ -616,6 +650,7 @@ function Dashboard() {
   const monthlyInflowConverted = convert(monthlyInflowChf, 'CHF')
   const monthlyOutflowConverted = convert(monthlyOutflowChf, 'CHF')
   const dailyPnLConverted = dailyPnLChf !== null ? convert(dailyPnLChf, 'CHF') : null
+  const weeklyPnLConverted = weeklyPnLChf !== null ? convert(weeklyPnLChf, 'CHF') : null
   const monthlyPnLConverted = convert(monthlyPnLChf, 'CHF')
   const ytdPnLConverted = convert(ytdPnLChf, 'CHF')
 
@@ -629,6 +664,10 @@ function Dashboard() {
   const dailyPnLInUsd = useMemo(
     () => dailyPnLChf !== null ? dailyPnLChf * (exchangeRates?.rates['USD'] || 1) : null,
     [dailyPnLChf, exchangeRates]
+  )
+  const weeklyPnLInUsd = useMemo(
+    () => (weeklyPnLChf !== null ? weeklyPnLChf * (exchangeRates?.rates['USD'] || 1) : null),
+    [weeklyPnLChf, exchangeRates]
   )
   const monthlyPnLInUsd = useMemo(
     () => monthlyPnLChf * (exchangeRates?.rates['USD'] || 1),
@@ -1006,6 +1045,35 @@ function Dashboard() {
                     {dailyPnLInUsd !== null && (
                       <TotalText variant={dailyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
                         {formatUsd(dailyPnLInUsd)}
+                      </TotalText>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="text-xs md:text-sm text-text-muted mb-1 flex justify-between">
+                  <span>Weekly PnL</span>
+                  {weeklyPnLSnapshotDateTime && <span>({weeklyPnLSnapshotDateTime})</span>}
+                </div>
+                {weeklyPnLChf === null ? (
+                  <div className="text-xs md:text-sm text-warning">
+                    No snapshot from before this week
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-baseline gap-2">
+                      <TotalText variant={weeklyPnLConverted! >= 0 ? 'inflow' : 'outflow'}>
+                        {formatCurrencyValue(weeklyPnLConverted!)}
+                      </TotalText>
+                      {weeklyPnLPercentage !== null && (
+                        <span className={`text-xs md:text-sm ${weeklyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
+                          {isIncognito ? '(****)' : `(${weeklyPnLPercentage >= 0 ? '+' : ''}${weeklyPnLPercentage.toFixed(2)}%)`}
+                        </span>
+                      )}
+                    </div>
+                    {weeklyPnLInUsd !== null && (
+                      <TotalText variant={weeklyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
+                        {formatUsd(weeklyPnLInUsd)}
                       </TotalText>
                     )}
                   </div>
