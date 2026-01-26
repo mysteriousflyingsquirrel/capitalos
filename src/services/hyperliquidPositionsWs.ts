@@ -113,8 +113,9 @@ export class HyperliquidPositionsWs {
           const fundingFeeUsd = sinceOpenFunding === null ? null : -sinceOpenFunding
 
           positions.push({
-            id: `hyperliquid-pos-${coin.toUpperCase()}-${this.dex || 'default'}`,
-            ticker: coin.toUpperCase(),
+            // Keep coin casing as-is (needed for HL coin identifiers like "xyz:XYZ100")
+            id: `hyperliquid-pos-${coin}-${this.dex || 'default'}`,
+            ticker: coin,
             margin: marginUsed,
             pnl: unrealizedPnl,
             platform: 'Hyperliquid',
