@@ -107,6 +107,59 @@ const PIE_CHART_COLORS = [
   CHART_COLORS.muted2,
 ]
 
+// Helper component: SectionCard (same as Hyperliquid)
+interface SectionCardProps {
+  title: string
+  titleRight?: React.ReactNode
+  children: React.ReactNode
+}
+
+function SectionCard({ title, titleRight, children }: SectionCardProps) {
+  return (
+    <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+      <div className="mb-6 pb-4 border-b border-border-strong">
+        <div className="flex items-center justify-between gap-3">
+          <Heading level={2}>{title}</Heading>
+          {titleRight ? <div className="text-xs text-text-muted whitespace-nowrap">{titleRight}</div> : null}
+        </div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// PnL Box Component (same as Hyperliquid)
+interface PnLBoxProps {
+  title: string
+  value: number | null
+}
+
+function PnLBox({ title, value }: PnLBoxProps) {
+  const { isIncognito } = useIncognito()
+  const { baseCurrency } = useCurrency()
+  const formatCurrency = (val: number) => formatMoney(val, baseCurrency, 'ch', { incognito: isIncognito })
+  
+  if (value === null) {
+    return (
+      <div className="bg-bg-surface-2 border border-border-subtle rounded-card p-4">
+        <div className="text-text-muted text-xs md:text-sm mb-2">{title}</div>
+        <div className="text-text-muted text-lg font-medium">N/A</div>
+      </div>
+    )
+  }
+  
+  const isPositive = value >= 0
+
+  return (
+    <div className="bg-bg-surface-2 border border-border-subtle rounded-card p-4">
+      <div className="text-text-muted text-xs md:text-sm mb-2">{title}</div>
+      <TotalText variant={isPositive ? 'inflow' : 'outflow'} className="block">
+        {formatCurrency(value)}
+      </TotalText>
+    </div>
+  )
+}
+
 // Helper component: KPI Card
 function KpiCard({ title, value, subtitle }: KpiCardProps) {
   return (
@@ -1003,142 +1056,72 @@ function Dashboard() {
         {/* Page Title */}
         <Heading level={1}>Dashboard</Heading>
         
-        {/* First Row: Total Net Worth (with PnL) + Monthly Cashflow (Inflow/Outflow) */}
+        {/* First Row: Total Net Worth + Monthly Cashflow (Inflow/Outflow) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Total Net Worth KPI with Monthly PnL */}
+          {/* Total Net Worth KPI */}
           <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
-              <div className="flex flex-col">
-                <div className="flex items-center justify-between mb-2">
-                  <Heading level={2}>Total Net Worth</Heading>
-                </div>
-                <TotalText variant={totalNetWorthConverted >= 0 ? 'inflow' : 'outflow'} className="mt-1">
-                  {formatCurrencyValue(totalNetWorthConverted)}
-                </TotalText>
-                <TotalText variant={totalNetWorthInUsd >= 0 ? 'inflow' : 'outflow'} className="mt-1">
-                  {formatUsd(totalNetWorthInUsd)}
-                </TotalText>
-              </div>
+              <Heading level={2}>Total Net Worth</Heading>
             </div>
-            <div className="space-y-2">
-              <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1 flex justify-between">
-                  <span>Daily PnL</span>
-                  {latestSnapshotDateTime && <span>({latestSnapshotDateTime})</span>}
-                </div>
-                {dailyPnLChf === null ? (
-                  <div className="text-xs md:text-sm text-warning">
-                    ⚠️ No snapshot available
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-baseline gap-2">
-                      <TotalText variant={dailyPnLConverted! >= 0 ? 'inflow' : 'outflow'}>
-                        {formatCurrencyValue(dailyPnLConverted!)}
-                      </TotalText>
-                      {dailyPnLPercentage !== null && (
-                        <span className={`text-xs md:text-sm ${dailyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {isIncognito ? '(****)' : `(${dailyPnLPercentage >= 0 ? '+' : ''}${dailyPnLPercentage.toFixed(2)}%)`}
-                        </span>
-                      )}
-                    </div>
-                    {dailyPnLInUsd !== null && (
-                      <TotalText variant={dailyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
-                        {formatUsd(dailyPnLInUsd)}
-                      </TotalText>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1 flex justify-between">
-                  <span>Weekly PnL</span>
-                  {weeklyPnLSnapshotDateTime && <span>({weeklyPnLSnapshotDateTime})</span>}
-                </div>
-                {weeklyPnLChf === null ? (
-                  <div className="text-xs md:text-sm text-warning">
-                    No snapshot from before this week
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-baseline gap-2">
-                      <TotalText variant={weeklyPnLConverted! >= 0 ? 'inflow' : 'outflow'}>
-                        {formatCurrencyValue(weeklyPnLConverted!)}
-                      </TotalText>
-                      {weeklyPnLPercentage !== null && (
-                        <span className={`text-xs md:text-sm ${weeklyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {isIncognito ? '(****)' : `(${weeklyPnLPercentage >= 0 ? '+' : ''}${weeklyPnLPercentage.toFixed(2)}%)`}
-                        </span>
-                      )}
-                    </div>
-                    {weeklyPnLInUsd !== null && (
-                      <TotalText variant={weeklyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
-                        {formatUsd(weeklyPnLInUsd)}
-                      </TotalText>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1 flex justify-between">
-                  <span>Monthly PnL</span>
-                  {monthlyPnLSnapshotDateTime && <span>({monthlyPnLSnapshotDateTime})</span>}
-                </div>
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-baseline gap-2">
-                    <TotalText variant={monthlyPnLConverted >= 0 ? 'inflow' : 'outflow'}>
-                      {formatCurrencyValue(monthlyPnLConverted)}
-                    </TotalText>
-                    <span className={`text-xs md:text-sm ${monthlyPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {isIncognito ? '(****)' : `(${monthlyPnLPercentage >= 0 ? '+' : ''}${monthlyPnLPercentage.toFixed(2)}%)`}
-                    </span>
-                  </div>
-                  <TotalText variant={monthlyPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
-                    {formatUsd(monthlyPnLInUsd)}
-                  </TotalText>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1 flex justify-between">
-                  <span>YTD PnL</span>
-                  {ytdPnLSnapshotDateTime && <span>({ytdPnLSnapshotDateTime})</span>}
-                </div>
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-baseline gap-2">
-                    <TotalText variant={ytdPnLConverted >= 0 ? 'inflow' : 'outflow'}>
-                      {formatCurrencyValue(ytdPnLConverted)}
-                    </TotalText>
-                    <span className={`text-xs md:text-sm ${ytdPnLPercentage >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {isIncognito ? '(****)' : `(${ytdPnLPercentage >= 0 ? '+' : ''}${ytdPnLPercentage.toFixed(2)}%)`}
-                    </span>
-                  </div>
-                  <TotalText variant={ytdPnLInUsd >= 0 ? 'inflow' : 'outflow'}>
-                    {formatUsd(ytdPnLInUsd)}
-                  </TotalText>
-                </div>
-              </div>
+            <div className="flex flex-col space-y-1">
+              <TotalText variant={totalNetWorthConverted >= 0 ? 'inflow' : 'outflow'} className="text-[1.296rem] lg:text-[1.5525rem]">
+                {formatCurrencyValue(totalNetWorthConverted)}
+              </TotalText>
+              <TotalText variant={totalNetWorthInUsd >= 0 ? 'inflow' : 'outflow'}>
+                {formatUsd(totalNetWorthInUsd)}
+              </TotalText>
             </div>
           </div>
 
           {/* Monthly Cashflow KPI with Inflow, Outflow, and Spare Change */}
           <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
-            <Heading level={2} className="mb-2">Monthly Cashflow</Heading>
+            <div className="mb-6 pb-4 border-b border-border-strong">
+              <Heading level={2}>Monthly Cashflow</Heading>
+            </div>
             <div className="space-y-2">
-              <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1">Inflow</div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-success flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
                 <TotalText variant="inflow">{formatCurrencyValue(monthlyInflowConverted)}</TotalText>
               </div>
-              <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1">Outflow</div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-danger flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
                 <TotalText variant="outflow">{formatCurrencyValue(monthlyOutflowConverted)}</TotalText>
               </div>
-              <div>
-                <div className="text-xs md:text-sm text-text-muted mb-1">Spare Change</div>
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" preserveAspectRatio="xMidYMid meet">
+                  <defs>
+                    <radialGradient id="IconifyId17ecdb2904d178eab14122" cx="2218.4" cy="26.957" r="74.733" gradientTransform="matrix(-1.0422 0 0 1 2371.6 0)" gradientUnits="userSpaceOnUse">
+                      <stop stopColor="#FFCA28" offset=".599"></stop>
+                      <stop stopColor="#FFB300" offset="1"></stop>
+                    </radialGradient>
+                    <path id="IconifyId17ecdb2904d178eab14123" d="M32.34 71.87l.24-.03l-.22-8.84c0-4.85 1.52-10.42 8.33-11.63c3.5-.62 7.44.91 8.59.91s1.26-.99 1.26-.99l.07-38c0-4.62 2.88-9.02 8.37-9.02s8.59 3.74 8.59 9l.84 37.11s.32 1.57.57 1.65c1.46.44 3.32-1.36 8.67-.37s6.96 5.37 8.75 5.73s3.03-.7 8.08-.7s9.49 3.93 9.49 8.78l-.34 29.75c0 4.12-3.47 8.25-4.27 9.14c-2.82 3.17-4.36 7.19-4.36 11.36v2c0 4.73-4.19 6.53-9.12 6.55l-34.8.17c-4.65.02-8.43-2.91-8.43-8.07s-.49-9.81-4.63-11.85s-12.39-12-13.19-21.98c-.55-6.93 2.23-10.08 7.51-10.67z"></path>
+                    <clipPath id="IconifyId17ecdb2904d178eab14124">
+                      <use xlinkHref="#IconifyId17ecdb2904d178eab14123"></use>
+                    </clipPath>
+                  </defs>
+                  <path d="M50.98 122.96c-3.16 0-6.86-1.72-6.86-6.57c0-5.09-.42-10.72-5.45-13.19c-3.46-1.7-12.44-13.2-13.11-22.8c-.4-5.7 1.91-6.53 6.09-8.03c.42-.15.85-.3 1.28-.46c1.07-.4 1.07-.4.93-8.93c0-5.96 2.32-9.28 7.1-10.13c.47-.08.98-.12 1.53-.12c1.71 0 3.47.41 4.75.7c.89.21 1.53.35 2.05.35a2.68 2.68 0 0 0 2.75-2.32c.01-.06.01-.11.01-.17l.07-38c0-3.62 2.15-7.52 6.87-7.52c4.44 0 7.09 2.8 7.09 7.5l.84 37.15c0 .09.01.18.03.27c.33 1.59.68 2.51 1.61 2.79c.3.09.61.13.94.13c.59 0 1.15-.13 1.79-.29c.83-.2 1.86-.45 3.29-.45c.87 0 1.81.09 2.81.28c2.92.54 4.55 2.27 5.86 3.65c.94.99 1.75 1.85 2.87 2.07c.35.07.69.1 1.05.1c.68 0 1.32-.12 2.07-.26c1.19-.23 2.67-.51 5.26-.51c4.33 0 7.99 3.34 7.99 7.28l-.34 29.73c0 3.31-2.94 6.81-4.14 8.17c-3.05 3.43-4.99 7.81-4.99 12.33v2.03c0 4.14-3.98 5.03-7.38 5.05l-34.66.17z" fill="url(#IconifyId17ecdb2904d178eab14122)"></path>
+                  <path d="M59 7h.2c4.86 0 5.8 4.04 5.8 6.28v.07l.62 37.11c0 .18-.08.36-.05.53c.25 1.25.63 3.33 2.6 3.92c.44.13.87.2 1.35.2c.77 0 1.45-.17 2.13-.33c.83-.2 1.68-.41 2.93-.41c.78 0 1.63.08 2.53.25c2.44.45 3.76 1.85 5.04 3.21c1.02 1.08 2.08 2.2 3.67 2.52c.44.09.88.13 1.34.13c.82 0 1.56-.14 2.35-.29c1.13-.21 2.53-.48 4.98-.48c3.46 0 6.49 2.7 6.49 5.75l-.34 29.78c0 1.93-1.25 4.6-3.51 7.15c-3.29 3.7-5.12 8.43-5.12 13.3v2.02c0 .91-.22 3.55-6.13 3.57l-34.83.17c-2.59 0-5.38-1.33-5.38-5.07c0-4-.01-11.44-6.3-14.54c-3.15-1.55-11.66-12.61-12.28-21.56c-.32-4.57.93-5.02 5.09-6.51c.42-.15.86-.31 1.3-.47c1.97-.74 1.97-2.47 1.97-4c0-.71-.01-1.66-.02-2.61c-.02-1.85-.05-3.7-.05-3.7c0-6.84 3.34-8.23 5.86-8.68c.38-.07.81-.1 1.27-.1c1.54 0 3.2.38 4.41.66c.98.23 1.7.39 2.38.39c2.51 0 4.03-1.83 4.24-3.64c.01-.11.02-.23.02-.34l.07-38.14c0-2.23 1.13-6.16 5.37-6.16m-.02-2.7c-5.49 0-8.37 4.4-8.37 9.02l-.07 38s-.11.99-1.26.99c-.95 0-3.84-1.06-6.79-1.06c-.6 0-1.2.04-1.79.15c-6.82 1.21-8.33 6.78-8.33 11.63c0 0 .12 7.47.05 7.5c-4.8 1.79-8.86 2.5-8.34 10c.69 9.99 9.8 22 13.94 24.04s4.61 6.46 4.61 11.62c0 5.14 3.73 7.84 8.36 7.84h.05l34.85.06c4.93-.02 9.12-1.59 9.12-6.32v-2c0-4.17 1.54-8.19 4.36-11.36c.8-.9 4.32-5.02 4.32-9.14l.31-29.76c0-4.85-4.44-8.78-9.5-8.78c-4.32 0-5.86.77-7.33.77c-.25 0-.5-.02-.76-.07c-1.79-.36-3.4-4.74-8.75-5.73c-1.19-.22-2.2-.3-3.08-.3c-2.63 0-4.02.74-5.08.74a1.7 1.7 0 0 1-.51-.07c-.25-.08-.57-1.65-.57-1.65l-.84-37.11c-.01-5.27-3.1-9.01-8.6-9.01z" fill="#EDA600"></path>
+                  <path d="M40.46 86.01c-1.27.88-6.13-2.09-7.6-7.08c-1.69-5.75-.13-11.25-.13-11.25s2.85 6.18 4.08 8.5c2.74 5.16 4.88 8.98 3.65 9.83z" clipPath="url(#IconifyId17ecdb2904d178eab14124)" fill="#EDA600"></path>
+                </svg>
                 <TotalText variant="spare">{formatCurrencyValue(convert(monthlySpareChangeChf, 'CHF'))}</TotalText>
               </div>
             </div>
           </div>
         </div>
+        
+        {/* Performance Frame */}
+        <SectionCard title="Performance">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <PnLBox title="Daily PnL" value={dailyPnLConverted} />
+            <PnLBox title="Weekly PnL" value={weeklyPnLConverted} />
+            <PnLBox title="Monthly PnL" value={monthlyPnLConverted} />
+            <PnLBox title="YTD PnL" value={ytdPnLConverted} />
+          </div>
+        </SectionCard>
 
         {/* Second Row: Net Worth Evolution (Full Width) */}
         <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
