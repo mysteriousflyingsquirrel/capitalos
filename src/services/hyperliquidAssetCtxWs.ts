@@ -1,4 +1,4 @@
-﻿import { type HyperliquidWsStatus } from './hyperliquidPositionsWs'
+import { type HyperliquidWsStatus } from './hyperliquidPositionsWs'
 
 export type MarkPriceMap = Record<string, number | null>
 
@@ -6,7 +6,7 @@ type ActiveAssetCtxMessage = {
   channel?: string
   data?: {
     coin?: string
-    markPx?: string | number
+    ctx?: { markPx?: string | number; [key: string]: unknown }
     [key: string]: unknown
   }
 }
@@ -65,7 +65,6 @@ export class HyperliquidAssetCtxWs {
           const subscription: any = {
             type: 'activeAssetCtx',
             coin: coin,
-            user: this.walletAddress,
           }
 
           this.ws?.send(
@@ -91,7 +90,7 @@ export class HyperliquidAssetCtxWs {
         const coin = typeof data.coin === 'string' ? data.coin : null
         if (!coin) return
 
-        const markPx = toNumber(data.markPx)
+        const markPx = toNumber(data.ctx?.markPx)
         this.markPrices[coin] = markPx
 
         this.onStatus?.('subscribed')
@@ -140,7 +139,6 @@ export class HyperliquidAssetCtxWs {
         const subscription: any = {
           type: 'activeAssetCtx',
           coin: coin,
-          user: this.walletAddress,
         }
 
         this.ws.send(
