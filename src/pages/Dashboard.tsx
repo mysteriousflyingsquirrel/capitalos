@@ -1056,10 +1056,10 @@ function Dashboard() {
         {/* Page Title */}
         <Heading level={1}>Dashboard</Heading>
         
-        {/* First Row: Total Net Worth + Monthly Cashflow (Inflow/Outflow) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Total Net Worth KPI */}
-          <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+        {/* Total Net Worth, Performance, Monthly Cashflow — mobile: TNW, Perf, MC; desktop: TNW+MC row, then Perf */}
+        <div className="flex flex-col gap-6 md:grid md:grid-cols-2">
+          {/* Total Net Worth KPI — mobile 1st, desktop top-left */}
+          <div className="order-1 md:order-1 bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <Heading level={2}>Total Net Worth</Heading>
             </div>
@@ -1073,8 +1073,8 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* Monthly Cashflow KPI with Inflow, Outflow, and Spare Change */}
-          <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+          {/* Monthly Cashflow KPI — mobile 3rd, desktop top-right */}
+          <div className="order-3 md:order-2 bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
             <div className="mb-6 pb-4 border-b border-border-strong">
               <Heading level={2}>Monthly Cashflow</Heading>
             </div>
@@ -1111,17 +1111,18 @@ function Dashboard() {
               </div>
             </div>
           </div>
-        </div>
-        
-        {/* Performance Frame */}
-        <SectionCard title="Performance">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <PnLBox title="Daily PnL" value={dailyPnLConverted} />
-            <PnLBox title="Weekly PnL" value={weeklyPnLConverted} />
-            <PnLBox title="Monthly PnL" value={monthlyPnLConverted} />
-            <PnLBox title="YTD PnL" value={ytdPnLConverted} />
+          {/* Performance Frame — mobile 2nd, desktop full-width row below TNW+MC */}
+          <div className="order-2 md:order-3 md:col-span-2">
+            <SectionCard title="Performance">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <PnLBox title="Daily PnL" value={dailyPnLConverted} />
+                <PnLBox title="Weekly PnL" value={weeklyPnLConverted} />
+                <PnLBox title="Monthly PnL" value={monthlyPnLConverted} />
+                <PnLBox title="YTD PnL" value={ytdPnLConverted} />
+              </div>
+            </SectionCard>
           </div>
-        </SectionCard>
+        </div>
 
         {/* Second Row: Net Worth Evolution (Full Width) */}
         <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
