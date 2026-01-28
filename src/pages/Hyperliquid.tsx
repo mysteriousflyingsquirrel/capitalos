@@ -7,6 +7,7 @@ import { useData } from '../contexts/DataContext'
 import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney, formatNumber } from '../lib/currency'
 import type { PerpetualsOpenPosition, PerpetualsOpenOrder } from './NetWorth'
+import { useHyperliquidAssetCtx } from '../hooks/valuation/useHyperliquidAssetCtx'
 import { useHyperliquidWsPositions } from '../hooks/valuation/useHyperliquidWsPositions'
 
 // Helper component: SectionCard
@@ -70,6 +71,7 @@ interface PositionRow {
   pnl: number
   pnlPercent: number
   size: number
+  markPx: number | null
   amount: string // Token amount (e.g., "0.0335 ETH")
   entryPrice: number | null // Entry price
   liqPrice: number | null // Liquidation price
@@ -101,6 +103,34 @@ function Hyperliquid() {
   const positionsColumnWidths = ['100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px']
   const openOrdersColumnWidths = ['100px', '100px', '100px', '100px', '100px']
 
+  // Base positions from net worth snapshot (fallback if WS not connected)
+  const basePositions: PerpetualsOpenPosition[] = useMemo(() => {
+    const hyperliquidItem = data.netWorthItems.find(
+      (item) => item.category === 'Perpetuals' && item.platform === 'Hyperliquid'
+    )
+    return Array.isArray(hyperliquidItem?.perpetualsData?.openPositions) ? hyperliquidItem!.perpetualsData!.openPositions : []
+  }, [data.netWorthItems])
+
+  // Replace Hyperliquid positions with WS stream (positions table only)
+  const mergedPositions: PerpetualsOpenPosition[] = useMemo(
+    () => (hlWsPositions.length > 0 ? hlWsPositions : basePositions),
+    [hlWsPositions, basePositions]
+  )
+
+  // Subscribe to active asset contexts for mark prices
+  const assetCtxCoins = useMemo(() => {
+    const unique = new Set<string>()
+    for (const p of mergedPositions) {
+      if (p?.ticker) unique.add(p.ticker)
+    }
+    return Array.from(unique).sort()
+  }, [mergedPositions])
+
+  const { markPrices } = useHyperliquidAssetCtx({
+    walletAddress: hyperliquidWalletAddress,
+    coins: assetCtxCoins,
+  })
+
   // Extract PnL values from Hyperliquid portfolio data
   const portfolioPnL = useMemo(() => {
     const hyperliquidItem = data.netWorthItems.find(
@@ -118,16 +148,6 @@ function Hyperliquid() {
 
   // Extract open positions from all perpetuals items
   const positions: PositionRow[] = useMemo(() => {
-    const hyperliquidItem = data.netWorthItems.find(
-      item => item.category === 'Perpetuals' && item.platform === 'Hyperliquid'
-    )
-    const basePositions: PerpetualsOpenPosition[] = Array.isArray(hyperliquidItem?.perpetualsData?.openPositions)
-      ? hyperliquidItem!.perpetualsData!.openPositions
-      : []
-
-    // Replace Hyperliquid positions with WS stream (positions table only)
-    const mergedPositions: PerpetualsOpenPosition[] = hlWsPositions.length > 0 ? hlWsPositions : basePositions
-
     // Map to PositionRow format
     return mergedPositions.map((pos) => {
       const side = pos.positionSide === 'LONG' ? 'Long' : pos.positionSide === 'SHORT' ? 'Short' : 'Long'
@@ -137,6 +157,12 @@ function Hyperliquid() {
       
       const size = pos.margin + pos.pnl
       const pnlPercent = pos.margin !== 0 ? (pos.pnl / pos.margin) * 100 : 0
+
+      const markPx =
+        (pos.ticker ? markPrices[pos.ticker] : undefined) ??
+        (pos.ticker ? markPrices[pos.ticker.toUpperCase()] : undefined) ??
+        (pos.ticker ? markPrices[pos.ticker.toLowerCase()] : undefined) ??
+        null
 
       // Format token amount
       let amountStr = '-'
@@ -154,13 +180,14 @@ function Hyperliquid() {
         pnl: pos.pnl,
         pnlPercent: pnlPercent,
         size: size,
+        markPx,
         amount: amountStr,
         entryPrice: pos.entryPrice ?? null,
         liqPrice: pos.liquidationPrice ?? null,
         fundingFee: pos.fundingFeeUsd ?? null,
       }
     })
-  }, [data.netWorthItems, hlWsPositions])
+  }, [mergedPositions, markPrices])
 
   // Extract open orders from all perpetuals items
   const openOrders: OpenOrderRow[] = useMemo(() => {
@@ -304,7 +331,11 @@ function Hyperliquid() {
                         </div>
                       </td>
                       <td className="py-3 pr-4 text-left whitespace-nowrap">
-                        <div className="text2 text-text-primary">-</div>
+                        <div className="text2 text-text-primary">
+                          {position.markPx !== null && position.markPx !== undefined
+                            ? `$${formatNumber(position.markPx, 'us', { incognito: isIncognito })}`
+                            : '—'}
+                        </div>
                       </td>
                       <td className="py-3 pr-4 text-left whitespace-nowrap">
                         <div className="text2 text-text-primary">
