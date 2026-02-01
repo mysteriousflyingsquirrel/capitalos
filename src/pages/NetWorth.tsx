@@ -1327,8 +1327,10 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   const [amount, setAmount] = useState('')
   const [pricePerItem, setPricePerItem] = useState('')
   const [monthlyDepreciationChf, setMonthlyDepreciationChf] = useState('')
-  // For Crypto, Index Funds, Stocks, and Commodities, currency is always USD. For others, default to CHF.
-  const [currency, setCurrency] = useState<CurrencyCode>(isCrypto || isStockCategory ? 'USD' : 'CHF')
+  // Index Funds, Stocks, Commodities: user selects CHF, USD, or EUR. Crypto: USD. Others: default CHF.
+  const [currency, setCurrency] = useState<CurrencyCode>(
+    isCrypto || isStockCategory ? 'USD' : 'CHF'
+  )
   const [platform, setPlatform] = useState('Physical')
   const isDepreciatingAsset = category === 'Depreciating Assets'
   // For date input, use YYYY-MM-DD format (HTML5 date input format)
@@ -1464,8 +1466,8 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
       }
     }
 
-    // For Crypto, Index Funds, Stocks, and Commodities, currency is always USD
-    const itemCurrency = isCrypto || isStockCategory ? 'USD' : currency
+    // Index Funds, Stocks, Commodities: use selected currency (CHF, USD, EUR). Crypto: USD. Others: selected currency.
+    const itemCurrency = isCrypto ? 'USD' : currency
 
     // Validate monthly depreciation for Depreciating Assets
     if (isDepreciatingAsset) {
@@ -1509,7 +1511,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
     setAmount('')
     setPricePerItem('')
     setMonthlyDepreciationChf('')
-    setCurrency(isCrypto ? 'USD' : 'CHF')
+    setCurrency(isCrypto ? 'USD' : (isStockCategory ? 'USD' : 'CHF'))
     setPlatform('Physical')
     // Reset date to today in YYYY-MM-DD format
     const now = new Date()
@@ -1566,7 +1568,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
                 >
                   Currency
                 </label>
-            {(isCrypto || isStockCategory) ? (
+            {isCrypto ? (
               <div className="w-full bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-muted text-xs md:text-sm cursor-not-allowed">
                 USD
               </div>
@@ -1609,7 +1611,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
                       className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
                 htmlFor="nw-price-per-item"
                     >
-                Price per Item ({(isCrypto || isStockCategory) ? 'USD' : currency})
+                Price per Item ({isCrypto ? 'USD' : currency})
                 {isLoadingPrice && (isCrypto || isStockCategory) && (
                         <span className="ml-2 text-text-muted text-[0.4725rem] md:text-[0.567rem]">(fetching...)</span>
                       )}
@@ -1844,7 +1846,7 @@ function EditNetWorthItemModal({ item, platforms, onClose, onSave }: EditNetWort
             <div className="text-text-primary text-xs md:text-sm">{item.category}</div>
           </div>
 
-          {(isCrypto || isStockCategory) ? (
+          {isCrypto ? (
             <>
               <div>
                 <label
@@ -2323,10 +2325,8 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
 
     // Handle transaction types for supported categories
     if (canUseAdjustmentMode && transactionType) {
-      // Determine currency based on category
-      const transactionCurrency = isCrypto || isStockCategory 
-        ? 'USD' 
-        : (item.currency as CurrencyCode)
+      // Index Funds, Stocks, Commodities: use item currency (CHF, USD, EUR). Crypto: USD. Others: item currency.
+      const transactionCurrency = (isCrypto ? 'USD' : (item.currency as CurrencyCode))
       
       switch (transactionType) {
         case 'BUY':
@@ -2410,7 +2410,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
 
       const side: TransactionTab = parsedAmount > 0 ? 'buy' : 'sell'
       const absoluteAmount = Math.abs(parsedAmount)
-      const transactionCurrency = (isCrypto || isStockCategory) ? 'USD' : (item.currency as CurrencyCode)
+      const transactionCurrency = (isCrypto ? 'USD' : (item.currency as CurrencyCode))
       const pricePerItemChfValue = convert(parsedPrice, transactionCurrency)
 
       onSave({
@@ -2630,7 +2630,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
               className="block text-text-secondary text-[0.567rem] md:text-xs font-medium mb-1"
               htmlFor="tx-total-balance"
             >
-              Total balance of this transaction ({(isCrypto || isStockCategory) ? 'USD' : item.currency})
+              Total balance of this transaction ({isCrypto ? 'USD' : item.currency})
               </label>
             <input
               id="tx-total-balance"

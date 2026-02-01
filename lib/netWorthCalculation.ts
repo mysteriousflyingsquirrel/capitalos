@@ -85,13 +85,13 @@ export class NetWorthCalculationService {
           balance = 0
         }
       } else if (item.category === 'Index Funds' || item.category === 'Stocks' || item.category === 'Commodities') {
-        // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance
+        // Index Funds, Stocks, Commodities: price is already in item.currency (CHF, USD, or EUR). No conversion to USD.
         const holdings = calculateHoldings(item.id, transactions)
         const ticker = (item.name || '').trim().toUpperCase()
-        const currentPriceUsd = stockPrices[ticker] || 0
-        if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-          const valueUsd = holdings * currentPriceUsd
-          balance = valueUsd * usdToChfRate
+        const currentPrice = stockPrices[ticker] || 0
+        if (currentPrice > 0) {
+          const valueInItemCurrency = holdings * currentPrice
+          balance = convert(valueInItemCurrency, (item.currency as CurrencyCode))
         } else {
           balance = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
         }
