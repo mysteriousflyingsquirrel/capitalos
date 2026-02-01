@@ -132,17 +132,26 @@ function SectionCard({ title, titleRight, children }: SectionCardProps) {
 interface PnLBoxProps {
   title: string
   value: number | null
+  /** Snapshot date label shown top-right (e.g. "DD/MM/YYYY - hh:mm UTC") */
+  snapshotDateLabel?: string | null
 }
 
-function PnLBox({ title, value }: PnLBoxProps) {
+function PnLBox({ title, value, snapshotDateLabel }: PnLBoxProps) {
   const { isIncognito } = useIncognito()
   const { baseCurrency } = useCurrency()
   const formatCurrency = (val: number) => formatMoney(val, baseCurrency, 'ch', { incognito: isIncognito })
   
   if (value === null) {
     return (
-      <div className="bg-bg-surface-2 border border-border-subtle rounded-card p-4">
-        <div className="text-text-muted text-xs md:text-sm mb-2">{title}</div>
+      <div className="bg-bg-surface-2 border border-border-subtle rounded-card p-4 relative">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="text-text-muted text-xs md:text-sm">{title}</div>
+          {snapshotDateLabel != null && snapshotDateLabel !== '' && (
+            <div className="text-text-muted text-[0.65rem] md:text-[0.7rem] whitespace-nowrap text-right shrink-0">
+              {snapshotDateLabel}
+            </div>
+          )}
+        </div>
         <div className="text-text-muted text-lg font-medium">N/A</div>
       </div>
     )
@@ -151,8 +160,15 @@ function PnLBox({ title, value }: PnLBoxProps) {
   const isPositive = value >= 0
 
   return (
-    <div className="bg-bg-surface-2 border border-border-subtle rounded-card p-4">
-      <div className="text-text-muted text-xs md:text-sm mb-2">{title}</div>
+    <div className="bg-bg-surface-2 border border-border-subtle rounded-card p-4 relative">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="text-text-muted text-xs md:text-sm">{title}</div>
+        {snapshotDateLabel != null && snapshotDateLabel !== '' && (
+          <div className="text-text-muted text-[0.65rem] md:text-[0.7rem] whitespace-nowrap text-right shrink-0">
+            {snapshotDateLabel}
+          </div>
+        )}
+      </div>
       <TotalText variant={isPositive ? 'inflow' : 'outflow'} className="block">
         {formatCurrency(value)}
       </TotalText>
@@ -1115,10 +1131,10 @@ function Dashboard() {
           <div className="order-2 md:order-3 md:col-span-2">
             <SectionCard title="Performance">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <PnLBox title="Daily PnL" value={dailyPnLConverted} />
-                <PnLBox title="Weekly PnL" value={weeklyPnLConverted} />
-                <PnLBox title="Monthly PnL" value={monthlyPnLConverted} />
-                <PnLBox title="YTD PnL" value={ytdPnLConverted} />
+                <PnLBox title="Daily PnL" value={dailyPnLConverted} snapshotDateLabel={latestSnapshotDateTime} />
+                <PnLBox title="Weekly PnL" value={weeklyPnLConverted} snapshotDateLabel={weeklyPnLSnapshotDateTime} />
+                <PnLBox title="Monthly PnL" value={monthlyPnLConverted} snapshotDateLabel={monthlyPnLSnapshotDateTime} />
+                <PnLBox title="YTD PnL" value={ytdPnLConverted} snapshotDateLabel={ytdPnLSnapshotDateTime} />
               </div>
             </SectionCard>
           </div>
