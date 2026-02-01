@@ -132,7 +132,7 @@ function SectionCard({ title, titleRight, children }: SectionCardProps) {
 interface PnLBoxProps {
   title: string
   value: number | null
-  /** Snapshot date label shown top-right (e.g. "DD/MM/YYYY - hh:mm UTC") */
+  /** Snapshot date label shown top-right (dd/mm/yyyy) */
   snapshotDateLabel?: string | null
 }
 
@@ -530,7 +530,7 @@ function Dashboard() {
     return ((totalNetWorthChf - latestNetWorth) / latestNetWorth) * 100
   }, [totalNetWorthChf, latestSnapshot, dailyPnLChf, convert])
 
-  // Format the latest snapshot's timestamp as UTC date/time (DD/MM/YYYY - hh:mm UTC)
+  // Format the latest snapshot's timestamp as date only (dd/mm/yyyy)
   const latestSnapshotDateTime = useMemo(() => {
     if (!latestSnapshot) {
       return null
@@ -539,12 +539,10 @@ function Dashboard() {
     const year = date.getUTCFullYear()
     const month = String(date.getUTCMonth() + 1).padStart(2, '0')
     const day = String(date.getUTCDate()).padStart(2, '0')
-    const hours = String(date.getUTCHours()).padStart(2, '0')
-    const minutes = String(date.getUTCMinutes()).padStart(2, '0')
-    return `${day}/${month}/${year} - ${hours}:${minutes} UTC`
+    return `${day}/${month}/${year}`
   }, [latestSnapshot])
 
-  // Helper function to format snapshot timestamp as UTC date/time (DD/MM/YYYY - hh:mm UTC)
+  // Helper function to format snapshot timestamp as date only (dd/mm/yyyy)
   const formatSnapshotDateTime = (snapshot: NetWorthSnapshot | null): string | null => {
     if (!snapshot) {
       return null
@@ -553,9 +551,7 @@ function Dashboard() {
     const year = date.getUTCFullYear()
     const month = String(date.getUTCMonth() + 1).padStart(2, '0')
     const day = String(date.getUTCDate()).padStart(2, '0')
-    const hours = String(date.getUTCHours()).padStart(2, '0')
-    const minutes = String(date.getUTCMinutes()).padStart(2, '0')
-    return `${day}/${month}/${year} - ${hours}:${minutes} UTC`
+    return `${day}/${month}/${year}`
   }
 
   // Find the snapshot used for Monthly PnL (last snapshot from previous month)
