@@ -114,3 +114,51 @@ Capitalos is a unified wealth management web application. It tracks total net wo
 - **Adding scope**: New features, new pages, new integrations, or new data flows shall be added to this document (e.g. Section 4 and relevant Sections 6–9) before implementation. The change shall be described in a way that future developers and AI agents can enforce.
 - **Removing scope**: Removing an in-scope feature shall be reflected in this document first; then code may be removed or deprecated.
 - **Authority rule**: If it is not defined here, do not implement it.
+
+## Exchanges – Hyperliquid
+
+### Funding Health Indicator (Hyperliquid)
+
+1) New top frame:
+
+- Add a new frame at the TOP of the Hyperliquid page named: "Dashboard"
+- It appears ABOVE the existing frames: Performance, Positions, Open Orders.
+- Purpose: comment the "health" of each open position using funding rate.
+
+2) Dashboard frame rendering:
+
+- Render one line PER open Hyperliquid perp position.
+- Each line MUST contain ONLY:
+  - A colored dot (green/orange/red) at the beginning
+  - One sentence (exactly one sentence, no extra stats)
+- No tooltips, no hover behavior, no secondary text.
+- Default sorting: highest risk first (RED, then ORANGE, then GREEN).
+
+3) Dashboard health messages (exact strings):
+
+- GREEN: "Funding favors your {TICKER} position. No pressure."
+- ORANGE: "Funding is mildly against your {TICKER} position. Stay alert."
+- RED: "High funding pressure on {TICKER}. Consider de-risking or SL in profit."
+- UNKNOWN (missing data): "Funding data unavailable for {TICKER}."
+
+Note: UNKNOWN uses "-" in table (see below). Dot can be neutral/gray if the doc supports it, otherwise just "neutral dot".
+
+4) Positions table additions:
+
+- Add column: "Funding Signal" (shows the dot or "-" if unavailable)
+- Add column: "Funding Rate" (raw signed percent value or "-" if unavailable)
+- Missing/unavailable data MUST be shown as "-" (dash). Do not show blank or 0.
+
+5) Scope / Non-goals:
+
+- Hyperliquid only (no Kraken/MEXC/Aster yet).
+- No bot alerts / no automation in this requirement.
+- No tooltips, no drill-down details.
+
+**Acceptance Criteria:**
+
+- Dashboard frame exists above Performance/Positions/Open Orders.
+- Dashboard shows one line per open position with ONLY dot + one sentence.
+- No tooltips for this feature.
+- Positions table has Funding Signal and Funding Rate columns.
+- Missing values show "-" and rendering never crashes.

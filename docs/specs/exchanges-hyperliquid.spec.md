@@ -187,6 +187,80 @@ This affects which DEXs are queried for positions and equity.
 4. **Missing wallet address**:
    - If wallet address is not configured, Hyperliquid Perpetuals item MUST be absent or contain empty arrays (no crash).
 
+## Funding Health Indicator
+
+### UI: Dashboard Frame (Funding Health)
+
+- Add new top frame named "Dashboard" above existing frames (Performance, Positions, Open Orders).
+- It lists one line per open perp position.
+- Each line contains ONLY:
+  - colored dot (🟢🟠🔴)
+  - single sentence (no additional data, no badges, no numbers)
+- Sorting: RED first, then ORANGE, then GREEN.
+- No tooltips, no hover state requirements.
+
+### Computation: Funding Signal v1
+
+Define the thresholds clearly. These rules apply to Hyperliquid positions.
+
+**Definitions:**
+
+- `fundingRatePct` = funding rate expressed in PERCENT (e.g. +0.05% equals 0.05)
+- `side` is LONG or SHORT
+
+**Rules:**
+
+- **LONG:**
+  - GREEN if `fundingRatePct <= 0.00`
+  - ORANGE if `0.00 < fundingRatePct < 0.05`
+  - RED if `fundingRatePct >= 0.05`
+- **SHORT:**
+  - GREEN if `fundingRatePct >= 0.00`
+  - ORANGE if `-0.05 < fundingRatePct < 0.00`
+  - RED if `fundingRatePct <= -0.05`
+- **UNKNOWN:**
+  - if `fundingRatePct` is missing OR `side` is missing => UNKNOWN
+
+**Message mapping (exact strings):**
+
+- GREEN: "Funding favors your {TICKER} position. No pressure."
+- ORANGE: "Funding is mildly against your {TICKER} position. Stay alert."
+- RED: "High funding pressure on {TICKER}. Consider de-risking or SL in profit."
+- UNKNOWN: "Funding data unavailable for {TICKER}."
+
+### UI: Positions Table Columns
+
+Add/extend the table spec to include:
+
+- **Column "Funding Signal":**
+  - shows colored dot for GREEN/ORANGE/RED
+  - shows "-" for UNKNOWN/missing
+- **Column "Funding Rate":**
+  - shows signed percent string if available
+  - shows "-" if missing
+
+**Mandatory behavior:**
+
+- If any funding-related field is not available, display "-" (dash), never blank, never 0.
+- Rendering must not crash on null/undefined funding data.
+
+### Data Source Notes
+
+Document where `fundingRatePct` comes from in the Hyperliquid integration:
+
+- Reference the existing REST/WS data path used by the codebase.
+- If currently not available in the normalized position model, state that it MUST be added to the position data model for the UI to consume.
+
+Do NOT invent endpoints; describe at a high level and align with existing doc wording.
+
+### Acceptance Criteria
+
+- Dashboard frame appears above existing frames.
+- Dashboard lines contain only dot + one sentence, with exact strings as specified.
+- No tooltips for this feature.
+- Positions table includes Funding Signal + Funding Rate.
+- Missing data displays "-" everywhere relevant.
+
 ## Future Notes (optional, clearly marked as PROPOSAL)
 **PROPOSAL**: Add WS auto-reconnect with exponential backoff and make the “mark price” source explicit in UI copy (e.g., “Mark”).
 

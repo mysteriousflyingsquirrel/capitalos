@@ -1,0 +1,31 @@
+CAPITALOS DEVELOPMENT WORKFLOW (MANDATORY)
+
+For ANY NEW FEATURE (UI, logic, indicators, dashboards, integrations):
+
+WORKFLOW:
+1) Do NOT implement code immediately.
+2) First ensure the feature is defined in /docs/requirements.md.
+3) Then ensure a detailed engineering spec exists in /docs/specs/*.spec.md.
+4) Then ensure a machine-readable PRD exists in /docs/prd/*.prd.json.
+5) ONLY after steps 2–4 are completed and approved, implementation may begin.
+
+SOURCE OF TRUTH HIERARCHY:
+1) PRD (.prd.json) – execution contract
+2) Spec (.spec.md) – clarification
+3) Requirements (requirements.md) – scope & intent
+
+IMPLEMENTATION RULES:
+- Never invent behavior not described in the PRD.
+- Never change the PRD during implementation.
+- If anything is unclear, ask to update requirements/spec/PRD first.
+- No partial implementations.
+
+STRICT MODE:
+Any feature related to money, trading, PnL, positions, risk, or indicators MUST follow the full workflow. No exceptions.
+
+EXCEPTIONS:
+- Small refactors or bugfixes may skip PRD.
+- If skipping PRD, explicitly state why.
+
+ENFORCEMENT:
+If the user asks to implement a feature that is not yet defined in requirements/spec/PRD, stop and ask which document to create or update first.
