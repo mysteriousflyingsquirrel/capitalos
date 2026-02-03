@@ -78,6 +78,7 @@ interface PositionRow {
   liqPrice: number | null // Liquidation price
   fundingFee: number | null // Funding fee in USD
   fundingRatePct: number | null // current funding rate in percent (e.g., +0.05% => 0.05)
+  openInterest: number | null // market open interest for the asset (USD notional)
 }
 
 // Open Order row data interface
@@ -102,7 +103,7 @@ function Hyperliquid() {
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
 
   // Column widths - easily adjustable per column
-  const positionsColumnWidths = ['100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px']
+  const positionsColumnWidths = ['100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px']
   const openOrdersColumnWidths = ['100px', '100px', '100px', '100px', '100px']
 
   // Base positions from net worth snapshot (fallback if WS not connected)
@@ -130,6 +131,7 @@ function Hyperliquid() {
         ...rest,
         ...p,
         fundingRatePct: p.fundingRatePct ?? rest?.fundingRatePct ?? null,
+        openInterest: p.openInterest ?? rest?.openInterest ?? null,
       } as PerpetualsOpenPosition)
     }
     return merged
@@ -208,30 +210,41 @@ function Hyperliquid() {
         liqPrice: pos.liquidationPrice ?? null,
         fundingFee: pos.fundingFeeUsd ?? null,
         fundingRatePct: pos.fundingRatePct ?? null,
+        openInterest: pos.openInterest ?? null,
       }
     })
   }, [mergedPositions, markPrices])
+
+  /** Elevated OI threshold (USD notional): when base signal is ORANGE and OI > this, display RED. */
+  const OPEN_INTEREST_ELEVATED_THRESHOLD = 1_000_000
 
   type FundingSignal = 'GREEN' | 'ORANGE' | 'RED' | 'UNKNOWN'
 
   function computeFundingSignal(args: {
     fundingRatePct: number | null
     sideRaw: 'LONG' | 'SHORT' | null
+    openInterest: number | null
   }): FundingSignal {
-    const { fundingRatePct, sideRaw } = args
+    const { fundingRatePct, sideRaw, openInterest } = args
     if (fundingRatePct === null || fundingRatePct === undefined) return 'UNKNOWN'
     if (sideRaw === null) return 'UNKNOWN'
 
+    let base: FundingSignal
     if (sideRaw === 'LONG') {
-      if (fundingRatePct <= 0.0) return 'GREEN'
-      if (fundingRatePct < 0.05) return 'ORANGE'
-      return 'RED'
+      if (fundingRatePct <= 0.0) base = 'GREEN'
+      else if (fundingRatePct < 0.05) base = 'ORANGE'
+      else base = 'RED'
+    } else {
+      if (fundingRatePct >= 0.0) base = 'GREEN'
+      else if (fundingRatePct > -0.05) base = 'ORANGE'
+      else base = 'RED'
     }
 
-    // Short
-    if (fundingRatePct >= 0.0) return 'GREEN'
-    if (fundingRatePct > -0.05) return 'ORANGE'
-    return 'RED'
+    // Open interest adjustment: ORANGE + elevated OI => RED
+    if (base === 'ORANGE' && openInterest != null && openInterest > OPEN_INTEREST_ELEVATED_THRESHOLD) {
+      return 'RED'
+    }
+    return base
   }
 
   function fundingMessage(args: { signal: FundingSignal; ticker: string }): string {
@@ -244,7 +257,7 @@ function Hyperliquid() {
 
   const dashboardLines = useMemo(() => {
     const lines = positions.map((p) => {
-      const signal = computeFundingSignal({ fundingRatePct: p.fundingRatePct, sideRaw: p.sideRaw })
+      const signal = computeFundingSignal({ fundingRatePct: p.fundingRatePct, sideRaw: p.sideRaw, openInterest: p.openInterest })
       return {
         id: p.id,
         token: p.token,
@@ -385,6 +398,9 @@ function Hyperliquid() {
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Funding Rate</Heading>
                   </th>
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Open Interest</Heading>
+                  </th>
                   <th className="text-left pb-3 whitespace-nowrap">
                     <Heading level={4}>Funding Fee</Heading>
                   </th>
@@ -393,7 +409,7 @@ function Hyperliquid() {
               <tbody>
                 {positions.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-8 text-center">
+                    <td colSpan={12} className="py-8 text-center">
                       <div className="text2 text-text-muted">No positions</div>
                     </td>
                   </tr>
@@ -401,7 +417,7 @@ function Hyperliquid() {
                   positions.map((position) => {
                     const isLong = position.side === 'Long'
                     const pnlIsPositive = position.pnl >= 0
-                    const signal = computeFundingSignal({ fundingRatePct: position.fundingRatePct, sideRaw: position.sideRaw })
+                    const signal = computeFundingSignal({ fundingRatePct: position.fundingRatePct, sideRaw: position.sideRaw, openInterest: position.openInterest })
                     const signalDotColor =
                       signal === 'GREEN'
                         ? '#2ECC71'
@@ -480,6 +496,13 @@ function Hyperliquid() {
                         <div className="text2 text-text-primary">
                           {position.fundingRatePct !== null && position.fundingRatePct !== undefined
                             ? `${position.fundingRatePct > 0 ? '+' : ''}${position.fundingRatePct.toFixed(4)}%`
+                            : '-'}
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4 text-left whitespace-nowrap">
+                        <div className="text2 text-text-primary">
+                          {position.openInterest !== null && position.openInterest !== undefined
+                            ? formatCurrency(position.openInterest)
                             : '-'}
                         </div>
                       </td>

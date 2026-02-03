@@ -20,6 +20,11 @@ IMPLEMENTATION RULES:
 - If anything is unclear, ask to update requirements/spec/PRD first.
 - No partial implementations.
 
+COMPLETION VERIFICATION (before marking a feature complete):
+- Before considering a feature complete, explicitly verify the implementation against the PRD and the relevant spec.
+- List: acceptance criteria met, exact copy/thresholds/columns, and missing-data behavior.
+- Do not mark complete without this verification.
+
 STRICT MODE:
 Any feature related to money, trading, PnL, positions, risk, or indicators MUST follow the full workflow. No exceptions.
 

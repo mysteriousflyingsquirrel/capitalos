@@ -199,7 +199,7 @@ This affects which DEXs are queried for positions and equity.
 - Sorting: RED first, then ORANGE, then GREEN.
 - No tooltips, no hover state requirements.
 
-### Computation: Funding Signal v1
+### Computation: Funding Signal v1 (with Open Interest)
 
 Define the thresholds clearly. These rules apply to Hyperliquid positions.
 
@@ -207,8 +207,10 @@ Define the thresholds clearly. These rules apply to Hyperliquid positions.
 
 - `fundingRatePct` = funding rate expressed in PERCENT (e.g. +0.05% equals 0.05)
 - `side` is LONG or SHORT
+- `openInterest` = market open interest for the asset (from same source as funding, e.g. metaAndAssetCtxs). Optional; if missing, OI is not used in the formula.
+- **Elevated OI**: `openInterest` is above a configurable threshold (e.g. 1_000_000 USD notional or a per-asset cap). The exact threshold is implementation-defined; document it in Data Source Notes.
 
-**Rules:**
+**Funding-only rules (base signal):**
 
 - **LONG:**
   - GREEN if `fundingRatePct <= 0.00`
@@ -220,6 +222,12 @@ Define the thresholds clearly. These rules apply to Hyperliquid positions.
   - RED if `fundingRatePct <= -0.05`
 - **UNKNOWN:**
   - if `fundingRatePct` is missing OR `side` is missing => UNKNOWN
+
+**Open interest adjustment:**
+
+- If the base signal is **ORANGE** and `openInterest` is present and **elevated**, the **displayed signal** SHALL be **RED** (one step worse).
+- If OI is missing or not elevated, the displayed signal equals the base signal.
+- GREEN and RED base signals are unchanged by OI.
 
 **Message mapping (exact strings):**
 
@@ -238,6 +246,9 @@ Add/extend the table spec to include:
 - **Column "Funding Rate":**
   - shows signed percent string if available
   - shows "-" if missing
+- **Column "Open Interest":**
+  - shows market OI for the asset (formatted, e.g. USD notional or raw) if available
+  - shows "-" if missing
 
 **Mandatory behavior:**
 
@@ -246,19 +257,17 @@ Add/extend the table spec to include:
 
 ### Data Source Notes
 
-Document where `fundingRatePct` comes from in the Hyperliquid integration:
-
-- Reference the existing REST/WS data path used by the codebase.
-- If currently not available in the normalized position model, state that it MUST be added to the position data model for the UI to consume.
-
-Do NOT invent endpoints; describe at a high level and align with existing doc wording.
+- **fundingRatePct**: From Hyperliquid `metaAndAssetCtxs` (asset context `funding` × 100). Same REST path as positions; attach per-asset to the position data model.
+- **openInterest**: From the same `metaAndAssetCtxs` response; field `openInterest` per asset (notional or token OI as returned by the API). MUST be added to the position data model for the UI and for the OI-adjusted signal. If missing, signal uses funding (and side) only; display "-" in the Open Interest column.
+- **Elevated OI threshold**: Implementation-defined (e.g. openInterest > 1_000_000 or a per-asset value). Document the chosen threshold in code or config so it can be tuned later.
 
 ### Acceptance Criteria
 
 - Dashboard frame appears above existing frames.
 - Dashboard lines contain only dot + one sentence, with exact strings as specified.
 - No tooltips for this feature.
-- Positions table includes Funding Signal + Funding Rate.
+- Positions table includes Funding Signal, Funding Rate, and Open Interest.
+- When base signal is ORANGE and open interest is elevated, displayed signal is RED.
 - Missing data displays "-" everywhere relevant.
 
 ## Future Notes (optional, clearly marked as PROPOSAL)

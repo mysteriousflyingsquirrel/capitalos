@@ -13,7 +13,7 @@
       "Performance windows (24h/7d/30d/90d)",
       "Error handling and missing-credential behavior",
       "Dashboard frame (top of Hyperliquid page)",
-      "Positions table columns: Funding Signal, Funding Rate",
+      "Positions table columns: Funding Signal, Funding Rate, Open Interest",
       "Funding signal computation (LONG/SHORT thresholds)",
       "Exact message strings and missing-data display as \"-\""
     ],
@@ -31,7 +31,8 @@
     "Dashboard frame exists above Performance/Positions/Open Orders.",
     "Dashboard shows one line per open position with ONLY dot + one sentence.",
     "No tooltips for funding health feature.",
-    "Positions table has Funding Signal and Funding Rate columns.",
+    "Positions table has Funding Signal, Funding Rate, and Open Interest columns.",
+    "When base signal is ORANGE and open interest is elevated, displayed signal is RED.",
     "Missing values show \"-\" and rendering never crashes."
   ],
   "data": {
@@ -42,7 +43,9 @@
     "markPriceSource": "useHyperliquidAssetCtx (asset context stream)",
     "fundingHealth": {
       "required": ["fundingRatePct", "side"],
-      "missingBehavior": "Display \"-\" in UI; do not crash. fundingRatePct must be added to position data model if not already present (reference existing REST/WS data path)."
+      "optional": ["openInterest"],
+      "missingBehavior": "Display \"-\" in UI; do not crash. fundingRatePct and openInterest from metaAndAssetCtxs; add to position data model if not present.",
+      "elevatedOiThreshold": "Implementation-defined (e.g. openInterest > 1_000_000)."
     }
   },
   "logic": {
@@ -64,7 +67,8 @@
         "ORANGE": "-0.05 < fundingRatePct < 0.00",
         "RED": "fundingRatePct <= -0.05"
       },
-      "UNKNOWN": "fundingRatePct is missing OR side is missing"
+      "UNKNOWN": "fundingRatePct is missing OR side is missing",
+      "openInterestAdjustment": "If base signal is ORANGE and openInterest is present and elevated, displayed signal is RED; otherwise displayed = base. GREEN/RED unchanged by OI."
     }
   },
   "ui": {
@@ -91,7 +95,8 @@
     },
     "tableColumns": [
       { "id": "fundingSignal", "label": "Funding Signal", "emptyValue": "-" },
-      { "id": "fundingRate", "label": "Funding Rate", "emptyValue": "-" }
+      { "id": "fundingRate", "label": "Funding Rate", "emptyValue": "-" },
+      { "id": "openInterest", "label": "Open Interest", "emptyValue": "-" }
     ],
     "missingDataRule": "Display \"-\" (dash); never blank, never 0. Do not crash on null/undefined."
   }

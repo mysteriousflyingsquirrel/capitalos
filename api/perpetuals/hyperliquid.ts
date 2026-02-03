@@ -40,6 +40,7 @@ interface PerpetualsOpenPosition {
   liquidationPrice?: number | null // liquidation price
   fundingFeeUsd?: number | null // total funding fee in USD (cumFunding.sinceOpen)
   fundingRatePct?: number | null // current funding rate in percent (e.g., +0.05% => 0.05)
+  openInterest?: number | null // market open interest for the asset (from metaAndAssetCtxs; same units as API)
 }
 
 interface ExchangeBalance {
@@ -207,6 +208,23 @@ function buildFundingRatePctMap(args: { universe: any[]; assetCtxs: any[] }): Re
   return result
 }
 
+function buildOpenInterestMap(args: { universe: any[]; assetCtxs: any[] }): Record<string, number | null> {
+  const { universe, assetCtxs } = args
+  const result: Record<string, number | null> = {}
+
+  const n = Math.min(universe.length, assetCtxs.length)
+  for (let i = 0; i < n; i++) {
+    const coin = extractSymbol(universe[i])
+    if (!coin) continue
+
+    const oi = toFiniteNumber(assetCtxs[i]?.openInterest)
+    result[coin] = oi
+    result[coin.toUpperCase()] = oi
+  }
+
+  return result
+}
+
 async function dexContainsSilver(dex: string): Promise<boolean> {
   try {
     const requestBody: any = {
@@ -312,9 +330,10 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
     
     for (const dex of dexsToQuery) {
       try {
-        // Fetch asset contexts to get current funding rate (and meta universe)
+        // Fetch asset contexts to get current funding rate, open interest (and meta universe)
         const metaAndAssetCtxs = await fetchMetaAndAssetCtxs(dex)
         const fundingRatePctMap = metaAndAssetCtxs ? buildFundingRatePctMap(metaAndAssetCtxs) : {}
+        const openInterestMap = metaAndAssetCtxs ? buildOpenInterestMap(metaAndAssetCtxs) : {}
 
         // Fetch meta data (fallback) to get szDecimals for formatting
         const meta = metaAndAssetCtxs ? { universe: metaAndAssetCtxs.universe } : await fetchMeta(dex)
@@ -456,6 +475,11 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             fundingRatePctMap[symbol.toUpperCase()] ??
             null
 
+          const openInterest =
+            openInterestMap[symbol] ??
+            openInterestMap[symbol.toUpperCase()] ??
+            null
+
           allPositions.push({
             // Keep id stable so UI can overlay WS positions onto REST (WS uses: hyperliquid-pos-${coin}-${dex||default})
             id: `hyperliquid-pos-${symbol}-${dex || 'default'}`,
@@ -470,6 +494,7 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             liquidationPrice,
             fundingFeeUsd,
             fundingRatePct,
+            openInterest,
           })
         }
       } catch (error) {

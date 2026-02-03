@@ -123,7 +123,7 @@ Capitalos is a unified wealth management web application. It tracks total net wo
 
 - Add a new frame at the TOP of the Hyperliquid page named: "Dashboard"
 - It appears ABOVE the existing frames: Performance, Positions, Open Orders.
-- Purpose: comment the "health" of each open position using funding rate.
+- Purpose: comment the "health" of each open position using funding rate and open interest.
 
 2) Dashboard frame rendering:
 
@@ -147,6 +147,7 @@ Note: UNKNOWN uses "-" in table (see below). Dot can be neutral/gray if the doc 
 
 - Add column: "Funding Signal" (shows the dot or "-" if unavailable)
 - Add column: "Funding Rate" (raw signed percent value or "-" if unavailable)
+- Add column: "Open Interest" (market open interest for the asset, or "-" if unavailable)
 - Missing/unavailable data MUST be shown as "-" (dash). Do not show blank or 0.
 
 5) Scope / Non-goals:
@@ -155,10 +156,16 @@ Note: UNKNOWN uses "-" in table (see below). Dot can be neutral/gray if the doc 
 - No bot alerts / no automation in this requirement.
 - No tooltips, no drill-down details.
 
+6) Open interest in the formula:
+
+- The funding health signal MAY take open interest (OI) into account: when the funding-only signal would be ORANGE and market open interest for that asset is "elevated" (above a defined threshold), the displayed signal SHALL be RED (one step worse). Otherwise the signal is based on funding (and side) only.
+- Open interest is per-asset market OI from the same data source as funding (e.g. Hyperliquid metaAndAssetCtxs). If OI is missing, the formula uses funding (and side) only.
+
 **Acceptance Criteria:**
 
 - Dashboard frame exists above Performance/Positions/Open Orders.
 - Dashboard shows one line per open position with ONLY dot + one sentence.
 - No tooltips for this feature.
-- Positions table has Funding Signal and Funding Rate columns.
+- Positions table has Funding Signal, Funding Rate, and Open Interest columns.
+- When funding-only signal is ORANGE and OI is elevated, displayed signal is RED.
 - Missing values show "-" and rendering never crashes.
