@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "id": "market-data",
+  "title": "Market Data (FX, Crypto, Stock)",
+  "source": "docs/requirements.md § 8 Data & SSOT, § 9 Exchange & Market Data Rules",
+  "specRef": "docs/specs/market-data.spec.md",
+  "scope": {
+    "inScope": [
+      "FX rate sources and caching",
+      "Crypto prices and USD→CHF rate (CryptoCompare)",
+      "Stock/ETF/commodity prices (Yahoo Finance via RapidAPI)",
+      "Refresh intervals, TTL, rate limiting",
+      "Error handling and UI fallbacks"
+    ],
+    "outOfScope": [
+      "Perpetuals exchange APIs (see exchange specs)"
+    ]
+  },
+  "acceptanceCriteria": [
+    "When exchange rates were fetched within last 24h for same base, getExchangeRates(base) MUST return cached values without network call.",
+    "Two back-to-back Yahoo Finance fetches MUST be delayed by at least 1 second.",
+    "If CryptoCompare requests fail, net worth calculations MUST still render finite totals (transaction-derived valuations)."
+  ],
+  "data": {
+    "fx": {
+      "source": "exchangeRateService.ts → getExchangeRates(base)",
+      "upstream": "https://api.exchangerate-api.com/v4/latest/{base}",
+      "cacheKey": "capitalos_exchange_rates_v1",
+      "ttlHours": 24,
+      "fallback": "Cached if base matches; else hardcoded {CHF:1, EUR:1, USD:1}"
+    },
+    "crypto": {
+      "source": "lib/cryptoCompare.ts",
+      "pricesEndpoint": "fsyms...&tsyms=USD",
+      "usdChfEndpoint": "fsym=USD&tsyms=CHF",
+      "consumers": "cryptoCompareService.ts, DataContext, Dashboard"
+    },
+    "stock": {
+      "source": "yahooFinanceService.ts → fetchStockPrices(tickers, apiKey)",
+      "host": "apidojo-yahoo-finance-v1.p.rapidapi.com",
+      "minRequestIntervalMs": 1000
+    }
+  },
+  "logic": {
+    "refreshIntervalMs": 300000,
+    "yahooRateLimitMs": 1000,
+    "cryptoFailure": "Return empty price maps and/or null rates; callers handle.",
+    "yahooFailure": "Return {} and log; MUST NOT throw to UI."
+  }
+}

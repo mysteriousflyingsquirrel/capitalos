@@ -51,6 +51,7 @@ export interface PerpetualsOpenPosition {
   entryPrice?: number | null // entry price
   liquidationPrice?: number | null // liquidation price
   fundingFeeUsd?: number | null // total funding fee in USD (cumFunding.sinceOpen)
+  fundingRatePct?: number | null // current funding rate in percent (e.g., +0.05% => 0.05)
 }
 
 export interface ExchangeBalance {

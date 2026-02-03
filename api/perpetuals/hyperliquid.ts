@@ -39,6 +39,7 @@ interface PerpetualsOpenPosition {
   entryPrice?: number | null // entry price
   liquidationPrice?: number | null // liquidation price
   fundingFeeUsd?: number | null // total funding fee in USD (cumFunding.sinceOpen)
+  fundingRatePct?: number | null // current funding rate in percent (e.g., +0.05% => 0.05)
 }
 
 interface ExchangeBalance {
@@ -75,6 +76,16 @@ interface PerpetualsData {
 }
 
 const HYPERLIQUID_BASE_URL = 'https://api.hyperliquid.xyz'
+
+function toFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'string') {
+    const n = parseFloat(value)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
 
 async function fetchAllPerpDexs(): Promise<string[]> {
   try {
@@ -135,6 +146,65 @@ function extractSymbol(universeEntry: any): string | null {
     return universeEntry.name || universeEntry.coin || universeEntry.token || universeEntry.symbol || null
   }
   return null
+}
+
+async function fetchMetaAndAssetCtxs(dex: string = ''): Promise<{ universe: any[]; assetCtxs: any[] } | null> {
+  try {
+    const requestBody: any = {
+      type: 'metaAndAssetCtxs',
+    }
+
+    if (dex) {
+      requestBody.dex = dex
+    }
+
+    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    const data = await response.json()
+    if (!Array.isArray(data) || data.length < 2) {
+      return null
+    }
+
+    const meta = data[0]
+    const assetCtxs = data[1]
+
+    const universe: any[] = Array.isArray(meta?.universe) ? meta.universe : []
+    const assetCtxsArr: any[] = Array.isArray(assetCtxs) ? assetCtxs : []
+
+    return { universe, assetCtxs: assetCtxsArr }
+  } catch {
+    return null
+  }
+}
+
+function buildFundingRatePctMap(args: { universe: any[]; assetCtxs: any[] }): Record<string, number | null> {
+  const { universe, assetCtxs } = args
+  const result: Record<string, number | null> = {}
+
+  const n = Math.min(universe.length, assetCtxs.length)
+  for (let i = 0; i < n; i++) {
+    const coin = extractSymbol(universe[i])
+    if (!coin) continue
+
+    const fundingRaw = toFiniteNumber(assetCtxs[i]?.funding)
+    const fundingRatePct = fundingRaw === null ? null : fundingRaw * 100
+
+    // Store both exact and uppercase keys for robustness
+    result[coin] = fundingRatePct
+    result[coin.toUpperCase()] = fundingRatePct
+  }
+
+  return result
 }
 
 async function dexContainsSilver(dex: string): Promise<boolean> {
@@ -242,8 +312,12 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
     
     for (const dex of dexsToQuery) {
       try {
-        // Fetch meta data to get szDecimals for formatting
-        const meta = await fetchMeta(dex)
+        // Fetch asset contexts to get current funding rate (and meta universe)
+        const metaAndAssetCtxs = await fetchMetaAndAssetCtxs(dex)
+        const fundingRatePctMap = metaAndAssetCtxs ? buildFundingRatePctMap(metaAndAssetCtxs) : {}
+
+        // Fetch meta data (fallback) to get szDecimals for formatting
+        const meta = metaAndAssetCtxs ? { universe: metaAndAssetCtxs.universe } : await fetchMeta(dex)
         const szDecimalsMap: Record<string, number> = {}
         
         if (meta?.universe) {
@@ -336,7 +410,7 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             } else if (typeof position.entryPx === 'number') {
               entryPrice = position.entryPx
             }
-            if (isNaN(entryPrice) || !isFinite(entryPrice)) {
+            if (entryPrice === null || isNaN(entryPrice) || !isFinite(entryPrice)) {
               entryPrice = null
             }
           }
@@ -349,7 +423,7 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             } else if (typeof position.liquidationPx === 'number') {
               liquidationPrice = position.liquidationPx
             }
-            if (isNaN(liquidationPrice) || !isFinite(liquidationPrice)) {
+            if (liquidationPrice === null || isNaN(liquidationPrice) || !isFinite(liquidationPrice)) {
               liquidationPrice = null
             }
           }
@@ -377,8 +451,14 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             }
           }
 
+          const fundingRatePct =
+            fundingRatePctMap[symbol] ??
+            fundingRatePctMap[symbol.toUpperCase()] ??
+            null
+
           allPositions.push({
-            id: `hyperliquid-pos-${symbol}-${dex || 'default'}-${Date.now()}`,
+            // Keep id stable so UI can overlay WS positions onto REST (WS uses: hyperliquid-pos-${coin}-${dex||default})
+            id: `hyperliquid-pos-${symbol}-${dex || 'default'}`,
             ticker: symbol,
             margin,
             pnl: unrealizedPnl,
@@ -389,6 +469,7 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             entryPrice,
             liquidationPrice,
             fundingFeeUsd,
+            fundingRatePct,
           })
         }
       } catch (error) {
@@ -559,7 +640,7 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
             } else if (typeof order.limitPx === 'number') {
               limitPx = order.limitPx
             }
-            if (isNaN(limitPx) || !isFinite(limitPx)) {
+            if (limitPx === null || isNaN(limitPx) || !isFinite(limitPx)) {
               limitPx = null
             }
           }
@@ -570,7 +651,7 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
             } else if (typeof order.triggerPx === 'number') {
               triggerPx = order.triggerPx
             }
-            if (isNaN(triggerPx) || !isFinite(triggerPx)) {
+            if (triggerPx === null || isNaN(triggerPx) || !isFinite(triggerPx)) {
               triggerPx = null
             }
           }

@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "id": "valuation-engine",
+  "title": "Valuation Engine (Net Worth SSOT)",
+  "source": "docs/requirements.md § 8 Data & SSOT (Valuation)",
+  "specRef": "docs/specs/valuation-engine.spec.md",
+  "scope": {
+    "inScope": [
+      "SSOT entry point for net worth valuation (legacy calculateTotals)",
+      "Computation ordering and conversion rules",
+      "Which pages consume which engine",
+      "Snapshot reuse of valuation logic"
+    ],
+    "outOfScope": [
+      "New ValuationEngine/ValuationProvider as production path (not yet wired in App)"
+    ]
+  },
+  "acceptanceCriteria": [
+    "For fixed item/transaction set and fixed price maps, calculateTotals MUST return the same totals across invocations.",
+    "Perpetuals totals MUST be derived from exchangeBalance only.",
+    "If any intermediate calculation produces NaN/Infinity, final totals MUST remain finite."
+  ],
+  "data": {
+    "ssotEntryPoint": "lib/netWorthCalculation.ts → NetWorthCalculationService.calculateTotals",
+    "dependsOn": ["lib/balanceCalculation.ts", "cryptoPrices", "stockPrices", "usdToChfRate", "convert()"]
+  },
+  "logic": {
+    "ordering": [
+      "Initialize all category totals to 0",
+      "For each item: compute CHF balance (Crypto: price×coinAmount→USD→CHF; Perpetuals: exchangeBalance USD→CHF; Stock-like: holdings×price→convert→CHF; else calculateBalanceChf)",
+      "Guard NaN/Infinity per item as 0",
+      "Sum category totals to totalNetWorthChf"
+    ],
+    "cryptoConversion": "usdToChfRate if available; else convert(usdValue, 'USD').",
+    "rounding": "No rounding until UI formatting (toFixed/Intl.NumberFormat)."
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "id": "loading-ui",
+  "title": "Loading UI (Auth Gate)",
+  "source": "docs/requirements.md § 4 Auth, docs/specs/loading-ui.spec.md",
+  "specRef": "docs/specs/loading-ui.spec.md",
+  "scope": {
+    "inScope": [
+      "When loading screen appears/disappears",
+      "Definition of 'loaded' (AuthGate READY, hasInitialDataLoaded)",
+      "Random message rotation (1700ms interval)",
+      "Slow/failed fetch behavior and timeouts",
+      "Quota-exceeded and fatal error UI"
+    ],
+    "outOfScope": []
+  },
+  "acceptanceCriteria": [
+    "When AuthGate is SUBSCRIBING, loading UI MUST be visible and main routes MUST NOT render.",
+    "While loading persists > 2s, displayed message MUST change at least once (1700ms interval).",
+    "When safe mode/quota exceeded is set, UI MUST show 'Firebase Quota Exceeded' and Sign Out button.",
+    "If hasInitialDataLoaded never becomes true, app MUST still reach READY within ~30s after subscribing."
+  ],
+  "data": {
+    "states": ["AUTH_LOADING", "SIGNED_OUT", "INITIALIZING_USER", "SUBSCRIBING", "READY", "ERROR_QUOTA_EXCEEDED", "ERROR_FATAL"],
+    "ssot": "src/lib/dataSafety/authGate.tsx",
+    "uiComponent": "src/components/AuthGateUI.tsx"
+  },
+  "logic": {
+    "showLoadingWhen": "state in AUTH_LOADING | INITIALIZING_USER | SUBSCRIBING; ProtectedRoutes show AuthGateUI when not READY and not SIGNED_OUT.",
+    "messageRotationMs": 1700,
+    "initTimeout": "INITIALIZING_USER or SUBSCRIBING > 15s => ERROR_FATAL with 'Initialization timeout: Having trouble connecting to Firebase'.",
+    "subscribeTimeout": "If hasInitialDataLoaded not observed within 30s, transition to READY anyway.",
+    "offlineRetry": "Retry buttons in error UI MUST be disabled when offline."
+  }
+}

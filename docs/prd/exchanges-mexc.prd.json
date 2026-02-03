@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "id": "exchanges-mexc",
+  "title": "MEXC Exchange Integration",
+  "source": "docs/requirements.md § 4 Perpetuals, § 9 Perpetuals",
+  "specRef": "docs/specs/exchanges-mexc.spec.md",
+  "scope": {
+    "inScope": [
+      "Credentials (API key + secret) and storage",
+      "REST endpoints (equity, positions, open orders, performance)",
+      "WebSocket positions streaming",
+      "Normalization into PerpetualsData",
+      "Performance window mapping and open orders contract sizing",
+      "Error handling and missing-key behavior"
+    ],
+    "outOfScope": [
+      "Deterministic Price column (PROPOSAL in spec)"
+    ]
+  },
+  "acceptanceCriteria": [
+    "If keys not configured, MEXC page MUST not crash and MUST show empty tables or N/A performance.",
+    "Performance boxes MUST display server-returned values (24h/7d/30d/90d) or 'N/A' when null.",
+    "Open order size MUST prefer computed price * (contracts*contractSize) when contract size available.",
+    "When WS emits positions, positions table MUST reflect WS data over REST snapshot."
+  ],
+  "data": {
+    "credentialsPath": "users/{uid}/settings/user → apiKeys.mexcApiKey, mexcSecretKey",
+    "restEndpoints": [
+      "POST /api/perpetuals/mexc/equity",
+      "POST /api/perpetuals/mexc/positions",
+      "POST /api/perpetuals/mexc/openOrders",
+      "POST /api/perpetuals/mexc/performance"
+    ],
+    "wsEndpoint": "wss://contract.mexc.com/edge",
+    "wsScope": "positions only via push.personal.position"
+  },
+  "logic": {
+    "missingKeys": "REST returns HTTP 400 { success: false, error: 'MEXC API keys not configured' }.",
+    "performanceMapping": "pnl24hUsd from todayPnl; pnl7d/30d/90d from analysis/v3 and recent/v3.",
+    "positionsPrice": "Current behavior: Price column renders '-' (no mark price)."
+  },
+  "ui": {
+    "leverageDefault": "1x when null/undefined",
+    "entryPriceMissing": "Display '-'",
+    "wsStatusInTitle": "WS: <status>"
+  }
+}

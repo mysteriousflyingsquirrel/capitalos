@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "id": "snapshots",
+  "title": "Net Worth Snapshots",
+  "source": "docs/requirements.md § 4 In-Scope Features (Snapshots), § 6 FR-9",
+  "specRef": "docs/specs/snapshots.spec.md",
+  "scope": {
+    "inScope": [
+      "Manual snapshot creation (Settings page)",
+      "Automatic snapshot creation (GitHub Actions cron)",
+      "Snapshot storage in Firestore and localStorage",
+      "API POST /api/snapshot/create",
+      "Idempotency per date and end-of-day timestamp semantics"
+    ],
+    "outOfScope": [
+      "Retention/cleanup policy (current behavior unclear; PROPOSAL in spec)",
+      "Exposing 'already exists' outcome in Settings UI (PROPOSAL)"
+    ]
+  },
+  "acceptanceCriteria": [
+    "GET /api/snapshot/create MUST return HTTP 405.",
+    "POST /api/snapshot/create without uid MUST return HTTP 400.",
+    "Calling POST /api/snapshot/create twice for the same day MUST return success both times and MUST NOT change the stored snapshot on the second call.",
+    "A created snapshot's timestamp MUST equal 23:59:59 UTC for snapshot.date (with the special midnight window exception)."
+  ],
+  "data": {
+    "model": "NetWorthSnapshot",
+    "fields": {
+      "date": "ISO date string YYYY-MM-DD (also document id)",
+      "timestamp": "Unix ms, end-of-day UTC 23:59:59.000Z for date",
+      "categories": "Record<NetWorthCategory, number>",
+      "total": "number (total net worth)"
+    },
+    "firestorePath": "users/{uid}/snapshots/{date}",
+    "localStorageKey": "capitalos_net_worth_snapshots_v1"
+  },
+  "logic": {
+    "ssot": "Same valuation logic as primary net worth (NetWorthCalculationService.calculateTotals / createSnapshotFromValuation equivalent)",
+    "uniqueness": "At most one snapshot per date (UTC day key)",
+    "idempotency": "If snapshot already exists for date, return 200 and do not overwrite",
+    "midnightWindow": "If endpoint runs 00:00–00:04 UTC, create snapshot for yesterday (previous UTC day)"
+  },
+  "api": {
+    "endpoint": "POST /api/snapshot/create",
+    "requestBody": { "uid": "string (required)" },
+    "successResponse": "HTTP 200",
+    "errors": {
+      "405": "Non-POST → { error: 'Method not allowed. Use POST.' }",
+      "400": "Missing/invalid uid → { error: 'User ID (uid) is required...' }",
+      "500": "Unexpected → { success: false, error: message }"
+    }
+  }
+}

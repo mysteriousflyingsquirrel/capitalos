@@ -67,6 +67,7 @@ interface PositionRow {
   id: string
   token: string
   side: 'Long' | 'Short'
+  sideRaw: 'LONG' | 'SHORT' | null
   leverage: string
   pnl: number
   pnlPercent: number
@@ -76,6 +77,7 @@ interface PositionRow {
   entryPrice: number | null // Entry price
   liqPrice: number | null // Liquidation price
   fundingFee: number | null // Funding fee in USD
+  fundingRatePct: number | null // current funding rate in percent (e.g., +0.05% => 0.05)
 }
 
 // Open Order row data interface
@@ -100,7 +102,7 @@ function Hyperliquid() {
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
 
   // Column widths - easily adjustable per column
-  const positionsColumnWidths = ['100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px']
+  const positionsColumnWidths = ['100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px']
   const openOrdersColumnWidths = ['100px', '100px', '100px', '100px', '100px']
 
   // Base positions from net worth snapshot (fallback if WS not connected)
@@ -112,10 +114,26 @@ function Hyperliquid() {
   }, [data.netWorthItems])
 
   // Replace Hyperliquid positions with WS stream (positions table only)
-  const mergedPositions: PerpetualsOpenPosition[] = useMemo(
-    () => (hlWsPositions.length > 0 ? hlWsPositions : basePositions),
-    [hlWsPositions, basePositions]
-  )
+  const mergedPositions: PerpetualsOpenPosition[] = useMemo(() => {
+    // WS is positions-only and does not carry fundingRatePct. Overlay WS onto REST by id to keep fundingRatePct when available.
+    const restById = new Map<string, PerpetualsOpenPosition>()
+    for (const p of basePositions) restById.set(p.id, p)
+
+    if (hlWsPositions.length === 0) {
+      return basePositions
+    }
+
+    const merged: PerpetualsOpenPosition[] = []
+    for (const p of hlWsPositions) {
+      const rest = restById.get(p.id)
+      merged.push({
+        ...rest,
+        ...p,
+        fundingRatePct: p.fundingRatePct ?? rest?.fundingRatePct ?? null,
+      } as PerpetualsOpenPosition)
+    }
+    return merged
+  }, [hlWsPositions, basePositions])
 
   // Subscribe to active asset contexts for mark prices
   const assetCtxCoins = useMemo(() => {
@@ -150,7 +168,10 @@ function Hyperliquid() {
   const positions: PositionRow[] = useMemo(() => {
     // Map to PositionRow format
     return mergedPositions.map((pos) => {
-      const side = pos.positionSide === 'LONG' ? 'Long' : pos.positionSide === 'SHORT' ? 'Short' : 'Long'
+      const sideRaw: 'LONG' | 'SHORT' | null =
+        pos.positionSide === 'LONG' ? 'LONG' : pos.positionSide === 'SHORT' ? 'SHORT' : null
+
+      const side = sideRaw === 'LONG' ? 'Long' : sideRaw === 'SHORT' ? 'Short' : 'Long'
       const leverageStr = pos.leverage !== null && pos.leverage !== undefined 
         ? `${Math.round(pos.leverage)}x` 
         : '1x'
@@ -176,6 +197,7 @@ function Hyperliquid() {
         id: pos.id,
         token: pos.ticker,
         side: side,
+        sideRaw,
         leverage: leverageStr,
         pnl: pos.pnl,
         pnlPercent: pnlPercent,
@@ -185,9 +207,56 @@ function Hyperliquid() {
         entryPrice: pos.entryPrice ?? null,
         liqPrice: pos.liquidationPrice ?? null,
         fundingFee: pos.fundingFeeUsd ?? null,
+        fundingRatePct: pos.fundingRatePct ?? null,
       }
     })
   }, [mergedPositions, markPrices])
+
+  type FundingSignal = 'GREEN' | 'ORANGE' | 'RED' | 'UNKNOWN'
+
+  function computeFundingSignal(args: {
+    fundingRatePct: number | null
+    sideRaw: 'LONG' | 'SHORT' | null
+  }): FundingSignal {
+    const { fundingRatePct, sideRaw } = args
+    if (fundingRatePct === null || fundingRatePct === undefined) return 'UNKNOWN'
+    if (sideRaw === null) return 'UNKNOWN'
+
+    if (sideRaw === 'LONG') {
+      if (fundingRatePct <= 0.0) return 'GREEN'
+      if (fundingRatePct < 0.05) return 'ORANGE'
+      return 'RED'
+    }
+
+    // Short
+    if (fundingRatePct >= 0.0) return 'GREEN'
+    if (fundingRatePct > -0.05) return 'ORANGE'
+    return 'RED'
+  }
+
+  function fundingMessage(args: { signal: FundingSignal; ticker: string }): string {
+    const { signal, ticker } = args
+    if (signal === 'GREEN') return `Funding favors your ${ticker} position. No pressure.`
+    if (signal === 'ORANGE') return `Funding is mildly against your ${ticker} position. Stay alert.`
+    if (signal === 'RED') return `High funding pressure on ${ticker}. Consider de-risking or SL in profit.`
+    return `Funding data unavailable for ${ticker}.`
+  }
+
+  const dashboardLines = useMemo(() => {
+    const lines = positions.map((p) => {
+      const signal = computeFundingSignal({ fundingRatePct: p.fundingRatePct, sideRaw: p.sideRaw })
+      return {
+        id: p.id,
+        token: p.token,
+        signal,
+        message: fundingMessage({ signal, ticker: p.token }),
+      }
+    })
+
+    const rank: Record<FundingSignal, number> = { RED: 0, ORANGE: 1, GREEN: 2, UNKNOWN: 3 }
+    lines.sort((a, b) => rank[a.signal] - rank[b.signal])
+    return lines
+  }, [positions])
 
   // Extract open orders from all perpetuals items
   const openOrders: OpenOrderRow[] = useMemo(() => {
@@ -225,6 +294,38 @@ function Hyperliquid() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Page Title */}
         <Heading level={1}>Hyperliquid</Heading>
+
+        {/* Dashboard Frame */}
+        <SectionCard title="Dashboard">
+          {dashboardLines.length === 0 ? (
+            <div className="py-6 text-center">
+              <div className="text2 text-text-muted">No positions</div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {dashboardLines.map((line) => {
+                const dotColor =
+                  line.signal === 'GREEN'
+                    ? '#2ECC71'
+                    : line.signal === 'ORANGE'
+                      ? '#F39C12'
+                      : line.signal === 'RED'
+                        ? '#E74C3C'
+                        : '#A0AEC0'
+
+                return (
+                  <div key={line.id} className="flex items-start gap-3">
+                    <div
+                      className="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: dotColor }}
+                    />
+                    <div className="text2 text-text-primary">{line.message}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </SectionCard>
 
         {/* Performance Frame */}
         <SectionCard title="Performance">
@@ -278,6 +379,12 @@ function Hyperliquid() {
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Liq. Price</Heading>
                   </th>
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Funding Signal</Heading>
+                  </th>
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Funding Rate</Heading>
+                  </th>
                   <th className="text-left pb-3 whitespace-nowrap">
                     <Heading level={4}>Funding Fee</Heading>
                   </th>
@@ -286,7 +393,7 @@ function Hyperliquid() {
               <tbody>
                 {positions.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center">
+                    <td colSpan={11} className="py-8 text-center">
                       <div className="text2 text-text-muted">No positions</div>
                     </td>
                   </tr>
@@ -294,6 +401,15 @@ function Hyperliquid() {
                   positions.map((position) => {
                     const isLong = position.side === 'Long'
                     const pnlIsPositive = position.pnl >= 0
+                    const signal = computeFundingSignal({ fundingRatePct: position.fundingRatePct, sideRaw: position.sideRaw })
+                    const signalDotColor =
+                      signal === 'GREEN'
+                        ? '#2ECC71'
+                        : signal === 'ORANGE'
+                          ? '#F39C12'
+                          : signal === 'RED'
+                            ? '#E74C3C'
+                            : null
 
                     return (
                       <tr key={position.id} className="border-b border-border-subtle last:border-b-0">
@@ -348,6 +464,22 @@ function Hyperliquid() {
                         <div className="text2 text-text-primary">
                           {position.liqPrice !== null && position.liqPrice > 0 
                             ? `$${formatNumber(position.liqPrice, 'us', { incognito: isIncognito })}` 
+                            : '-'}
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4 text-left whitespace-nowrap">
+                        {signalDotColor ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: signalDotColor }} />
+                          </div>
+                        ) : (
+                          <div className="text2 text-text-primary">-</div>
+                        )}
+                      </td>
+                      <td className="py-3 pr-4 text-left whitespace-nowrap">
+                        <div className="text2 text-text-primary">
+                          {position.fundingRatePct !== null && position.fundingRatePct !== undefined
+                            ? `${position.fundingRatePct > 0 ? '+' : ''}${position.fundingRatePct.toFixed(4)}%`
                             : '-'}
                         </div>
                       </td>

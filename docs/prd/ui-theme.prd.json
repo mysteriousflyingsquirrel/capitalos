@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "id": "ui-theme",
+  "title": "UI Theme",
+  "source": "docs/requirements.md § 10 UI/UX Principles (Theme)",
+  "specRef": "docs/specs/ui-theme.spec.md",
+  "scope": {
+    "inScope": [
+      "Supported theme IDs and labels",
+      "CSS variable tokens and palettes (hex)",
+      "Application to DOM (data-theme, --token)",
+      "Persistence in Firestore",
+      "Colors only; no layout/typography changes"
+    ],
+    "outOfScope": []
+  },
+  "acceptanceCriteria": [
+    "After selecting a theme, document.documentElement MUST have data-theme='<themeId>' and CSS variables for all tokens.",
+    "Reloading after theme change MUST apply the same theme from Firestore.",
+    "If Firestore stores an invalid themeId, app MUST use galaxy and persist it back."
+  ],
+  "data": {
+    "themeIds": ["galaxy", "emerald", "obsidian", "dawn", "moss", "inferno"],
+    "ssot": "src/lib/themes.ts → THEMES",
+    "persistencePath": "users/{uid}/settings/user.themeId",
+    "defaultCss": "src/index.css :root (Galaxy palette)"
+  },
+  "ui": {
+    "application": "Set --<token> for all theme.colors; set data-theme on root to themeId (applyTheme in themes.ts).",
+    "constraint": "Themes MUST change colors only (CSS variables); MUST NOT change layout, typography scale, or component structure."
+  },
+  "logic": {
+    "unknownThemeId": "Fall back to galaxy; MAY persist fallback to Firestore.",
+    "themeSaveFailure": "Revert to previous theme and set error in context."
+  }
+}

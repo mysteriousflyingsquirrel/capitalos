@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "id": "net-worth",
+  "title": "Net Worth (Categories, Items, Totals)",
+  "source": "docs/requirements.md § 4 Net Worth, § 6 FR-1, FR-7",
+  "specRef": "docs/specs/net-worth.spec.md",
+  "scope": {
+    "inScope": [
+      "Net Worth categories and item/holdings derivation from transactions",
+      "Category totals and total net worth computation",
+      "Currency conversion and price sourcing",
+      "Missing-price fallbacks (Crypto, Stock-like, Perpetuals, Depreciating Assets)",
+      "Perpetuals and Depreciating Assets special-case rules"
+    ],
+    "outOfScope": [
+      "Transaction CRUD (see transactions.spec)",
+      "Snapshot creation (see snapshots.spec)"
+    ]
+  },
+  "acceptanceCriteria": [
+    "When a transaction is added/edited/deleted, category subtotal and total net worth MUST update without full reload.",
+    "Perpetuals category total MUST equal sum of exchangeBalance holdings in USD converted to CHF (usdToChfRate or fallback); MUST NOT include open positions PnL.",
+    "Depreciating Assets computed value MUST NEVER display below 0.",
+    "If price maps do not contain a ticker, UI MUST still compute a finite value using transaction history (no NaN/Infinity)."
+  ],
+  "data": {
+    "categories": ["Cash", "Bank Accounts", "Retirement Funds", "Index Funds", "Stocks", "Commodities", "Crypto", "Perpetuals", "Real Estate", "Depreciating Assets"],
+    "ssotTotals": "lib/netWorthCalculation.ts → NetWorthCalculationService.calculateTotals",
+    "ssotHoldings": "lib/balanceCalculation.ts",
+    "firestoreItems": "users/{uid}/netWorthItems/{itemId}",
+    "perpetualsNotPersisted": "Items with category Perpetuals MUST NOT be written to Firestore by client."
+  },
+  "logic": {
+    "perpetuals": "Totals from exchangeBalance only; open positions displayed but do not affect net worth.",
+    "depreciatingAssets": "baseBalance from transactions; monthsDiff from earliest BUY date; totalDepreciation = monthlyDepreciationChf * monthsDiff; depreciatedBalance = max(0, baseBalance - totalDepreciation).",
+    "missingPrice": "Fall back to calculateBalanceChf (transaction-based). NaN/Infinity treated as 0 in category totals."
+  }
+}

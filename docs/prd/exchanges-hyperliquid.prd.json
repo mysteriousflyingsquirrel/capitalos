@@ -1,0 +1,98 @@
+{
+  "version": "1.0",
+  "id": "exchanges-hyperliquid",
+  "title": "Hyperliquid Exchange Integration",
+  "source": "docs/requirements.md Section 4 Perpetuals, Section 9 Perpetuals, Exchanges – Hyperliquid",
+  "specRef": "docs/specs/exchanges-hyperliquid.spec.md",
+  "scope": {
+    "inScope": [
+      "Credentials (wallet address) and storage",
+      "REST vs WebSocket responsibilities",
+      "PerpetualsData normalization (positions, open orders, portfolio PnL)",
+      "Positions table Price column (markPx from asset context)",
+      "Performance windows (24h/7d/30d/90d)",
+      "Error handling and missing-credential behavior",
+      "Dashboard frame (top of Hyperliquid page)",
+      "Positions table columns: Funding Signal, Funding Rate",
+      "Funding signal computation (LONG/SHORT thresholds)",
+      "Exact message strings and missing-data display as \"-\""
+    ],
+    "outOfScope": [
+      "Kraken / MEXC / Aster",
+      "Tooltips, hover behavior, drill-down details for funding",
+      "Bot alerts or automation"
+    ]
+  },
+  "acceptanceCriteria": [
+    "When mark prices are available, Positions 'Price' column MUST display $<formatted markPx>.",
+    "If WS disconnected and REST positions exist, positions table MUST still render from REST snapshot.",
+    "Performance PnL boxes MUST render 24h/7d/30d/90d values or 'N/A' if null.",
+    "If wallet address is not configured, Hyperliquid Perpetuals item MUST be absent or contain empty arrays (no crash).",
+    "Dashboard frame exists above Performance/Positions/Open Orders.",
+    "Dashboard shows one line per open position with ONLY dot + one sentence.",
+    "No tooltips for funding health feature.",
+    "Positions table has Funding Signal and Funding Rate columns.",
+    "Missing values show \"-\" and rendering never crashes."
+  ],
+  "data": {
+    "credentialsPath": "users/{uid}/settings/user -> apiKeys.hyperliquidWalletAddress",
+    "restEndpoint": "POST /api/perpetuals/hyperliquid",
+    "wsEndpoint": "wss://api.hyperliquid.xyz/ws",
+    "wsSubscription": "clearinghouseState, user: walletAddress",
+    "markPriceSource": "useHyperliquidAssetCtx (asset context stream)",
+    "fundingHealth": {
+      "required": ["fundingRatePct", "side"],
+      "missingBehavior": "Display \"-\" in UI; do not crash. fundingRatePct must be added to position data model if not already present (reference existing REST/WS data path)."
+    }
+  },
+  "logic": {
+    "priceColumn": "MUST display markPx from asset context; if missing display dash. MUST NOT display entry/mid/oracle/liquidation price.",
+    "performanceWindows": "24h/7d/30d from deltaFromBucket (pnlHistory or accountValueHistory); 90d from pnl90dUsd (closest point to 90 days ago).",
+    "missingWallet": "REST fetch MUST return null (hyperliquidService.fetchHyperliquidPerpetualsData).",
+    "fundingSignal": {
+      "definitions": {
+        "fundingRatePct": "Funding rate in PERCENT (e.g. +0.05% => 0.05)",
+        "side": "LONG or SHORT"
+      },
+      "LONG": {
+        "GREEN": "fundingRatePct <= 0.00",
+        "ORANGE": "0.00 < fundingRatePct < 0.05",
+        "RED": "fundingRatePct >= 0.05"
+      },
+      "SHORT": {
+        "GREEN": "fundingRatePct >= 0.00",
+        "ORANGE": "-0.05 < fundingRatePct < 0.00",
+        "RED": "fundingRatePct <= -0.05"
+      },
+      "UNKNOWN": "fundingRatePct is missing OR side is missing"
+    }
+  },
+  "ui": {
+    "wsStatusValues": ["disconnected", "connecting", "subscribed", "error"],
+    "emptyTables": "No positions / No open orders",
+    "frames": [
+      {
+        "name": "Dashboard",
+        "position": "above",
+        "aboveFrames": ["Performance", "Positions", "Open Orders"],
+        "rules": [
+          "One line per open Hyperliquid perp position",
+          "Each line: colored dot (green/orange/red) + exactly one sentence",
+          "No tooltips, no hover behavior, no secondary text",
+          "Sort order: RED first, then ORANGE, then GREEN"
+        ]
+      }
+    ],
+    "fundingHealthCopy": {
+      "GREEN": "Funding favors your {TICKER} position. No pressure.",
+      "ORANGE": "Funding is mildly against your {TICKER} position. Stay alert.",
+      "RED": "High funding pressure on {TICKER}. Consider de-risking or SL in profit.",
+      "UNKNOWN": "Funding data unavailable for {TICKER}."
+    },
+    "tableColumns": [
+      { "id": "fundingSignal", "label": "Funding Signal", "emptyValue": "-" },
+      { "id": "fundingRate", "label": "Funding Rate", "emptyValue": "-" }
+    ],
+    "missingDataRule": "Display \"-\" (dash); never blank, never 0. Do not crash on null/undefined."
+  }
+}
