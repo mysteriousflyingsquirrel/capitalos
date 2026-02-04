@@ -23,8 +23,8 @@ const TotalText: React.FC<TotalTextProps> = ({ variant, className = '', children
     ? { color: '#DAA520' }
     : {}
   
-  // Use text1 for font size (as defined in tailwind.config.js fontSize.text1)
-  const classes = `text-text1 font-normal ${className}`.trim()
+  // Let className control font size (removed text-text1 to avoid specificity issues)
+  const classes = `font-normal ${className}`.trim()
 
   return (
     <span className={classes} style={colorStyle} {...rest}>

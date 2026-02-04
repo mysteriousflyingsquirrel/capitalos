@@ -338,9 +338,8 @@ function NetWorthCategorySection({
             
             return (
               <div className="space-y-6">
-                {/* Account Equity Table (one row per exchange) */}
+                {/* Perpetuals Table (one row per exchange) */}
                 <div>
-                  <Heading level={3} className="mb-3 text-text-secondary">Account Equity</Heading>
                   <div className="w-full overflow-hidden">
                     <style>{`
                       @media (max-width: 767px) {

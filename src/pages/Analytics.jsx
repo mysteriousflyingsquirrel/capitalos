@@ -97,18 +97,18 @@ function EntryMenu({ entry, onEdit, onRemove }) {
       {menuOpen && menuPosition && (
         <div
           ref={menuRef}
-          className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 min-w-[180px]"
+          className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-2 min-w-[160px]"
           style={{ left: menuPosition.x, top: menuPosition.y }}
         >
           <button
             onClick={handleEdit}
-            className="w-full text-left px-4 py-2 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors rounded-input"
           >
             Edit
           </button>
           <button
             onClick={handleRemove}
-            className="w-full text-left px-4 py-2 text-danger text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-danger text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors rounded-input"
           >
             Remove
           </button>
