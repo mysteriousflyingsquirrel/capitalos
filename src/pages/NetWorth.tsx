@@ -288,15 +288,22 @@ function NetWorthCategorySection({
 
   return (
     <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6 overflow-hidden">
+      {/* Header: title + totals, then separator */}
       <div className="mb-6 pb-4 border-b border-border-strong">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-end justify-between gap-4">
           <div>
             <Heading level={2}>{category}</Heading>
-                  <TotalText variant={subtotalInBaseCurrency >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
-                    {formatCurrency(subtotalInBaseCurrency)}
-                  </TotalText>
-                  <TotalText variant={subtotalInUsd >= 0 ? 'inflow' : 'outflow'} className="block mt-1">
-                    {formatUsd(subtotalInUsd)}
+            <TotalText
+              variant={subtotalInBaseCurrency > 0 ? 'inflow' : subtotalInBaseCurrency < 0 ? 'outflow' : 'neutral'}
+              className="block mt-1"
+            >
+              {formatCurrency(subtotalInBaseCurrency)}
+            </TotalText>
+            <TotalText
+              variant={subtotalInUsd > 0 ? 'inflow' : subtotalInUsd < 0 ? 'outflow' : 'neutral'}
+              className="block mt-1"
+            >
+              {formatUsd(subtotalInUsd)}
             </TotalText>
           </div>
           {category !== 'Perpetuals' && (
@@ -378,8 +385,10 @@ function NetWorthCategorySection({
                               ? holdingsUsd * usdToChfRate
                               : convert(holdingsUsd, 'USD')
 
-                            // Color for total value (green if positive, red if negative)
-                            const totalColorClass = balanceChf >= 0 ? 'text-inflow' : 'text-outflow'
+                            // Color for total value (same behavior as Cashflow item totals)
+                            const totalVariant = balanceChf > 0 ? 'inflow' : balanceChf < 0 ? 'outflow' : 'neutral'
+                            const itemCurrency = 'USD' as CurrencyCode
+                            const showItemCurrencyTotal = itemCurrency !== baseCurrency
 
                             return (
                               <tr key={perpetualsItem.id}>
@@ -403,13 +412,15 @@ function NetWorthCategorySection({
                                     <div className="flex-shrink-0 w-2 md:w-3" aria-hidden="true" />
                                     
                                     {/* Column 3: Total CHF + Total USD (fixed width) */}
-                                    <div className="w-[85px] md:w-[120px] flex-shrink-0 text-right">
-                                      <div className={`text-[0.63rem] md:text-[0.79rem] whitespace-nowrap ${totalColorClass}`}>
+                                    <div className={`w-[85px] md:w-[120px] flex-shrink-0 text-right flex flex-col ${showItemCurrencyTotal ? '' : 'justify-center'}`}>
+                                      <TotalText variant={totalVariant} className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
                                         {formatCurrency(balanceChf)}
-                                      </div>
-                                      <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] whitespace-nowrap">
-                                        {formatUsd(holdingsUsd)}
-                                      </div>
+                                      </TotalText>
+                                      {showItemCurrencyTotal && (
+                                        <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] whitespace-nowrap">
+                                          {formatMoney(holdingsUsd, itemCurrency, 'ch', { incognito: isIncognito })}
+                                        </div>
+                                      )}
                                     </div>
                                     
                                     {/* Vertical Spacer */}
@@ -619,12 +630,14 @@ function NetWorthCategorySection({
                     formatMoney(value, displayPriceCurrency, 'ch', { incognito: isIncognito })
                   
                   // Calculate total in USD for display
-                  const totalInUsd = baseCurrency === 'CHF'
-                    ? balanceConverted * (exchangeRates?.rates['USD'] || 1)
-                    : balanceConverted // Already in USD if baseCurrency is USD
+                  const itemCurrency: CurrencyCode = category === 'Crypto'
+                    ? 'USD'
+                    : ((item.currency as CurrencyCode) || baseCurrency)
+                  const showItemCurrencyTotal = itemCurrency !== baseCurrency
+                  const totalInItemCurrency = balanceConverted * (exchangeRates?.rates[itemCurrency] || 1)
                   
-                  // Color for total value (green if positive, red if negative)
-                  const totalColorClass = balanceConverted >= 0 ? 'text-inflow' : 'text-outflow'
+                  // Color for total value (same behavior as Cashflow item totals)
+                  const totalVariant = balanceConverted > 0 ? 'inflow' : balanceConverted < 0 ? 'outflow' : 'neutral'
                   
                   return (
                     <tr key={item.id}>
@@ -676,13 +689,15 @@ function NetWorthCategorySection({
                           <div className="flex-shrink-0 w-2 md:w-3" aria-hidden="true" />
                           
                           {/* Column 3: Total CHF + Total USD (fixed width, responsive) */}
-                          <div className="w-[85px] md:w-[120px] flex-shrink-0 text-right">
-                            <div className={`text-[0.63rem] md:text-[0.79rem] whitespace-nowrap ${totalColorClass}`}>
+                          <div className={`w-[85px] md:w-[120px] flex-shrink-0 text-right flex flex-col ${showItemCurrencyTotal ? '' : 'justify-center'}`}>
+                            <TotalText variant={totalVariant} className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
                               {formatCurrency(balanceConverted)}
-                            </div>
-                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] whitespace-nowrap">
-                              {formatUsd(totalInUsd)}
-                            </div>
+                            </TotalText>
+                            {showItemCurrencyTotal && (
+                              <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] whitespace-nowrap">
+                                {formatMoney(totalInItemCurrency, itemCurrency, 'ch', { incognito: isIncognito })}
+                              </div>
+                            )}
                           </div>
                           
                           {/* Vertical Spacer */}
@@ -1366,15 +1381,20 @@ function NetWorth() {
         
         {/* Total Net Worth */}
         <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+          {/* Header: title + totals, then separator */}
           <div className="mb-6 pb-4 border-b border-border-strong">
-            <div className="flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-              <Heading level={2}>Total Net Worth</Heading>
-              </div>
-              <TotalText variant={totalNetWorth >= 0 ? 'inflow' : 'outflow'} className="mt-1">
+            <Heading level={2}>Total Net Worth</Heading>
+            <div className="flex flex-col space-y-1 mt-1">
+              <TotalText
+                variant={totalNetWorth > 0 ? 'inflow' : totalNetWorth < 0 ? 'outflow' : 'neutral'}
+                className="block"
+              >
                 {formatCurrency(totalNetWorth)}
               </TotalText>
-              <TotalText variant={totalNetWorthInUsd >= 0 ? 'inflow' : 'outflow'} className="mt-1">
+              <TotalText
+                variant={totalNetWorthInUsd > 0 ? 'inflow' : totalNetWorthInUsd < 0 ? 'outflow' : 'neutral'}
+                className="block"
+              >
                 {formatUsd(totalNetWorthInUsd)}
               </TotalText>
             </div>

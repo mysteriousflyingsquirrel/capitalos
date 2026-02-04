@@ -475,13 +475,26 @@ function Analytics() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 {/* Manual Inflows */}
                 <div className="bg-bg-frame border border-border-subtle rounded-input p-4">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-end justify-between mb-4">
                     <Heading level={3}>Manual Inflows (Future)</Heading>
                     <button
                       onClick={() => setShowAddModal('inflow')}
-                      className="py-1.5 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
+                      className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
                     >
-                      + Add
+                      <svg
+                        className="w-4 h-4 transition-transform group-hover:rotate-90"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      <span>Add Item</span>
                     </button>
                   </div>
                   <div className="space-y-1.5 max-h-64 overflow-y-auto">
@@ -524,13 +537,26 @@ function Analytics() {
 
                 {/* Planned Payments */}
                 <div className="bg-bg-frame border border-border-subtle rounded-input p-4">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-end justify-between mb-4">
                     <Heading level={3}>Planned Payments (Future)</Heading>
                     <button
                       onClick={() => setShowAddModal('outflow')}
-                      className="py-1.5 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg"
+                      className="py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-2 group"
                     >
-                      + Add
+                      <svg
+                        className="w-4 h-4 transition-transform group-hover:rotate-90"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      <span>Add Item</span>
                     </button>
                   </div>
                   <div className="space-y-1.5 max-h-64 overflow-y-auto">

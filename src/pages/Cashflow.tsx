@@ -117,16 +117,18 @@ function SectionCard({ title, children, total, totalColor = 'success' }: Section
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   
   return (
-      <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+    <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+      {/* Header: title + totals, then separator */}
       <div className="mb-6 pb-4 border-b border-border-strong">
-        <div className="flex flex-col">
-          <Heading level={2}>{title}</Heading>
-          {total !== undefined && (
-            <TotalText variant={totalColor === 'success' ? 'inflow' : 'outflow'} className="mt-1">
-              {formatCurrency(total)}
-            </TotalText>
-          )}
-        </div>
+        <Heading level={2}>{title}</Heading>
+        {total !== undefined && (
+          <TotalText
+            variant={totalColor === 'success' ? 'inflow' : 'outflow'}
+            className="block mt-1"
+          >
+            {formatCurrency(total)}
+          </TotalText>
+        )}
       </div>
       {children}
     </div>
@@ -226,11 +228,9 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
   return (
     <>
     <SectionCard title="Inflow" total={totalInflow} totalColor="success">
-      <GroupedList
-          items={items}
-        groupKey="group"
-        groupOrder={inflowGroups}
-        renderGroupHeader={(groupName, groupItems) => {
+      <div className="space-y-6">
+        {inflowGroups.map((groupName) => {
+          const groupItems = items.filter((i) => i.group === groupName)
           const totalChf = groupItems.reduce((sum, item) => {
             // Use original amount and currency if available, otherwise fall back to amountChf
             if (item.amount !== undefined && item.currency) {
@@ -239,98 +239,99 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
             return sum + item.amountChf
           }, 0)
           const total = convert(totalChf, 'CHF')
-          return (
-            <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
-              <div>
-                <Heading level={3}>{groupName}</Heading>
-                <TotalText variant="inflow" className="block mt-1">
-                  {formatCurrency(total)}
-                </TotalText>
-              </div>
-              <button
-                  onClick={() => setAddItemGroup(groupName as InflowGroupName)}
-                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
-              >
-                <svg
-                  className="w-4 h-4 transition-transform group-hover:rotate-90"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2.5}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
-                <span>Add Item</span>
-              </button>
-            </div>
-          )
-        }}
-        renderTable={(groupItems) => {
+
           // Sort items: 1st by Provider A-Z, 2nd by amount high-low
           const sortedItems = [...groupItems].sort((a, b) => {
-            // First priority: Provider A-Z
             const providerCompare = a.provider.localeCompare(b.provider)
             if (providerCompare !== 0) return providerCompare
-            // Second priority: Amount high-low
             return b.amountChf - a.amountChf
           })
 
           return (
-          <div className="overflow-x-auto">
-            <table className="w-full border-separate" style={{ tableLayout: 'fixed', width: '100%', borderSpacing: '0 6px' }}>
-              <tbody>
-                {sortedItems.length === 0 ? (
-                  <tr>
-                    <td className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
-                      No items yet. Click "Add Item" to get started.
-                    </td>
-                  </tr>
-                ) : (
-                  sortedItems.map((item) => (
-                    <tr key={item.id}>
-                      <td className="p-0 align-top">
-                        <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
-                          <div className="flex-1 min-w-0 pr-2">
-                            <div className="text-[0.63rem] md:text-[0.79rem] truncate">{item.item}</div>
-                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate">
-                              {item.provider}
+            <div key={groupName} className="bg-bg-frame border border-border-subtle rounded-input p-4">
+              {/* Title + separator */}
+              <div className="mb-4 pb-2 border-b border-border-subtle">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <Heading level={3}>{groupName}</Heading>
+                    <TotalText variant="inflow" className="block mt-1">
+                      {formatCurrency(total)}
+                    </TotalText>
+                  </div>
+                  <button
+                    onClick={() => setAddItemGroup(groupName as InflowGroupName)}
+                    className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+                  >
+                    <svg
+                      className="w-4 h-4 transition-transform group-hover:rotate-90"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2.5}
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
+                    <span>Add Item</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full border-separate" style={{ tableLayout: 'fixed', width: '100%', borderSpacing: '0 6px' }}>
+                  <tbody>
+                    {sortedItems.length === 0 ? (
+                      <tr>
+                        <td className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                          No items yet. Click "Add Item" to get started.
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedItems.map((item) => (
+                        <tr key={item.id}>
+                          <td className="p-0 align-top">
+                            <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
+                              <div className="flex-1 min-w-0 pr-2">
+                                <div className="text-[0.63rem] md:text-[0.79rem] truncate">{item.item}</div>
+                                <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate">
+                                  {item.provider}
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
+                                <TotalText variant="inflow" className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
+                                  {formatCurrency(
+                                    item.amount !== undefined && item.currency
+                                      ? convert(item.amount, item.currency as CurrencyCode)
+                                      : convert(item.amountChf, 'CHF')
+                                  )}
+                                </TotalText>
+                              </div>
+                              <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                              <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                              <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                              <div className="flex-shrink-0 flex items-center justify-end">
+                                <CashflowItemMenu
+                                  itemId={item.id}
+                                  itemType="inflow"
+                                  onEdit={() => setEditingItem(item)}
+                                  onRemove={() => onRemoveItem(item.id)}
+                                />
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
-                            <TotalText variant="inflow" className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
-                              {formatCurrency(
-                                item.amount !== undefined && item.currency
-                                  ? convert(item.amount, item.currency as CurrencyCode)
-                                  : convert(item.amountChf, 'CHF')
-                              )}
-                            </TotalText>
-                          </div>
-                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
-                          <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
-                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
-                          <div className="flex-shrink-0 flex items-center justify-end">
-                            <CashflowItemMenu
-                              itemId={item.id}
-                              itemType="inflow"
-                              onEdit={() => setEditingItem(item)}
-                              onRemove={() => onRemoveItem(item.id)}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )
-        }}
-      />
+        })}
+      </div>
     </SectionCard>
     {(addItemGroup || editingItem) && (
       <AddInflowItemModal
@@ -383,11 +384,9 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
   return (
     <>
     <SectionCard title="Outflow" total={totalOutflow} totalColor="danger">
-      <GroupedList
-          items={items}
-        groupKey="group"
-        groupOrder={outflowGroups}
-        renderGroupHeader={(groupName, groupItems) => {
+      <div className="space-y-6">
+        {outflowGroups.map((groupName) => {
+          const groupItems = items.filter((i) => i.group === groupName)
           const totalChf = groupItems.reduce((sum, item) => {
             // Use original amount and currency if available, otherwise fall back to amountChf
             if (item.amount !== undefined && item.currency) {
@@ -396,98 +395,99 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
             return sum + item.amountChf
           }, 0)
           const total = convert(totalChf, 'CHF')
-          return (
-            <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
-              <div>
-                <Heading level={3}>{groupName}</Heading>
-                <TotalText variant="outflow" className="block mt-1">
-                  {formatCurrency(total)}
-                </TotalText>
-              </div>
-              <button
-                  onClick={() => setAddItemGroup(groupName as OutflowGroupName)}
-                className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
-              >
-                <svg
-                  className="w-4 h-4 transition-transform group-hover:rotate-90"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2.5}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
-                <span>Add Item</span>
-              </button>
-            </div>
-          )
-        }}
-        renderTable={(groupItems) => {
+
           // Sort items: 1st by Receiver A-Z, 2nd by amount high-low
           const sortedItems = [...groupItems].sort((a, b) => {
-            // First priority: Receiver A-Z
             const receiverCompare = a.receiver.localeCompare(b.receiver)
             if (receiverCompare !== 0) return receiverCompare
-            // Second priority: Amount high-low
             return b.amountChf - a.amountChf
           })
 
           return (
-          <div className="overflow-x-auto">
-            <table className="w-full border-separate" style={{ tableLayout: 'fixed', width: '100%', borderSpacing: '0 6px' }}>
-              <tbody>
-                {sortedItems.length === 0 ? (
-                  <tr>
-                    <td className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
-                      No items yet. Click "Add Item" to get started.
-                    </td>
-                  </tr>
-                ) : (
-                  sortedItems.map((item) => (
-                    <tr key={item.id}>
-                      <td className="p-0 align-top">
-                        <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
-                          <div className="flex-1 min-w-0 pr-2">
-                            <div className="text-[0.63rem] md:text-[0.79rem] truncate">{item.item}</div>
-                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate">
-                              {item.receiver}
+            <div key={groupName} className="bg-bg-frame border border-border-subtle rounded-input p-4">
+              {/* Title + separator */}
+              <div className="mb-4 pb-2 border-b border-border-subtle">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <Heading level={3}>{groupName}</Heading>
+                    <TotalText variant="outflow" className="block mt-1">
+                      {formatCurrency(total)}
+                    </TotalText>
+                  </div>
+                  <button
+                    onClick={() => setAddItemGroup(groupName as OutflowGroupName)}
+                    className="py-2 px-3 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg flex items-center justify-center gap-1.5 group"
+                  >
+                    <svg
+                      className="w-4 h-4 transition-transform group-hover:rotate-90"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2.5}
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
+                    <span>Add Item</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full border-separate" style={{ tableLayout: 'fixed', width: '100%', borderSpacing: '0 6px' }}>
+                  <tbody>
+                    {sortedItems.length === 0 ? (
+                      <tr>
+                        <td className="py-4 text-center text-text-muted text-[0.567rem] md:text-xs">
+                          No items yet. Click "Add Item" to get started.
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedItems.map((item) => (
+                        <tr key={item.id}>
+                          <td className="p-0 align-top">
+                            <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
+                              <div className="flex-1 min-w-0 pr-2">
+                                <div className="text-[0.63rem] md:text-[0.79rem] truncate">{item.item}</div>
+                                <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate">
+                                  {item.receiver}
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
+                                <TotalText variant="outflow" className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
+                                  {formatCurrency(
+                                    item.amount !== undefined && item.currency
+                                      ? convert(item.amount, item.currency as CurrencyCode)
+                                      : convert(item.amountChf, 'CHF')
+                                  )}
+                                </TotalText>
+                              </div>
+                              <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                              <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                              <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                              <div className="flex-shrink-0 flex items-center justify-end">
+                                <CashflowItemMenu
+                                  itemId={item.id}
+                                  itemType="outflow"
+                                  onEdit={() => setEditingItem(item)}
+                                  onRemove={() => onRemoveItem(item.id)}
+                                />
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
-                            <TotalText variant="outflow" className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
-                              {formatCurrency(
-                                item.amount !== undefined && item.currency
-                                  ? convert(item.amount, item.currency as CurrencyCode)
-                                  : convert(item.amountChf, 'CHF')
-                              )}
-                            </TotalText>
-                          </div>
-                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
-                          <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
-                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
-                          <div className="flex-shrink-0 flex items-center justify-end">
-                            <CashflowItemMenu
-                              itemId={item.id}
-                              itemType="outflow"
-                              onEdit={() => setEditingItem(item)}
-                              onRemove={() => onRemoveItem(item.id)}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )
-        }}
-      />
+        })}
+      </div>
     </SectionCard>
     {(addItemGroup || editingItem) && (
       <AddOutflowItemModal
@@ -647,11 +647,18 @@ function AccountflowSection({ mappings, platforms, onAddMapping, onEditMapping, 
     })
 
     return (
-      <div key={account} className="space-y-4 pb-4 border-b border-border-strong last:border-b-0">
-        {/* Account Header with Totals */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <Heading level={3}>{account}</Heading>
+      <div key={account} className="bg-bg-frame border border-border-subtle rounded-input p-4">
+        {/* Title + separator */}
+        <div className="mb-4 pb-2 border-b border-border-subtle">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <Heading level={3}>{account}</Heading>
+              <div className="mt-1 flex flex-col gap-1">
+                <TotalText variant="inflow">{formatCurrency(totalInflow)}</TotalText>
+                <TotalText variant="outflow">{formatCurrency(totalOutflow)}</TotalText>
+                <TotalText variant="spare">{formatCurrency(spare)}</TotalText>
+              </div>
+            </div>
             <button
               onClick={() => {
                 setPreselectedAccount(account)
@@ -675,19 +682,9 @@ function AccountflowSection({ mappings, platforms, onAddMapping, onEditMapping, 
               <span>Add Mapping</span>
             </button>
           </div>
-          <div className="mt-1 flex flex-col gap-1">
-            <TotalText variant="inflow">
-              {formatCurrency(totalInflow)}
-            </TotalText>
-            <TotalText variant="outflow">
-              {formatCurrency(totalOutflow)}
-            </TotalText>
-            <TotalText variant="spare">
-              {formatCurrency(spare)}
-            </TotalText>
-          </div>
         </div>
 
+        {/* Content */}
         {/* Unified Table with Item, Inflow/Outflow (combined), Actions */}
         {sortedMappings.length === 0 ? (
           <div className="text-text-muted text-[0.567rem] md:text-xs">No mappings</div>
