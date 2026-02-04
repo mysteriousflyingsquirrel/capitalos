@@ -28,6 +28,8 @@ interface ApiKeysContextType {
   apiKeysLoaded: boolean
   // Get current keys from ref (always available, even if state resets)
   getCurrentKeys: () => ApiKeysRefs
+  // Check if API keys are loaded (from ref, not state - for use in async functions)
+  isApiKeysLoaded: () => boolean
 }
 
 const ApiKeysContext = createContext<ApiKeysContextType | undefined>(undefined)
@@ -57,6 +59,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const prevUidRef = useRef<string | null>(null)
   // Track if keys have ever been successfully loaded for the current uid
   const keysLoadedForUidRef = useRef<string | null>(null)
+  // Ref to track apiKeysLoaded (for use in async functions that can't rely on state)
+  const apiKeysLoadedRef = useRef(false)
   
   // Helper to update both state and ref
   const updateKeys = (updates: Partial<ApiKeysRefs>) => {
@@ -85,6 +89,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
       
       // Reset loaded flags
       setApiKeysLoaded(false)
+      apiKeysLoadedRef.current = false
       setIsLoading(true)
       keysLoadedForUidRef.current = null
       
@@ -105,6 +110,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         setIsLoading(false)
         // Mark as loaded even if no UID (to unblock DataContext)
         setApiKeysLoaded(true)
+        apiKeysLoadedRef.current = true
         return
       }
       
@@ -162,6 +168,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         setIsLoading(false)
         // Mark keys as loaded after Firestore read completes (even if no keys found)
         setApiKeysLoaded(true)
+        apiKeysLoadedRef.current = true
         // Track that keys were loaded for this uid
         keysLoadedForUidRef.current = uid
         
@@ -273,6 +280,9 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
 
   // Get current keys from ref (always available, even if state resets)
   const getCurrentKeys = () => keysRef.current
+  
+  // Check if API keys are loaded from ref (for use in async functions)
+  const isApiKeysLoaded = () => apiKeysLoadedRef.current
 
   return (
     <ApiKeysContext.Provider
@@ -288,6 +298,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         isLoading,
         apiKeysLoaded,
         getCurrentKeys,
+        isApiKeysLoaded,
       }}
     >
       {children}

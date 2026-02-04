@@ -164,7 +164,6 @@ interface NetWorthCategorySectionProps {
   platforms: Platform[]
   onAddClick: () => void
   onAddTransaction: (itemId: string) => void
-  onShowMenu: (itemId: string, buttonElement: HTMLButtonElement) => void
   onRemoveItem: (itemId: string) => void
   onShowTransactions: (itemId: string) => void
   onEditItem: (itemId: string) => void
@@ -187,7 +186,6 @@ function NetWorthCategorySection({
   platforms,
   onAddClick,
   onAddTransaction,
-  onShowMenu,
   onRemoveItem,
   onShowTransactions,
   onEditItem,
@@ -234,7 +232,38 @@ function NetWorthCategorySection({
       
       return sum + (isNaN(totalChf) || !isFinite(totalChf) ? 0 : totalChf)
     }
-    // For non-Crypto, calculateBalanceChf already returns CHF (converts from original currency internally)
+    if (category === 'Index Funds' || category === 'Stocks' || category === 'Commodities') {
+      // For Index Funds/Stocks/Commodities: use live price if available
+      const holdings = calculateHoldings(item.id, transactions)
+      const ticker = item.name.trim().toUpperCase()
+      const currentPrice = stockPrices[ticker] || 0
+      
+      if (currentPrice > 0) {
+        // Use live price - check item's currency to determine if conversion needed
+        const itemCurrency = (item.currency as CurrencyCode) || 'USD'
+        
+        if (itemCurrency === 'CHF') {
+          // Price is already in CHF, no conversion needed
+          return sum + (holdings * currentPrice)
+        } else if (itemCurrency === 'USD') {
+          // Price is in USD, convert to CHF
+          const valueUsd = holdings * currentPrice
+          const valueChf = usdToChfRate && usdToChfRate > 0 
+            ? valueUsd * usdToChfRate 
+            : convert(valueUsd, 'USD')
+          return sum + (isNaN(valueChf) || !isFinite(valueChf) ? 0 : valueChf)
+        } else {
+          // Other currencies (EUR, etc.) - convert using exchange rates
+          const valueInCurrency = holdings * currentPrice
+          const valueChf = convert(valueInCurrency, itemCurrency)
+          return sum + (isNaN(valueChf) || !isFinite(valueChf) ? 0 : valueChf)
+        }
+      }
+      // Fallback to transaction-based if no live price
+      const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
+      return sum + (isNaN(balanceChf) || !isFinite(balanceChf) ? 0 : balanceChf)
+    }
+    // For other categories (Bank Accounts, etc.), use transaction-based calculation
     const balanceChf = calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert)
     return sum + (isNaN(balanceChf) || !isFinite(balanceChf) ? 0 : balanceChf)
   }, 0)
@@ -350,22 +379,47 @@ function NetWorthCategorySection({
                               ? holdingsUsd * usdToChfRate
                               : convert(holdingsUsd, 'USD')
 
+                            // Color for total value (green if positive, red if negative)
+                            const totalColorClass = balanceChf >= 0 ? 'text-inflow' : 'text-outflow'
+
                             return (
                               <tr key={perpetualsItem.id}>
                                 <td colSpan={3} className="p-0 align-top">
                                   <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
+                                    {/* Column 1: Item Name + Platform (flexible width) */}
                                     <div className="flex-1 min-w-0 pr-2">
                                       <div className="text-[0.882rem] truncate">{perpetualsItem.name || exchangeName}</div>
                                       <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">{perpetualsItem.platform || exchangeName}</div>
                                     </div>
-                                    <div className="flex-1 min-w-0 text-right px-2 perp-table-balance-cell">
-                                      <div className="text-[0.882rem] whitespace-nowrap">{formatCurrency(balanceChf)}</div>
-                                      <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">{formatNumber(holdingsUsd, 'ch', { incognito: isIncognito })}</div>
+                                    
+                                    {/* Column 2: Price + Holdings - empty for Perpetuals (fixed width for alignment) */}
+                                    <div className="w-[100px] flex-shrink-0 text-right">
+                                      <div className="text-[0.882rem] whitespace-nowrap text-text-muted" aria-hidden="true">&nbsp;</div>
+                                      <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap" aria-hidden="true">&nbsp;</div>
                                     </div>
+                                    
+                                    {/* Vertical Spacer */}
                                     <div className="flex-shrink-0 w-3" aria-hidden="true" />
                                     <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
                                     <div className="flex-shrink-0 w-3" aria-hidden="true" />
-                                    <div className="flex-shrink-0 w-14" aria-hidden="true" />
+                                    
+                                    {/* Column 3: Total CHF + Total USD (fixed width) */}
+                                    <div className="w-[120px] flex-shrink-0 text-right">
+                                      <div className={`text-[0.882rem] whitespace-nowrap ${totalColorClass}`}>
+                                        {formatCurrency(balanceChf)}
+                                      </div>
+                                      <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">
+                                        {formatUsd(holdingsUsd)}
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Vertical Spacer */}
+                                    <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                                    <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                                    <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                                    
+                                    {/* Column 4: Actions - empty for Perpetuals (fixed width for alignment) */}
+                                    <div className="w-10 flex-shrink-0" aria-hidden="true" />
                                   </div>
                                 </td>
                               </tr>
@@ -429,11 +483,18 @@ function NetWorthCategorySection({
                   } else if (category === 'Index Funds' || category === 'Stocks' || category === 'Commodities') {
                     const holdingsA = calculateHoldings(a.id, transactions)
                     const tickerA = a.name.trim().toUpperCase()
-                    const currentPriceUsdA = stockPrices[tickerA] || 0
-                    if (currentPriceUsdA > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-                      // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
-                      const valueUsd = holdingsA * currentPriceUsdA
-                      balanceA = valueUsd * usdToChfRate
+                    const currentPriceA = stockPrices[tickerA] || 0
+                    if (currentPriceA > 0) {
+                      // Use live price - check item's currency to determine if conversion needed
+                      const itemCurrencyA = (a.currency as CurrencyCode) || 'USD'
+                      if (itemCurrencyA === 'CHF') {
+                        balanceA = holdingsA * currentPriceA
+                      } else if (itemCurrencyA === 'USD') {
+                        const valueUsd = holdingsA * currentPriceA
+                        balanceA = usdToChfRate && usdToChfRate > 0 ? valueUsd * usdToChfRate : convert(valueUsd, 'USD')
+                      } else {
+                        balanceA = convert(holdingsA * currentPriceA, itemCurrencyA)
+                      }
                     } else {
                       // Fallback: use transaction-based calculation
                       balanceA = convert(calculateBalanceChf(a.id, transactions, a, cryptoPrices, convert), 'CHF')
@@ -459,11 +520,18 @@ function NetWorthCategorySection({
                   } else if (category === 'Index Funds' || category === 'Stocks' || category === 'Commodities') {
                     const holdingsB = calculateHoldings(b.id, transactions)
                     const tickerB = b.name.trim().toUpperCase()
-                    const currentPriceUsdB = stockPrices[tickerB] || 0
-                    if (currentPriceUsdB > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-                      // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
-                      const valueUsd = holdingsB * currentPriceUsdB
-                      balanceB = valueUsd * usdToChfRate
+                    const currentPriceB = stockPrices[tickerB] || 0
+                    if (currentPriceB > 0) {
+                      // Use live price - check item's currency to determine if conversion needed
+                      const itemCurrencyB = (b.currency as CurrencyCode) || 'USD'
+                      if (itemCurrencyB === 'CHF') {
+                        balanceB = holdingsB * currentPriceB
+                      } else if (itemCurrencyB === 'USD') {
+                        const valueUsd = holdingsB * currentPriceB
+                        balanceB = usdToChfRate && usdToChfRate > 0 ? valueUsd * usdToChfRate : convert(valueUsd, 'USD')
+                      } else {
+                        balanceB = convert(holdingsB * currentPriceB, itemCurrencyB)
+                      }
                     } else {
                       // Fallback: use transaction-based calculation
                       balanceB = convert(calculateBalanceChf(b.id, transactions, b, cryptoPrices, convert), 'CHF')
@@ -496,11 +564,26 @@ function NetWorthCategorySection({
                     // For Index Funds, Stocks, and Commodities: use current price from Yahoo Finance
                     const holdings = calculateHoldings(item.id, transactions)
                     const ticker = item.name.trim().toUpperCase()
-                    const currentPriceUsd = stockPrices[ticker] || 0
-                    if (currentPriceUsd > 0 && usdToChfRate !== null && usdToChfRate > 0) {
-                      // valueUSD = holdings * currentPriceUSD, valueCHF = valueUSD * usdToChfRate
-                      const valueUsd = holdings * currentPriceUsd
-                      balanceConverted = valueUsd * usdToChfRate
+                    const currentPrice = stockPrices[ticker] || 0
+                    
+                    if (currentPrice > 0) {
+                      // Use live price - check item's currency to determine if conversion needed
+                      const itemCurrency = (item.currency as CurrencyCode) || 'USD'
+                      
+                      if (itemCurrency === 'CHF') {
+                        // Price is already in CHF, no conversion needed
+                        balanceConverted = holdings * currentPrice
+                      } else if (itemCurrency === 'USD') {
+                        // Price is in USD, convert to CHF
+                        const valueUsd = holdings * currentPrice
+                        balanceConverted = usdToChfRate && usdToChfRate > 0 
+                          ? valueUsd * usdToChfRate 
+                          : convert(valueUsd, 'USD')
+                      } else {
+                        // Other currencies (EUR, etc.) - convert using exchange rates
+                        const valueInCurrency = holdings * currentPrice
+                        balanceConverted = convert(valueInCurrency, itemCurrency)
+                      }
                     } else {
                       // Fallback: use transaction-based calculation
                       balanceConverted = convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert), 'CHF')
@@ -510,12 +593,50 @@ function NetWorthCategorySection({
                     balanceConverted = convert(calculateBalanceChf(item.id, transactions, item, cryptoPrices, convert), 'CHF')
                   }
                   
+                  // Determine if using live price or fallback (for market-driven categories)
+                  const isMarketDriven = category === 'Index Funds' || category === 'Stocks' || category === 'Commodities' || category === 'Crypto'
+                  let isLivePrice = false
+                  let livePriceValue = 0
+                  let livePriceCurrency = 'USD'
+                  if (isMarketDriven) {
+                    const ticker = item.name.trim().toUpperCase()
+                    if (category === 'Crypto') {
+                      livePriceValue = cryptoPrices[ticker] || 0
+                      livePriceCurrency = 'USD'
+                      isLivePrice = livePriceValue > 0 && usdToChfRate !== null && usdToChfRate > 0
+                    } else {
+                      livePriceValue = stockPrices[ticker] || 0
+                      livePriceCurrency = (item.currency as string) || 'USD'
+                      // For CHF-denominated stocks, we don't need usdToChfRate
+                      isLivePrice = livePriceValue > 0 && (livePriceCurrency === 'CHF' || (usdToChfRate !== null && usdToChfRate > 0))
+                    }
+                  }
+                  
+                  // Display price in item's native currency (no conversion)
+                  const displayPrice = isMarketDriven && livePriceValue > 0 ? livePriceValue : null
+                  const displayPriceCurrency = livePriceCurrency as CurrencyCode
+                  
+                  // Format price in item's native currency
+                  const formatPriceInItemCurrency = (value: number) => 
+                    formatMoney(value, displayPriceCurrency, 'ch', { incognito: isIncognito })
+                  
+                  // Calculate total in USD for display
+                  const totalInUsd = baseCurrency === 'CHF'
+                    ? balanceConverted * (exchangeRates?.rates['USD'] || 1)
+                    : balanceConverted // Already in USD if baseCurrency is USD
+                  
+                  // Color for total value (green if positive, red if negative)
+                  const totalColorClass = balanceConverted >= 0 ? 'text-inflow' : 'text-outflow'
+                  
                   return (
                     <tr key={item.id}>
                       <td colSpan={3} className="p-0 align-top">
                         <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
+                          {/* Column 1: Item Name + Platform (flexible width) */}
                           <div className="flex-1 min-w-0 pr-2">
-                            <div className="text-[0.882rem] truncate">{item.name}</div>
+                            <div className="text-[0.882rem] truncate">
+                              {item.name}
+                            </div>
                             <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate flex items-center gap-1">
                               <span>{item.platform}</span>
                               {platforms.length > 0 && !platforms.some(p => p.name === item.platform) && (
@@ -526,32 +647,60 @@ function NetWorthCategorySection({
                               )}
                             </div>
                           </div>
-                          <div className="flex-1 min-w-0 text-right px-2 nw-table-balance-cell">
-                            <div className="text-[0.882rem] whitespace-nowrap">{formatCurrency(balanceConverted)}</div>
-                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">{formatCoinAmount(holdings, isIncognito)}</div>
+                          
+                          {/* Column 2: Price + Holdings (fixed width) */}
+                          <div className="w-[100px] flex-shrink-0 text-right">
+                            <div className="text-[0.882rem] whitespace-nowrap flex items-center justify-end gap-1">
+                              {isMarketDriven ? (
+                                <>
+                                  <span
+                                    className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${isLivePrice ? 'bg-green-500' : 'bg-red-500'}`}
+                                    aria-hidden="true"
+                                  />
+                                  {displayPrice !== null ? (
+                                    <>{formatPriceInItemCurrency(displayPrice)}</>
+                                  ) : (
+                                    <span className="sr-only">No live price</span>
+                                  )}
+                                </>
+                              ) : (
+                                <span aria-hidden="true">&nbsp;</span>
+                              )}
+                            </div>
+                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">
+                              {isMarketDriven ? formatCoinAmount(holdings, isIncognito) : <span aria-hidden="true">&nbsp;</span>}
+                            </div>
                           </div>
+                          
+                          {/* Vertical Spacer */}
                           <div className="flex-shrink-0 w-3" aria-hidden="true" />
                           <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
                           <div className="flex-shrink-0 w-3" aria-hidden="true" />
-                          <div className="flex-shrink-0 flex items-center justify-end">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => onAddTransaction(item.id)}
-                                className="p-0 hover:bg-bg-surface-2 rounded-input transition-colors"
-                                title="Add Transaction"
-                              >
-                                <svg className="w-6 h-6 text-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                </svg>
-                              </button>
-                              <ItemMenu
-                                itemId={item.id}
-                                onShowMenu={onShowMenu}
-                                onRemoveItem={onRemoveItem}
-                                onShowTransactions={onShowTransactions}
-                                onEditItem={onEditItem}
-                              />
+                          
+                          {/* Column 3: Total CHF + Total USD (fixed width) */}
+                          <div className="w-[120px] flex-shrink-0 text-right">
+                            <div className={`text-[0.882rem] whitespace-nowrap ${totalColorClass}`}>
+                              {formatCurrency(balanceConverted)}
                             </div>
+                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">
+                              {formatUsd(totalInUsd)}
+                            </div>
+                          </div>
+                          
+                          {/* Vertical Spacer */}
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          
+                          {/* Column 4: Actions (fixed width) */}
+                          <div className="w-10 flex-shrink-0 flex items-center justify-center">
+                            <ItemMenu
+                              itemId={item.id}
+                              onAddTransaction={onAddTransaction}
+                              onShowTransactions={onShowTransactions}
+                              onRemoveItem={onRemoveItem}
+                              onEditItem={onEditItem}
+                            />
                           </div>
                         </div>
                       </td>
@@ -571,13 +720,13 @@ function NetWorthCategorySection({
 // Item Menu Component (3-dots)
 interface ItemMenuProps {
   itemId: string
-  onShowMenu: (itemId: string, buttonElement: HTMLButtonElement) => void
-  onRemoveItem: (itemId: string) => void
+  onAddTransaction: (itemId: string) => void
   onShowTransactions: (itemId: string) => void
+  onRemoveItem: (itemId: string) => void
   onEditItem: (itemId: string) => void
 }
 
-function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions, onEditItem }: ItemMenuProps) {
+function ItemMenu({ itemId, onAddTransaction, onShowTransactions, onRemoveItem, onEditItem }: ItemMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -609,6 +758,12 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions, onEdit
     }
   }
 
+  const handleAddTransaction = () => {
+    setMenuOpen(false)
+    setMenuPosition(null)
+    onAddTransaction(itemId)
+  }
+
   const handleShowTransactions = () => {
     setMenuOpen(false)
     setMenuPosition(null)
@@ -632,7 +787,7 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions, onEdit
       <button
         ref={buttonRef}
         onClick={handleClick}
-        className="p-0 hover:bg-bg-surface-2 rounded-input transition-colors"
+        className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
         title="Options"
       >
         <svg className="w-6 h-6 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
@@ -642,24 +797,30 @@ function ItemMenu({ itemId, onShowMenu, onRemoveItem, onShowTransactions, onEdit
       {menuOpen && menuPosition && (
         <div
           ref={menuRef}
-          className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card px-3 py-3 lg:p-6 min-w-[180px]"
+          className="fixed z-[100] bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-2 min-w-[160px]"
           style={{ left: menuPosition.x, top: menuPosition.y }}
         >
           <button
             onClick={handleEdit}
-            className="w-full text-left px-4 py-2 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors rounded-input"
           >
             Edit
           </button>
           <button
+            onClick={handleAddTransaction}
+            className="w-full text-left px-3 py-1.5 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors rounded-input"
+          >
+            Add Transaction
+          </button>
+          <button
             onClick={handleShowTransactions}
-            className="w-full text-left px-4 py-2 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-text-primary text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors rounded-input"
           >
             Show Transactions
           </button>
           <button
             onClick={handleRemove}
-            className="w-full text-left px-4 py-2 text-danger text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors"
+            className="w-full text-left px-3 py-1.5 text-danger text-[0.567rem] md:text-xs hover:bg-bg-surface-2 transition-colors rounded-input"
           >
             Remove
           </button>
@@ -703,6 +864,28 @@ function NetWorth() {
   const [stockPrices, setStockPrices] = useState<Record<string, number>>({})
   const [stockPricesLastUpdate, setStockPricesLastUpdate] = useState<number>(0)
   const [usdToChfRate, setUsdToChfRate] = useState<number | null>(null)
+
+  // Sync prices from DataContext (ensures prices are updated from periodic refresh)
+  useEffect(() => {
+    console.log('[NetWorth] Sync effect triggered:', {
+      cryptoPricesCount: Object.keys(data.cryptoPrices).length,
+      stockPricesCount: Object.keys(data.stockPrices).length,
+      stockPrices: data.stockPrices,
+      usdToChfRate: data.usdToChfRate,
+    })
+    // Sync crypto prices from DataContext
+    if (Object.keys(data.cryptoPrices).length > 0) {
+      setCryptoPrices(prev => ({ ...prev, ...data.cryptoPrices }))
+    }
+    // Sync stock prices from DataContext
+    if (Object.keys(data.stockPrices).length > 0) {
+      setStockPrices(prev => ({ ...prev, ...data.stockPrices }))
+    }
+    // Sync USD to CHF rate from DataContext
+    if (data.usdToChfRate !== null) {
+      setUsdToChfRate(data.usdToChfRate)
+    }
+  }, [data.cryptoPrices, data.stockPrices, data.usdToChfRate])
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
 
   // Load platforms from Firestore (data items come from DataContext)
@@ -1082,10 +1265,6 @@ function NetWorth() {
     }
   }
 
-  const handleShowMenu = (itemId: string, buttonElement: HTMLButtonElement) => {
-    // This function is kept for interface compatibility but ItemMenu manages its own menu now
-  }
-
   const handleRemoveItem = async (itemId: string) => {
     if (window.confirm('Are you sure you want to remove this item? All associated transactions will also be removed.')) {
       // Find the existing item to get its updatedAt timestamp for conflict detection
@@ -1222,7 +1401,6 @@ function NetWorth() {
                 platforms={platforms}
                 onAddClick={() => setActiveCategory(category)}
                 onAddTransaction={handleAddTransaction}
-                onShowMenu={handleShowMenu}
                 onRemoveItem={handleRemoveItem}
                 onShowTransactions={handleShowTransactions}
                 onEditItem={handleEditItem}
@@ -2836,10 +3014,20 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
                   // Check if this is an ADJUSTMENT transaction (no price)
                   const isAdjustment = tx.cryptoType === 'ADJUSTMENT'
                   
+                  // Categories where price per item is always 1
+                  const categoriesWithoutPricePerItem = ['Cash', 'Bank Accounts', 'Retirement Funds', 'Real Estate', 'Perpetuals']
+                  const isNoPriceCategory = categoriesWithoutPricePerItem.includes(item.category)
+                  
                   if (isAdjustment) {
-                    // ADJUSTMENT doesn't have a price
-                    totalConverted = 0
-                    priceDisplay = '—'
+                    if (isNoPriceCategory) {
+                      // For categories where price is always 1, show price as 1 and total = amount
+                      totalConverted = tx.amount
+                      priceDisplay = '1'
+                    } else {
+                      // For Crypto/Stocks, no meaningful price or total for adjustments
+                      totalConverted = 0
+                      priceDisplay = '—'
+                    }
                   } else if (isCrypto) {
                     // Reconstruct original USD price from stored value
                     // When saving: convert(usdPrice, 'USD') converts FROM USD TO baseCurrency_at_save_time
@@ -2866,7 +3054,7 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
                     if (tx.pricePerItemChf === 1) {
                       // Amount is the total value in the selected currency
                       totalConverted = tx.amount // Already in original currency
-                      priceDisplay = '—' // No price per item for these transactions
+                      priceDisplay = '1' // Price per item is 1 for these categories
                     } else if (tx.pricePerItem !== undefined && tx.currency) {
                       // Use original price per item in original currency
                       const totalInOriginalCurrency = tx.amount * tx.pricePerItem
@@ -2917,7 +3105,7 @@ function ShowTransactionsModal({ item, transactions, cryptoPrices = {}, platform
                       <td className="py-2 px-3 text2 text-right">{amountDisplay}</td>
                       <td className="py-2 px-3 text2 text-right">{priceDisplay}</td>
                       <td className="py-2 px-3 text2 text-right">
-                        {isAdjustment ? (
+                        {isAdjustment && !isNoPriceCategory ? (
                           <span className="text-text-muted">—</span>
                         ) : (
                           <span className={typeColor}>

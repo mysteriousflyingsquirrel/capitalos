@@ -48,7 +48,7 @@ export function calculateBalanceChf(
       // Handle ADJUSTMENT transactions
       if (tx.cryptoType === 'ADJUSTMENT') {
         // For ADJUSTMENT, the amount is already the delta in holdings
-        // For simplicity, we'll use the average price of buy transactions
+        // Try to use the average price of buy transactions if available
         const buyTransactions = itemTransactions.filter(
           (t) => (t.cryptoType === 'BUY' || (!t.cryptoType && t.side === 'buy')) && t.pricePerItemChf > 0
         )
@@ -63,8 +63,9 @@ export function calculateBalanceChf(
           const avgPrice = totalAmount > 0 ? totalValue / totalAmount : 0
           return sum + tx.amount * avgPrice
         }
-        // If no buy transactions, adjustment has no value impact
-        return sum
+        // If no buy transactions, use price of 1 (correct for Bank Accounts, Cash, etc.)
+        // This allows ADJUSTMENT to directly affect the balance
+        return sum + tx.amount * 1
       }
 
       // Handle BUY/SELL transactions
@@ -132,7 +133,9 @@ export function calculateBalanceChf(
           const avgPrice = totalAmount > 0 ? totalValue / totalAmount : 0
           return sum + tx.amount * avgPrice
         }
-        return sum
+        // If no buy transactions, use price of 1 (correct for Bank Accounts, Cash, etc.)
+        // This allows ADJUSTMENT to directly affect the balance
+        return sum + tx.amount * 1
       }
 
       // Handle BUY/SELL transactions

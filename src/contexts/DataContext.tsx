@@ -69,6 +69,7 @@ export function DataProvider({ children }: DataProviderProps) {
     mexcSecretKey,
     apiKeysLoaded,
     getCurrentKeys,
+    isApiKeysLoaded,
   } = useApiKeys()
   const { setHasInitialDataLoaded } = useSyncStatus()
   const prevUidRef = useRef<string | null>(null)
@@ -158,6 +159,7 @@ export function DataProvider({ children }: DataProviderProps) {
     )
 
     if (stockItems.length === 0) {
+      console.log('[DataContext] fetchStockPricesData: No stock items found')
       return {}
     }
 
@@ -165,9 +167,18 @@ export function DataProvider({ children }: DataProviderProps) {
     const uniqueTickers = [...new Set(tickers)]
 
     try {
-      return await fetchStockPrices(uniqueTickers, rapidApiKey)
+      // Use getCurrentKeys() to get the current API key from ref (not stale closure value)
+      const currentKeys = getCurrentKeys()
+      console.log('[DataContext] fetchStockPricesData:', {
+        tickers: uniqueTickers,
+        hasApiKey: !!currentKeys.rapidApiKey,
+        apiKeyLength: currentKeys.rapidApiKey?.length || 0,
+      })
+      const prices = await fetchStockPrices(uniqueTickers, currentKeys.rapidApiKey)
+      console.log('[DataContext] fetchStockPricesData result:', prices)
+      return prices
     } catch (error) {
-      console.error('Error fetching stock prices:', error)
+      console.error('[DataContext] Error fetching stock prices:', error)
       return {}
     }
   }
@@ -343,7 +354,7 @@ export function DataProvider({ children }: DataProviderProps) {
     )
   }
 
-  // Load all data - exact flow: fetch exchange prices -> fetch crypto prices -> fetch perpetuals data -> update frontend
+  // Load all data - exact flow: wait for API keys -> load Firebase data -> fetch prices -> fetch perpetuals -> update frontend
   const loadAllData = async () => {
     if (!uid) {
       setLoading(false)
@@ -353,37 +364,38 @@ export function DataProvider({ children }: DataProviderProps) {
     try {
       setError(null)
       
+      // Step 0: Wait for API keys to load FIRST (max 5 seconds)
+      // This ensures rapidApiKey is available when fetching stock prices
+      // IMPORTANT: Use isApiKeysLoaded() which reads from ref, not apiKeysLoaded state (closure issue)
+      const isInitialLoad = !hasLoadedDataRef.current
+      
+      if (isInitialLoad && !isApiKeysLoaded()) {
+        const maxWait = 5000
+        const startTime = Date.now()
+        
+        // Use isApiKeysLoaded() to check ref value (not stale closure)
+        while (!isApiKeysLoaded() && (Date.now() - startTime) < maxWait) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+        
+        console.log('[DataContext] Waited for API keys:', {
+          apiKeysLoaded: isApiKeysLoaded(),
+          waitedMs: Date.now() - startTime,
+          currentRapidApiKey: getCurrentKeys().rapidApiKey ? 'present' : 'missing',
+        })
+      }
+      
       // Step 1: Load Firebase data
       const firebaseData = await loadFirebaseData()
       
       // Step 2: Fetch exchange prices (USD→CHF rate) and crypto/stock prices
+      // Now rapidApiKey is guaranteed to be available (if configured)
       const [cryptoData, stockPricesData] = await Promise.all([
         fetchCryptoPrices(firebaseData.items),
         fetchStockPricesData(firebaseData.items),
       ])
       
-      // Step 3: Wait for API keys to load (if initial load), then fetch Perpetuals data
-      // During initial load, we want to wait for keys so perpetuals are ready before showing the UI
-      const isInitialLoad = !hasLoadedDataRef.current
-      
-      if (isInitialLoad && !apiKeysLoaded) {
-        // Wait for API keys to load (max 5 seconds)
-        const maxWait = 5000
-        const startTime = Date.now()
-        
-        while (!apiKeysLoaded && (Date.now() - startTime) < maxWait) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-        }
-        
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[DataContext] Waited for API keys:', {
-            apiKeysLoaded,
-            waitedMs: Date.now() - startTime,
-          })
-        }
-      }
-      
-      // Now fetch Perpetuals data (keys are loaded or we've waited long enough)
+      // Step 3: Fetch Perpetuals data
       // Use getCurrentKeys() to ensure we always have the latest keys, not stale closure values
       const currentKeys = getCurrentKeys()
       const itemsWithPerpetuals = await fetchPerpetualsData(firebaseData.items, {

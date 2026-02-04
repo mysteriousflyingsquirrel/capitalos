@@ -227,6 +227,22 @@ function Dashboard() {
   const [stockPrices, setStockPrices] = useState<Record<string, number>>({})
   const [usdToChfRate, setUsdToChfRate] = useState<number | null>(null)
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
+
+  // Sync prices from DataContext (ensures prices are updated from periodic refresh)
+  useEffect(() => {
+    // Sync crypto prices from DataContext
+    if (Object.keys(data.cryptoPrices).length > 0) {
+      setCryptoPrices(prev => ({ ...prev, ...data.cryptoPrices }))
+    }
+    // Sync stock prices from DataContext
+    if (Object.keys(data.stockPrices).length > 0) {
+      setStockPrices(prev => ({ ...prev, ...data.stockPrices }))
+    }
+    // Sync USD to CHF rate from DataContext
+    if (data.usdToChfRate !== null) {
+      setUsdToChfRate(data.usdToChfRate)
+    }
+  }, [data.cryptoPrices, data.stockPrices, data.usdToChfRate])
   
   // Track window width for responsive x-axis ticks
   useEffect(() => {

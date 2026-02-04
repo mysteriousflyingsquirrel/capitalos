@@ -165,7 +165,14 @@ export async function fetchYahooFinancePrices(tickers: string[], apiKey?: string
  * @returns Record mapping ticker to price in USD
  */
 export async function fetchStockPrices(tickers: string[], apiKey?: string | null): Promise<Record<string, number>> {
+  console.log('[YahooFinance] fetchStockPrices called:', {
+    tickers,
+    hasApiKey: !!apiKey,
+    apiKeyLength: apiKey?.length || 0,
+  })
   // Use the main quotes endpoint
-  return await fetchYahooFinancePrices(tickers, apiKey)
+  const result = await fetchYahooFinancePrices(tickers, apiKey)
+  console.log('[YahooFinance] fetchStockPrices result:', result)
+  return result
 }
 
