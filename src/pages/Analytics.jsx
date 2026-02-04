@@ -87,7 +87,7 @@ function EntryMenu({ entry, onEdit, onRemove }) {
       <button
         ref={buttonRef}
         onClick={handleClick}
-        className="p-0 hover:bg-bg-surface-2 rounded-input transition-colors"
+        className="p-0"
         title="Options"
       >
         <svg className="w-6 h-6 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
@@ -496,13 +496,13 @@ function Analytics() {
                           className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]"
                         >
                           <div className="flex-1 min-w-0 pr-2">
-                            <div className="text-[0.882rem] truncate">{entry.title}</div>
-                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">
+                            <div className="text-[0.63rem] md:text-[0.79rem] truncate">{entry.title}</div>
+                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate">
                               {formatDateToDDMMYYYY(entry.date)}
                             </div>
                           </div>
                           <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
-                            <TotalText variant="inflow" className="text-[0.882rem] whitespace-nowrap">
+                            <TotalText variant="inflow" className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
                               {formatCurrency(entry.amount)}
                             </TotalText>
                           </div>
@@ -545,13 +545,13 @@ function Analytics() {
                           className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]"
                         >
                           <div className="flex-1 min-w-0 pr-2">
-                            <div className="text-[0.882rem] truncate">{entry.title}</div>
-                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">
+                            <div className="text-[0.63rem] md:text-[0.79rem] truncate">{entry.title}</div>
+                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate">
                               {formatDateToDDMMYYYY(entry.date)}
                             </div>
                           </div>
                           <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
-                            <TotalText variant="outflow" className="text-[0.882rem] whitespace-nowrap">
+                            <TotalText variant="outflow" className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
                               {formatCurrency(entry.amount)}
                             </TotalText>
                           </div>

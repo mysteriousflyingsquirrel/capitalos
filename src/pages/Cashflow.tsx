@@ -295,13 +295,13 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
                       <td className="p-0 align-top">
                         <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
                           <div className="flex-1 min-w-0 pr-2">
-                            <div className="text-[0.882rem] truncate">{item.item}</div>
-                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">
+                            <div className="text-[0.63rem] md:text-[0.79rem] truncate">{item.item}</div>
+                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate">
                               {item.provider}
                             </div>
                           </div>
                           <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
-                            <TotalText variant="inflow" className="text-[0.882rem] whitespace-nowrap">
+                            <TotalText variant="inflow" className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
                               {formatCurrency(
                                 item.amount !== undefined && item.currency
                                   ? convert(item.amount, item.currency as CurrencyCode)
@@ -452,13 +452,13 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
                       <td className="p-0 align-top">
                         <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
                           <div className="flex-1 min-w-0 pr-2">
-                            <div className="text-[0.882rem] truncate">{item.item}</div>
-                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">
+                            <div className="text-[0.63rem] md:text-[0.79rem] truncate">{item.item}</div>
+                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate">
                               {item.receiver}
                             </div>
                           </div>
                           <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
-                            <TotalText variant="outflow" className="text-[0.882rem] whitespace-nowrap">
+                            <TotalText variant="outflow" className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap">
                               {formatCurrency(
                                 item.amount !== undefined && item.currency
                                   ? convert(item.amount, item.currency as CurrencyCode)
@@ -703,12 +703,12 @@ function AccountflowSection({ mappings, platforms, onAddMapping, onEditMapping, 
                       <td className="p-0 align-top">
                         <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
                           <div className="flex-1 min-w-0 pr-2">
-                            <div className="text-[0.882rem] truncate">{label}</div>
+                            <div className="text-[0.63rem] md:text-[0.79rem] truncate">{label}</div>
                           </div>
                           <div className="flex-1 min-w-0 text-right px-2 flex flex-col justify-center">
                             <TotalText
                               variant={type === 'inflow' ? 'inflow' : 'outflow'}
-                              className="text-[0.882rem] whitespace-nowrap"
+                              className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap"
                             >
                               {formatCurrency(amount)}
                             </TotalText>
@@ -906,7 +906,7 @@ function CashflowItemMenu({ itemId, onEdit, onRemove }: CashflowItemMenuProps) {
       <button
         ref={buttonRef}
         onClick={handleClick}
-        className="p-0 hover:bg-bg-surface-2 rounded-input transition-colors"
+        className="p-0"
         title="Options"
       >
         <svg className="w-6 h-6 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">

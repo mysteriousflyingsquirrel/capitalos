@@ -388,38 +388,37 @@ function NetWorthCategorySection({
                                   <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
                                     {/* Column 1: Item Name + Platform (flexible width) */}
                                     <div className="flex-1 min-w-0 pr-2">
-                                      <div className="text-[0.882rem] truncate">{perpetualsItem.name || exchangeName}</div>
-                                      <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate">{perpetualsItem.platform || exchangeName}</div>
+                                      <div className="text-[0.63rem] md:text-[0.79rem] truncate">{perpetualsItem.name || exchangeName}</div>
+                                      <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate">{perpetualsItem.platform || exchangeName}</div>
                                     </div>
                                     
                                     {/* Column 2: Price + Holdings - empty for Perpetuals (fixed width for alignment) */}
-                                    <div className="w-[100px] flex-shrink-0 text-right">
-                                      <div className="text-[0.882rem] whitespace-nowrap text-text-muted" aria-hidden="true">&nbsp;</div>
-                                      <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap" aria-hidden="true">&nbsp;</div>
+                                    <div className="w-[70px] md:w-[100px] flex-shrink-0 text-right">
+                                      <div className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap text-text-muted" aria-hidden="true">&nbsp;</div>
+                                      <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] whitespace-nowrap" aria-hidden="true">&nbsp;</div>
                                     </div>
                                     
                                     {/* Vertical Spacer */}
-                                    <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                                    <div className="flex-shrink-0 w-2 md:w-3" aria-hidden="true" />
                                     <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
-                                    <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                                    <div className="flex-shrink-0 w-2 md:w-3" aria-hidden="true" />
                                     
                                     {/* Column 3: Total CHF + Total USD (fixed width) */}
-                                    <div className="w-[120px] flex-shrink-0 text-right">
-                                      <div className={`text-[0.882rem] whitespace-nowrap ${totalColorClass}`}>
+                                    <div className="w-[85px] md:w-[120px] flex-shrink-0 text-right">
+                                      <div className={`text-[0.63rem] md:text-[0.79rem] whitespace-nowrap ${totalColorClass}`}>
                                         {formatCurrency(balanceChf)}
                                       </div>
-                                      <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">
+                                      <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] whitespace-nowrap">
                                         {formatUsd(holdingsUsd)}
                                       </div>
                                     </div>
                                     
                                     {/* Vertical Spacer */}
-                                    <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                                    <div className="flex-shrink-0 w-2 md:w-3" aria-hidden="true" />
                                     <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
-                                    <div className="flex-shrink-0 w-3" aria-hidden="true" />
                                     
-                                    {/* Column 4: Actions - empty for Perpetuals (fixed width for alignment) */}
-                                    <div className="w-10 flex-shrink-0" aria-hidden="true" />
+                                    {/* Column 4: Actions - empty for Perpetuals (pl matches other rows) */}
+                                    <div className="flex-shrink-0 pl-2 md:pl-3 w-6" aria-hidden="true" />
                                   </div>
                                 </td>
                               </tr>
@@ -634,10 +633,10 @@ function NetWorthCategorySection({
                         <div className="flex items-stretch bg-bg-surface-1 border border-border-subtle rounded-input overflow-hidden p-[10px]">
                           {/* Column 1: Item Name + Platform (flexible width) */}
                           <div className="flex-1 min-w-0 pr-2">
-                            <div className="text-[0.882rem] truncate">
+                            <div className="text-[0.63rem] md:text-[0.79rem] truncate">
                               {item.name}
                             </div>
-                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] truncate flex items-center gap-1">
+                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] truncate flex items-center gap-1">
                               <span>{item.platform}</span>
                               {platforms.length > 0 && !platforms.some(p => p.name === item.platform) && (
                                 <svg className="w-3.5 h-3.5 text-warning flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -648,9 +647,9 @@ function NetWorthCategorySection({
                             </div>
                           </div>
                           
-                          {/* Column 2: Price + Holdings (fixed width) */}
-                          <div className="w-[100px] flex-shrink-0 text-right">
-                            <div className="text-[0.882rem] whitespace-nowrap flex items-center justify-end gap-1">
+                          {/* Column 2: Price + Holdings (fixed width, responsive) */}
+                          <div className="w-[70px] md:w-[100px] flex-shrink-0 text-right">
+                            <div className="text-[0.63rem] md:text-[0.79rem] whitespace-nowrap flex items-center justify-end gap-1">
                               {isMarketDriven ? (
                                 <>
                                   <span
@@ -667,33 +666,32 @@ function NetWorthCategorySection({
                                 <span aria-hidden="true">&nbsp;</span>
                               )}
                             </div>
-                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">
+                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] whitespace-nowrap">
                               {isMarketDriven ? formatCoinAmount(holdings, isIncognito) : <span aria-hidden="true">&nbsp;</span>}
                             </div>
                           </div>
                           
                           {/* Vertical Spacer */}
-                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-2 md:w-3" aria-hidden="true" />
                           <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
-                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-2 md:w-3" aria-hidden="true" />
                           
-                          {/* Column 3: Total CHF + Total USD (fixed width) */}
-                          <div className="w-[120px] flex-shrink-0 text-right">
-                            <div className={`text-[0.882rem] whitespace-nowrap ${totalColorClass}`}>
+                          {/* Column 3: Total CHF + Total USD (fixed width, responsive) */}
+                          <div className="w-[85px] md:w-[120px] flex-shrink-0 text-right">
+                            <div className={`text-[0.63rem] md:text-[0.79rem] whitespace-nowrap ${totalColorClass}`}>
                               {formatCurrency(balanceConverted)}
                             </div>
-                            <div className="text-text-muted text-[0.68rem] md:text-[0.774rem] whitespace-nowrap">
+                            <div className="text-text-muted text-[0.55rem] md:text-[0.774rem] whitespace-nowrap">
                               {formatUsd(totalInUsd)}
                             </div>
                           </div>
                           
                           {/* Vertical Spacer */}
-                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
+                          <div className="flex-shrink-0 w-2 md:w-3" aria-hidden="true" />
                           <div className="flex-shrink-0 w-px self-stretch bg-border-subtle" aria-hidden="true" />
-                          <div className="flex-shrink-0 w-3" aria-hidden="true" />
                           
-                          {/* Column 4: Actions (fixed width) */}
-                          <div className="w-10 flex-shrink-0 flex items-center justify-center">
+                          {/* Column 4: Actions (no extra spacing - frame padding provides right margin) */}
+                          <div className="flex-shrink-0 flex items-center pl-2 md:pl-3">
                             <ItemMenu
                               itemId={item.id}
                               onAddTransaction={onAddTransaction}
@@ -787,7 +785,7 @@ function ItemMenu({ itemId, onAddTransaction, onShowTransactions, onRemoveItem, 
       <button
         ref={buttonRef}
         onClick={handleClick}
-        className="p-1.5 hover:bg-bg-surface-2 rounded-input transition-colors"
+        className="p-0"
         title="Options"
       >
         <svg className="w-6 h-6 text-text-secondary" fill="currentColor" viewBox="0 0 24 24">
