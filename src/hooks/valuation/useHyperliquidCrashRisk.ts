@@ -583,18 +583,21 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
           if (crowdingConfirmed && crowdingDirection !== 'NEUTRAL' && !dataUnavailable && stabilityOk) {
             try {
               // Fetch 15m candles (last 2 for close-to-close return)
+              const candleCoin = parsedCoin
+
               const candles15m = await fetchCandleSnapshot({
-                coin: requestedTicker,
+                coin: candleCoin,
                 interval: '15m',
-                startTime: now - 30 * 60 * 1000, // last 30 min
+                startTime: now - 90 * 60 * 1000, // 90 min
+                endTime: now,
                 signal: abort.signal,
               })
-
-              // Fetch 1h candles (last 2)
+              
               const candles1h = await fetchCandleSnapshot({
-                coin: requestedTicker,
+                coin: candleCoin,
                 interval: '1h',
-                startTime: now - 2 * 60 * 60 * 1000, // last 2 hours
+                startTime: now - 4 * 60 * 60 * 1000, // 4 hours
+                endTime: now,
                 signal: abort.signal,
               })
 
