@@ -12,15 +12,14 @@
       "Positions table Price column (markPx from asset context)",
       "Performance windows (24h/7d/30d/90d)",
       "Error handling and missing-credential behavior",
-      "Dashboard frame (top of Hyperliquid page)",
-      "Positions table columns: Funding Signal, Funding Rate, Open Interest",
-      "Funding signal computation (LONG/SHORT thresholds)",
-      "Exact message strings and missing-data display as \"-\""
+      "Crash-Risk Indicator (3-Pillar system)",
+      "Profit Reminder System (milestone-based)"
     ],
     "outOfScope": [
       "Kraken / MEXC / Aster",
-      "Tooltips, hover behavior, drill-down details for funding",
-      "Bot alerts or automation"
+      "Bot alerts or automation",
+      "SL or order detection",
+      "Tooltips for risk indicator"
     ]
   },
   "acceptanceCriteria": [
@@ -28,12 +27,12 @@
     "If WS disconnected and REST positions exist, positions table MUST still render from REST snapshot.",
     "Performance PnL boxes MUST render 24h/7d/30d/90d values or 'N/A' if null.",
     "If wallet address is not configured, Hyperliquid Perpetuals item MUST be absent or contain empty arrays (no crash).",
-    "Dashboard frame exists above Performance/Positions/Open Orders.",
-    "Dashboard shows one line per open position with ONLY dot + one sentence.",
-    "No tooltips for funding health feature.",
-    "Positions table has Funding Signal, Funding Rate, and Open Interest columns.",
-    "When base signal is ORANGE and open interest is elevated, displayed signal is RED.",
-    "Missing values show \"-\" and rendering never crashes."
+    "Risk Indicator: Assets with dayNtlVlm < $25M OR openInterest < $10M show UNSUPPORTED state.",
+    "Risk Indicator: RED only fires when ALL 3 pillars agree (crowding + structure broken + liquidity fragile).",
+    "Risk Indicator: State cannot downgrade faster than cooldown period (30min RED, 15min ORANGE).",
+    "Profit Reminders: Fire at +5%, +10% milestones; only once per position.",
+    "Profit Reminders: Replaced with risk warning when RED active.",
+    "Missing data displays '–' and rendering never crashes."
   ],
   "data": {
     "credentialsPath": "users/{uid}/settings/user -> apiKeys.hyperliquidWalletAddress",
@@ -41,63 +40,103 @@
     "wsEndpoint": "wss://api.hyperliquid.xyz/ws",
     "wsSubscription": "clearinghouseState, user: walletAddress",
     "markPriceSource": "useHyperliquidAssetCtx (asset context stream)",
-    "fundingHealth": {
-      "required": ["fundingRatePct", "side"],
-      "optional": ["openInterest"],
-      "missingBehavior": "Display \"-\" in UI; do not crash. fundingRatePct and openInterest from metaAndAssetCtxs; add to position data model if not present.",
-      "elevatedOiThreshold": "Implementation-defined (e.g. openInterest > 1_000_000)."
+    "crashRiskIndicator": {
+      "dataSources": {
+        "primary": "metaAndAssetCtxs (markPx, oraclePx, funding, openInterest, premium, dayNtlVlm, impactPxs)",
+        "fallback": "l2Book (bestBid, bestAsk, depth within ±0.2%)",
+        "optional": "recentTrades (price impulse confirmation)"
+      },
+      "stabilityGate": {
+        "dayNtlVlm": "> $25,000,000",
+        "openInterest": "> $10,000,000"
+      },
+      "refreshIntervals": {
+        "metaAndAssetCtxs": "15 seconds",
+        "l2Book": "30 seconds (fallback only)",
+        "historicalLookback": "5 minutes (cached)"
+      }
     }
   },
   "logic": {
     "priceColumn": "MUST display markPx from asset context; if missing display dash. MUST NOT display entry/mid/oracle/liquidation price.",
     "performanceWindows": "24h/7d/30d from deltaFromBucket (pnlHistory or accountValueHistory); 90d from pnl90dUsd (closest point to 90 days ago).",
     "missingWallet": "REST fetch MUST return null (hyperliquidService.fetchHyperliquidPerpetualsData).",
-    "fundingSignal": {
-      "definitions": {
-        "fundingRatePct": "Funding rate in PERCENT (e.g. +0.05% => 0.05)",
-        "side": "LONG or SHORT"
+    "crashRiskIndicator": {
+      "pillar1_crowding": {
+        "metrics": ["openInterest", "funding"],
+        "formula": "OI_z = zscore(openInterest, 7d); F_z = zscore(funding, 7d)",
+        "condition": "OI_z >= 1.5 AND |F_z| >= 1.5 AND confirmed for 2 consecutive 15-min windows",
+        "direction": "F_z > 0 = Long crowding; F_z < 0 = Short crowding"
       },
-      "LONG": {
-        "GREEN": "fundingRatePct <= 0.00",
-        "ORANGE": "0.00 < fundingRatePct < 0.05",
-        "RED": "fundingRatePct >= 0.05"
+      "pillar2_structure": {
+        "metrics": ["markPx returns"],
+        "longCrowded": {
+          "intact": "15m return > 0 AND 1h return > 0",
+          "weakening": "15m return <= 0 OR 1h return ≈ 0",
+          "broken": "15m return < 0 AND 1h return < 0"
+        },
+        "shortCrowded": {
+          "intact": "15m return < 0 AND 1h return < 0",
+          "weakening": "15m return >= 0 OR 1h return ≈ 0",
+          "broken": "15m return > 0 AND 1h return > 0"
+        },
+        "zeroThreshold": "|return| < 0.001 (0.1%)"
       },
-      "SHORT": {
-        "GREEN": "fundingRatePct >= 0.00",
-        "ORANGE": "-0.05 < fundingRatePct < 0.00",
-        "RED": "fundingRatePct <= -0.05"
+      "pillar3_liquidity": {
+        "preferred": "impactPxs from metaAndAssetCtxs",
+        "fallback": "l2Book spread + depth",
+        "fragileCondition": "impact_cost_z >= 1.5 OR spread_z >= 1.5 OR depth_z <= -1.5",
+        "confirmation": "2 consecutive checks"
       },
-      "UNKNOWN": "fundingRatePct is missing OR side is missing",
-      "openInterestAdjustment": "If base signal is ORANGE and openInterest is present and elevated, displayed signal is RED; otherwise displayed = base. GREEN/RED unchanged by OI."
+      "stateLogic": {
+        "GREEN": "crowding = FALSE OR (crowding = TRUE AND structure = INTACT)",
+        "ORANGE": "crowding = TRUE AND structure = WEAKENING AND liquidity != FRAGILE",
+        "RED": "crowding = TRUE AND structure = BROKEN AND liquidity = FRAGILE",
+        "UNSUPPORTED": "stability gate failed"
+      },
+      "cooldowns": {
+        "RED": "30 minutes minimum hold",
+        "ORANGE": "15 minutes minimum hold"
+      }
+    },
+    "profitReminderSystem": {
+      "milestones": [
+        { "threshold": "+5%", "message": "You're up ~5%. Consider moving your stop to break-even." },
+        { "threshold": "+10%", "message": "You're up ~10%. Consider trailing your stop to lock in profits." },
+        { "threshold": "+15%", "message": "You're up ~15%. Strong gains—consider partial take-profit.", "optional": true },
+        { "threshold": "+20%", "message": "You're up ~20%. Excellent trade. Protect these gains.", "optional": true }
+      ],
+      "fireBehavior": "Once per position per milestone",
+      "redOverride": "You're in profit, but risk is high. Protect gains now.",
+      "stateTracking": "firedMilestones: Record<positionId, Set<milestone>>; reset on position close"
     }
   },
   "ui": {
     "wsStatusValues": ["disconnected", "connecting", "subscribed", "error"],
     "emptyTables": "No positions / No open orders",
-    "frames": [
-      {
-        "name": "Dashboard",
-        "position": "above",
-        "aboveFrames": ["Performance", "Positions", "Open Orders"],
-        "rules": [
-          "One line per open Hyperliquid perp position",
-          "Each line: colored dot (green/orange/red) + exactly one sentence",
-          "No tooltips, no hover behavior, no secondary text",
-          "Sort order: RED first, then ORANGE, then GREEN"
-        ]
+    "crashRiskIndicator": {
+      "frameTitle": "Risk Indicator",
+      "location": "Top of Hyperliquid page, above Performance frame",
+      "content": "One line per open position with colored dot + message",
+      "sorting": "RED first, then ORANGE, then GREEN, then UNSUPPORTED",
+      "noTooltips": true,
+      "messages": {
+        "GREEN": "Market is stable. Trade as planned.",
+        "ORANGE": "Risk is rising. Consider reducing size or tightening your stop.",
+        "RED": "High crash risk. Protect capital or exit.",
+        "UNSUPPORTED": "Market too unstable for reliable risk signals."
+      },
+      "dotColors": {
+        "GREEN": "#2ECC71",
+        "ORANGE": "#F39C12",
+        "RED": "#E74C3C",
+        "UNSUPPORTED": "#A0AEC0"
       }
-    ],
-    "fundingHealthCopy": {
-      "GREEN": "Funding favors your {TICKER} position. No pressure.",
-      "ORANGE": "Funding is mildly against your {TICKER} position. Stay alert.",
-      "RED": "High funding pressure on {TICKER}. Consider de-risking or SL in profit.",
-      "UNKNOWN": "Funding data unavailable for {TICKER}."
     },
-    "tableColumns": [
-      { "id": "fundingSignal", "label": "Funding Signal", "emptyValue": "-" },
-      { "id": "fundingRate", "label": "Funding Rate", "emptyValue": "-" },
-      { "id": "openInterest", "label": "Open Interest", "emptyValue": "-" }
-    ],
-    "missingDataRule": "Display \"-\" (dash); never blank, never 0. Do not crash on null/undefined."
+    "profitReminders": {
+      "display": "Secondary line below indicator OR toast/notification",
+      "mustNotObscure": "indicator message"
+    },
+    "missingDataRule": "Display '–' (dash); never blank, never 0. Do not crash on null/undefined."
   }
 }
