@@ -33,6 +33,7 @@ export type HyperliquidAssetCtx = {
   markPx: number | null
   oraclePx: number | null
   funding: number | null
+  /** Open interest in USD notional (token units × markPx) */
   openInterest: number | null
   premium: number | null
   dayNtlVlm: number | null
@@ -87,12 +88,18 @@ export async function fetchMetaAndAssetCtxs(args?: { dex?: string; signal?: Abor
     if (!coin) continue
     const ctx = assetCtxsRaw[i] as any
 
+    // Parse markPx first since we need it for openInterest USD conversion
+    const markPx = toFiniteNumber(ctx?.markPx)
+    // openInterest from API is in token units; convert to USD notional
+    const openInterestTokens = toFiniteNumber(ctx?.openInterest)
+    const openInterestUsd = openInterestTokens != null && markPx != null ? openInterestTokens * markPx : null
+
     const entry: HyperliquidAssetCtx = {
       coin,
-      markPx: toFiniteNumber(ctx?.markPx),
+      markPx,
       oraclePx: toFiniteNumber(ctx?.oraclePx),
       funding: toFiniteNumber(ctx?.funding),
-      openInterest: toFiniteNumber(ctx?.openInterest),
+      openInterest: openInterestUsd,
       premium: toFiniteNumber(ctx?.premium),
       dayNtlVlm: toFiniteNumber(ctx?.dayNtlVlm),
       impactPxsRaw: ctx?.impactPxs,
