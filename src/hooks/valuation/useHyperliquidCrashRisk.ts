@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   computeImpactCostPct,
+  extractSymbol,
   fetchL2BookSnapshot,
   fetchMetaAndAssetCtxs,
   type HyperliquidAssetCtx,
@@ -13,6 +14,14 @@ export type RiskDotDebug = {
   state: RiskState
   reason: string
   updatedAt: number
+  request: {
+    requestedTicker: string
+    parsedDex: string
+    parsedCoin: string
+    metaAndAssetCtxsPayload: { type: 'metaAndAssetCtxs'; dex: string }
+    assetCtxFound: boolean
+    assetCtxIndex: number | null
+  }
   universe: {
     dayNtlVlm: number | null
     minVolume: number
@@ -210,6 +219,13 @@ function buildTooltipText(args: { coin: string; debug: Omit<RiskDotDebug, 'toolt
 
   const lines: string[] = []
   lines.push(`Risk Dot Debug — ${args.coin}`)
+  lines.push('')
+  lines.push('REQUEST / MAPPING')
+  lines.push(`requestedTicker: ${d.request.requestedTicker}`)
+  lines.push(`parsedDex: ${d.request.parsedDex || '(default)'}`)
+  lines.push(`parsedCoin: ${d.request.parsedCoin}`)
+  lines.push(`metaAndAssetCtxs payload: ${JSON.stringify(d.request.metaAndAssetCtxsPayload)}`)
+  lines.push(`assetCtx found: ${String(d.request.assetCtxFound)}${d.request.assetCtxIndex != null ? ` (index ${d.request.assetCtxIndex})` : ''}`)
   lines.push('')
   lines.push('SECTION 0 — FINAL STATE')
   lines.push(`State: ${stateLabelForTooltip(d.state)}`)
@@ -467,21 +483,61 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
     const tick = async () => {
       const now = safeNow()
       try {
-        const meta = await fetchMetaAndAssetCtxs({ signal: abort.signal })
-        const byCoin = meta.byCoin
+        // Group tickers by dex and fetch per-dex metaAndAssetCtxs
+        const parseTicker = (ticker: string): { requestedTicker: string; parsedDex: string; parsedCoin: string } => {
+          const i = ticker.indexOf(':')
+          if (i <= 0) return { requestedTicker: ticker, parsedDex: '', parsedCoin: ticker }
+          return { requestedTicker: ticker, parsedDex: ticker.slice(0, i), parsedCoin: ticker.slice(i + 1) }
+        }
+
+        const parsed = coins.map(parseTicker)
+        const dexSet = new Set(parsed.map((p) => p.parsedDex))
+        const dexList = Array.from(dexSet)
+
+        const ctxByDex: Record<string, Awaited<ReturnType<typeof fetchMetaAndAssetCtxs>>> = {}
+        await Promise.all(
+          dexList.map(async (dex) => {
+            try {
+              // Pass dex explicitly ("" for default) so mapping bugs are visible in debug.
+              ctxByDex[dex] = await fetchMetaAndAssetCtxs({ dex, signal: abort.signal })
+            } catch {
+              ctxByDex[dex] = { universe: [], assetCtxsRaw: [], byCoin: {} }
+            }
+          })
+        )
+
+        // Build universe index maps per dex: coinNameUpper -> index
+        const indexByDex: Record<string, Record<string, number>> = {}
+        for (const dex of dexList) {
+          const resp = ctxByDex[dex]
+          const idx: Record<string, number> = {}
+          for (let i = 0; i < resp.universe.length; i++) {
+            const sym = extractSymbol(resp.universe[i])
+            if (!sym) continue
+            idx[sym.toUpperCase()] = i
+          }
+          indexByDex[dex] = idx
+        }
 
         const nextRisk: Record<string, RiskPerCoin> = {}
         const nextHistAll = { ...historyRef.current }
 
         // Evaluate only requested coins (open positions)
-        for (const coin of coins) {
-          const ctx: HyperliquidAssetCtx | undefined = byCoin[coin] ?? byCoin[coin.toUpperCase()]
+        for (const { requestedTicker, parsedDex, parsedCoin } of parsed) {
+          const dexResp = ctxByDex[parsedDex] ?? { universe: [], assetCtxsRaw: [], byCoin: {} }
+          const idxMap = indexByDex[parsedDex] ?? {}
+          const assetIndex = idxMap[parsedCoin.toUpperCase()]
+          const assetFound = typeof assetIndex === 'number'
+
+          const ctx: HyperliquidAssetCtx | undefined =
+            dexResp.byCoin[parsedCoin] ?? dexResp.byCoin[parsedCoin.toUpperCase()]
+
           const markPx = ctx?.markPx ?? null
           const funding = ctx?.funding ?? null
           const openInterest = ctx?.openInterest ?? null
           const dayNtlVlm = ctx?.dayNtlVlm ?? null
 
-          const hist = ensureCoinHistory(nextHistAll[coin])
+          const hist = ensureCoinHistory(nextHistAll[requestedTicker])
 
           // Update mark price points (keep last ~2h, enough for 1h return)
           if (markPx != null) {
@@ -516,18 +572,19 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
 
           // Fallback liquidity: l2Book when impact cost missing
           if (impactCostPct == null) {
-            const cached = lastL2BookRef.current[coin]
+            const cached = lastL2BookRef.current[requestedTicker]
             const shouldFetch = !cached || now - cached.ts >= 30 * 1000
             if (shouldFetch) {
               try {
-                const snap = await fetchL2BookSnapshot({ coin, signal: abort.signal })
-                lastL2BookRef.current[coin] = { ts: now, snapshot: snap }
+                // l2Book does not accept dex; the coin id is typically the full ticker (including dex prefix if any).
+                const snap = await fetchL2BookSnapshot({ coin: requestedTicker, signal: abort.signal })
+                lastL2BookRef.current[requestedTicker] = { ts: now, snapshot: snap }
               } catch {
                 // ignore l2 book failure
               }
             }
 
-            const snap = lastL2BookRef.current[coin]?.snapshot
+            const snap = lastL2BookRef.current[requestedTicker]?.snapshot
             if (snap?.spreadPct != null) {
               hist.spreadPct = upsertBucket(hist.spreadPct, now, snap.spreadPct)
               hist.spreadPct = trimBuckets(hist.spreadPct, now)
@@ -537,6 +594,9 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               hist.depthNotional = trimBuckets(hist.depthNotional, now)
             }
           }
+
+          // If we cannot find an assetCtx for this (dex, coin) mapping, treat as data unavailable (never false RED).
+          const dataUnavailable = !assetFound || ctx == null || dayNtlVlm == null || openInterest == null
 
           // ---------------- Stability gate ----------------
           const failedChecks: string[] = []
@@ -620,6 +680,120 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
           const orangeRemaining = cooldownBase?.state === 'ORANGE' ? Math.max(0, COOL_DOWN_ORANGE_MS - elapsed) : 0
           const redRemaining = cooldownBase?.state === 'RED' ? Math.max(0, COOL_DOWN_RED_MS - elapsed) : 0
 
+          if (dataUnavailable) {
+            const state: RiskState = 'UNSUPPORTED'
+            if (!hist.lastState || hist.lastState.state !== state) {
+              hist.lastState = { state, enteredAt: now }
+            }
+
+            const reason = !assetFound ? 'AssetCtx not found for parsed (dex, coin)' : 'metaAndAssetCtxs missing fields'
+            const dbgBase: Omit<RiskDotDebug, 'tooltipText'> = {
+              state,
+              reason,
+              updatedAt: now,
+              request: {
+                requestedTicker,
+                parsedDex,
+                parsedCoin,
+                metaAndAssetCtxsPayload: { type: 'metaAndAssetCtxs', dex: parsedDex },
+                assetCtxFound: assetFound,
+                assetCtxIndex: assetFound ? assetIndex : null,
+              },
+              universe: {
+                dayNtlVlm,
+                minVolume: STABILITY_DAY_NTL_VLM_MIN,
+                openInterest,
+                minOI: STABILITY_OPEN_INTEREST_MIN,
+                passDayNtlVlm,
+                passOpenInterest,
+                eligible: false,
+                failedChecks: [...failedChecks, 'data unavailable'],
+                disabledBecause: !assetFound
+                  ? `no ctx for dex='${parsedDex}' coin='${parsedCoin}'`
+                  : 'missing dayNtlVlm/openInterest',
+              },
+              pillar1: {
+                skipped: true,
+                oi: openInterest,
+                funding,
+                oi_z: oiZ,
+                f_z: fZ,
+                oi_z_th: CROWDING_OI_Z_THRESHOLD,
+                f_z_th: CROWDING_F_Z_THRESHOLD,
+                direction: crowdDir as any,
+                crowdingRaw,
+                crowdingConfirmed,
+                confirmCounter: crowdingCounter,
+                confirmRequired: crowdingConfirmRequired,
+                reason: 'SKIPPED (data unavailable)',
+              },
+              pillar2: {
+                skipped: true,
+                markNow: markPx,
+                return15m: null,
+                return1h: null,
+                directionUsed: crowdDir as any,
+                structureState: 'N/A',
+                ruleUsed: 'N/A',
+                reason: 'SKIPPED (data unavailable)',
+              },
+              pillar3: {
+                skipped: true,
+                source: impactCostPct != null ? 'impactPxs' : lastL2BookRef.current[requestedTicker]?.snapshot ? 'l2Book' : 'none',
+                impactCostPct: impactCostPct,
+                impactCost_z,
+                spreadPct: spreadBucket?.avg ?? spreadPctNow,
+                spread_z,
+                depthNotional: depthBucket?.avg ?? depthNow,
+                depth_z,
+                z_th: LIQUIDITY_Z_THRESHOLD,
+                liquidityFragileRaw: liquidityRaw,
+                liquidityFragileConfirmed: false,
+                confirmCounter: liquidityCounter,
+                confirmRequired: liquidityConfirmRequired,
+                reason: 'SKIPPED (data unavailable)',
+              },
+              antiFlip: {
+                confirmationRequired: 2,
+                crowdingConfirm: { n: crowdingCounter, required: crowdingConfirmRequired },
+                liquidityConfirm: { n: liquidityCounter, required: liquidityConfirmRequired },
+                stateCooldown: {
+                  orangeMinHoldMs: COOL_DOWN_ORANGE_MS,
+                  orangeRemainingMs: orangeRemaining,
+                  redMinHoldMs: COOL_DOWN_RED_MS,
+                  redRemainingMs: redRemaining,
+                },
+                stateChangeBlocked: false,
+                blockedReason: null,
+              },
+              decisionTrace: {
+                universeEligible: false,
+                crowdingConfirmed,
+                structureState: 'N/A',
+                liquidityFragileConfirmed: false,
+                computedState: state,
+                effectiveState: state,
+                ruleMatched: 'GRAY: data unavailable (mapping or missing fields)',
+              },
+            }
+
+            const debug: RiskDotDebug = { ...dbgBase, tooltipText: buildTooltipText({ coin: requestedTicker, debug: dbgBase }) }
+
+            nextRisk[requestedTicker] = {
+              coin: requestedTicker,
+              state,
+              message: 'Risk data unavailable.',
+              dotColor: DOT_COLORS[state],
+              funding,
+              openInterest,
+              dayNtlVlm,
+              markPx,
+              debug,
+            }
+            nextHistAll[requestedTicker] = hist
+            continue
+          }
+
           if (!stabilityOk) {
             const state: RiskState = 'UNSUPPORTED'
             // Track state entry for cooldown consistency
@@ -632,6 +806,14 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               state,
               reason,
               updatedAt: now,
+              request: {
+                requestedTicker,
+                parsedDex,
+                parsedCoin,
+                metaAndAssetCtxsPayload: { type: 'metaAndAssetCtxs', dex: parsedDex },
+                assetCtxFound: assetFound,
+                assetCtxIndex: assetFound ? assetIndex : null,
+              },
               universe: {
                 dayNtlVlm,
                 minVolume: STABILITY_DAY_NTL_VLM_MIN,
@@ -708,10 +890,10 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               },
             }
 
-            const debug: RiskDotDebug = { ...debugBase, tooltipText: buildTooltipText({ coin, debug: debugBase }) }
+            const debug: RiskDotDebug = { ...debugBase, tooltipText: buildTooltipText({ coin: requestedTicker, debug: debugBase }) }
 
-            nextRisk[coin] = {
-              coin,
+            nextRisk[requestedTicker] = {
+              coin: requestedTicker,
               state,
               message: MSG[state],
               dotColor: DOT_COLORS[state],
@@ -721,7 +903,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               markPx,
               debug,
             }
-            nextHistAll[coin] = hist
+            nextHistAll[requestedTicker] = hist
             continue
           }
 
@@ -847,6 +1029,14 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             state: effective,
             reason: debugReason,
             updatedAt: now,
+            request: {
+              requestedTicker,
+              parsedDex,
+              parsedCoin,
+              metaAndAssetCtxsPayload: { type: 'metaAndAssetCtxs', dex: parsedDex },
+              assetCtxFound: assetFound,
+              assetCtxIndex: assetFound ? assetIndex : null,
+            },
             universe: {
               dayNtlVlm,
               minVolume: STABILITY_DAY_NTL_VLM_MIN,
@@ -925,10 +1115,10 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             },
           }
 
-          const debug: RiskDotDebug = { ...dbgBase, tooltipText: buildTooltipText({ coin, debug: dbgBase }) }
+          const debug: RiskDotDebug = { ...dbgBase, tooltipText: buildTooltipText({ coin: requestedTicker, debug: dbgBase }) }
 
-          nextRisk[coin] = {
-            coin,
+          nextRisk[requestedTicker] = {
+            coin: requestedTicker,
             state: effective,
             message: MSG[effective],
             dotColor: DOT_COLORS[effective],
@@ -939,7 +1129,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             debug,
           }
 
-          nextHistAll[coin] = hist
+          nextHistAll[requestedTicker] = hist
         }
 
         historyRef.current = nextHistAll
@@ -966,10 +1156,21 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
           const next: Record<string, RiskPerCoin> = { ...prev }
           for (const coin of coins) {
             const failedChecks = ['metaAndAssetCtxs stale (>60s)']
+            const i = coin.indexOf(':')
+            const parsedDex = i > 0 ? coin.slice(0, i) : ''
+            const parsedCoin = i > 0 ? coin.slice(i + 1) : coin
             const dbgBase: Omit<RiskDotDebug, 'tooltipText'> = {
               state: 'UNSUPPORTED',
               reason: 'Risk data unavailable',
               updatedAt: lastOk,
+              request: {
+                requestedTicker: coin,
+                parsedDex,
+                parsedCoin,
+                metaAndAssetCtxsPayload: { type: 'metaAndAssetCtxs', dex: parsedDex },
+                assetCtxFound: false,
+                assetCtxIndex: null,
+              },
               universe: {
                 dayNtlVlm: null,
                 minVolume: STABILITY_DAY_NTL_VLM_MIN,

@@ -13,7 +13,7 @@ function toFiniteNumber(value: unknown): number | null {
   return null
 }
 
-function extractSymbol(universeEntry: unknown): string | null {
+export function extractSymbol(universeEntry: unknown): string | null {
   if (typeof universeEntry === 'string') return universeEntry
   if (universeEntry && typeof universeEntry === 'object') {
     const anyEntry = universeEntry as any
@@ -67,7 +67,11 @@ export async function fetchHyperliquidInfo<T>(body: HyperliquidInfoRequestBody, 
 }
 
 export async function fetchMetaAndAssetCtxs(args?: { dex?: string; signal?: AbortSignal }): Promise<HyperliquidMetaAndAssetCtxsResult> {
-  const data = await fetchHyperliquidInfo<any>({ type: 'metaAndAssetCtxs', ...(args?.dex ? { dex: args.dex } : {}) }, args?.signal)
+  const includeDex = args && Object.prototype.hasOwnProperty.call(args, 'dex')
+  const data = await fetchHyperliquidInfo<any>(
+    { type: 'metaAndAssetCtxs', ...(includeDex ? { dex: args?.dex } : {}) },
+    args?.signal
+  )
   if (!Array.isArray(data) || data.length < 2) {
     return { universe: [], assetCtxsRaw: [], byCoin: {} }
   }
