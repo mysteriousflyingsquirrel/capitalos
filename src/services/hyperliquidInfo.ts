@@ -2,6 +2,9 @@ type HyperliquidInfoRequestBody =
   | { type: 'metaAndAssetCtxs'; dex?: string }
   | { type: 'l2Book'; coin: string }
   | { type: 'recentTrades'; coin: string }
+  | { type: 'fundingHistory'; coin: string; startTime: number; endTime?: number }
+  | { type: 'candleSnapshot'; req: { coin: string; interval: string; startTime: number; endTime?: number } }
+  | { type: 'perpsAtOpenInterestCap'; dex?: string }
 
 function toFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
@@ -202,5 +205,176 @@ export function computeImpactCostPct(args: { impactPxsRaw: unknown; markPx: numb
   if (bid == null || ask == null) return null
   const cost = Math.abs(ask - bid) / markPx
   return Number.isFinite(cost) ? cost : null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Funding History API
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type FundingHistoryRecord = {
+  coin: string
+  fundingRate: number
+  premium: number
+  time: number // ms timestamp
+}
+
+/**
+ * Fetch funding history for a coin over a time range.
+ * Returns array sorted by time ascending.
+ */
+export async function fetchFundingHistory(args: {
+  coin: string
+  startTime: number
+  endTime?: number
+  signal?: AbortSignal
+}): Promise<FundingHistoryRecord[]> {
+  const { coin, startTime, endTime, signal } = args
+  const body: HyperliquidInfoRequestBody = {
+    type: 'fundingHistory',
+    coin,
+    startTime,
+    ...(endTime != null ? { endTime } : {}),
+  }
+
+  const raw = await fetchHyperliquidInfo<any[]>(body, signal)
+  if (!Array.isArray(raw)) return []
+
+  const records: FundingHistoryRecord[] = []
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue
+    const fundingRate = toFiniteNumber(r.fundingRate)
+    const premium = toFiniteNumber(r.premium)
+    const time = toFiniteNumber(r.time)
+    if (fundingRate == null || time == null) continue
+    records.push({
+      coin: typeof r.coin === 'string' ? r.coin : coin,
+      fundingRate,
+      premium: premium ?? 0,
+      time,
+    })
+  }
+
+  // Sort by time ascending
+  records.sort((a, b) => a.time - b.time)
+  return records
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Candle Snapshot API
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type CandleRecord = {
+  time: number // ms timestamp (open time)
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+/**
+ * Fetch candle snapshot for a coin.
+ * Supported intervals: "1m","3m","5m","15m","30m","1h","2h","4h","8h","12h","1d","3d","1w","1M"
+ * Returns array sorted by time ascending.
+ */
+export async function fetchCandleSnapshot(args: {
+  coin: string
+  interval: string
+  startTime: number
+  endTime?: number
+  signal?: AbortSignal
+}): Promise<CandleRecord[]> {
+  const { coin, interval, startTime, endTime, signal } = args
+  const body: HyperliquidInfoRequestBody = {
+    type: 'candleSnapshot',
+    req: {
+      coin,
+      interval,
+      startTime,
+      ...(endTime != null ? { endTime } : {}),
+    },
+  }
+
+  const raw = await fetchHyperliquidInfo<any[]>(body, signal)
+  if (!Array.isArray(raw)) return []
+
+  const candles: CandleRecord[] = []
+  for (const c of raw) {
+    // HL candle format: { t, T, s, i, o, c, h, l, v, n } or array format
+    if (!c) continue
+
+    let time: number | null = null
+    let open: number | null = null
+    let high: number | null = null
+    let low: number | null = null
+    let close: number | null = null
+    let volume: number | null = null
+
+    if (Array.isArray(c)) {
+      // Array format: [openTime, open, high, low, close, volume, closeTime, ...]
+      time = toFiniteNumber(c[0])
+      open = toFiniteNumber(c[1])
+      high = toFiniteNumber(c[2])
+      low = toFiniteNumber(c[3])
+      close = toFiniteNumber(c[4])
+      volume = toFiniteNumber(c[5])
+    } else if (typeof c === 'object') {
+      time = toFiniteNumber(c.t ?? c.time ?? c.openTime)
+      open = toFiniteNumber(c.o ?? c.open)
+      high = toFiniteNumber(c.h ?? c.high)
+      low = toFiniteNumber(c.l ?? c.low)
+      close = toFiniteNumber(c.c ?? c.close)
+      volume = toFiniteNumber(c.v ?? c.volume)
+    }
+
+    if (time == null || close == null) continue
+    candles.push({
+      time,
+      open: open ?? close,
+      high: high ?? close,
+      low: low ?? close,
+      close,
+      volume: volume ?? 0,
+    })
+  }
+
+  // Sort by time ascending
+  candles.sort((a, b) => a.time - b.time)
+  return candles
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Perps At Open Interest Cap API
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch list of perps currently at their open interest cap.
+ * Returns array of coin names (matching the names from metaAndAssetCtxs for that dex).
+ */
+export async function fetchPerpsAtOpenInterestCap(args?: {
+  dex?: string
+  signal?: AbortSignal
+}): Promise<string[]> {
+  const body: HyperliquidInfoRequestBody = {
+    type: 'perpsAtOpenInterestCap',
+    ...(args?.dex != null ? { dex: args.dex } : {}),
+  }
+
+  const raw = await fetchHyperliquidInfo<any>(body, args?.signal)
+
+  // Response could be array of strings or array of objects with coin field
+  if (!Array.isArray(raw)) return []
+
+  const coins: string[] = []
+  for (const item of raw) {
+    if (typeof item === 'string') {
+      coins.push(item)
+    } else if (item && typeof item === 'object') {
+      const coin = item.coin ?? item.name ?? item.symbol
+      if (typeof coin === 'string') coins.push(coin)
+    }
+  }
+
+  return coins
 }
 
