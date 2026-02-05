@@ -252,7 +252,7 @@ function Hyperliquid() {
         const existing = next[p.id] ?? { m5: false, m10: false }
         let updated = existing
 
-        if (p.pnlPercent >= 5 && !existing.m5) {
+        if (p.pnlPercent >= 2 && !existing.m5) {
           updated = { ...updated, m5: true }
           changed = true
         }
