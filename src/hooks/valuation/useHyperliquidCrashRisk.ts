@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   computeImpactCostPct,
   extractSymbol,
-  fetchCandleSnapshot,
   fetchFundingHistory,
   fetchL2BookSnapshot,
   fetchMetaAndAssetCtxs,
@@ -35,7 +34,7 @@ export type RiskDotDebug = {
     failedChecks: string[]
     disabledBecause: string | null
   }
-  pillar1: {
+  alarm1: {
     skipped: boolean
     funding: number | null
     funding_z: number | null
@@ -44,28 +43,13 @@ export type RiskDotDebug = {
     fundingHistoryLookback: string
     isAtOiCap: boolean
     oiCapAvailable: boolean
-    direction: 'LONG_CROWDED' | 'SHORT_CROWDED' | 'NEUTRAL'
-    crowdingRaw: boolean
-    crowdingConfirmed: boolean
+    alarmRaw: boolean
+    alarmConfirmed: boolean
     confirmCounter: number
     confirmRequired: number
     reason: string
   }
-  pillar2: {
-    skipped: boolean
-    markNow: number | null
-    return15m: number | null
-    return1h: number | null
-    return15m_th_weakening: number
-    return15m_th_broken: number
-    return1h_th_broken: number
-    candlesAvailable: boolean
-    directionUsed: 'LONG_CROWDED' | 'SHORT_CROWDED' | 'NEUTRAL'
-    structureState: 'N/A' | 'INTACT' | 'WEAKENING' | 'BROKEN'
-    ruleUsed: string
-    reason: string
-  }
-  pillar3: {
+  alarm2: {
     skipped: boolean
     source: 'impactPxs' | 'l2Book' | 'none'
     impactCostBps: number | null
@@ -74,16 +58,16 @@ export type RiskDotDebug = {
     spreadBps_th: number
     depthNotional: number | null
     depthNotional_th: number
-    liquidityFragileRaw: boolean
-    liquidityFragileConfirmed: boolean
+    alarmRaw: boolean
+    alarmConfirmed: boolean
     confirmCounter: number
     confirmRequired: number
     reason: string
   }
   antiFlip: {
     confirmationRequired: number
-    crowdingConfirm: { n: number; required: number }
-    liquidityConfirm: { n: number; required: number }
+    alarm1Confirm: { n: number; required: number }
+    alarm2Confirm: { n: number; required: number }
     stateCooldown: {
       orangeMinHoldMs: number
       orangeRemainingMs: number
@@ -95,9 +79,9 @@ export type RiskDotDebug = {
   }
   decisionTrace: {
     universeEligible: boolean
-    crowdingConfirmed: boolean
-    structureState: string
-    liquidityFragileConfirmed: boolean
+    alarm1Confirmed: boolean
+    alarm2Confirmed: boolean
+    alarmsActive: number
     computedState: RiskState
     effectiveState: RiskState
     ruleMatched: string
@@ -124,19 +108,14 @@ export type RiskPerCoin = {
 const STABILITY_DAY_NTL_VLM_MIN = 25_000_000
 const STABILITY_OPEN_INTEREST_MIN = 10_000_000
 
-// Pillar 1: Crowding
+// Alarm 1: Crowding
 const FUNDING_Z_THRESHOLD = 1.5
 const FUNDING_HISTORY_LOOKBACK_MS = 24 * 60 * 60 * 1000 // 24h
 
-// Pillar 2: Structure thresholds
-const STRUCTURE_WEAKENING_THRESHOLD = 0.002 // 0.2%
-const STRUCTURE_BROKEN_15M_THRESHOLD = 0.006 // 0.6%
-const STRUCTURE_BROKEN_1H_THRESHOLD = 0.012 // 1.2%
-
-// Pillar 3: Liquidity absolute thresholds
+// Alarm 2: Liquidity absolute thresholds
 const IMPACT_BPS_THRESHOLD = 25
 const SPREAD_BPS_THRESHOLD = 8
-const DEPTH_MIN_NOTIONAL = 500_000 // $500k (middle ground for metals/majors)
+const DEPTH_MIN_NOTIONAL = 500_000 // $500k
 
 // Anti-flip cooldowns
 const COOL_DOWN_ORANGE_MS = 15 * 60 * 1000
@@ -216,67 +195,21 @@ function zscore(current: number, history: number[]): number | null {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type CoinMemoryState = {
-  crowdingConfirmCount: number
-  liquidityConfirmCount: number
-  lastCrowdingRaw: boolean
-  lastLiquidityRaw: boolean
+  alarm1ConfirmCount: number
+  alarm2ConfirmCount: number
+  lastAlarm1Raw: boolean
+  lastAlarm2Raw: boolean
   lastState: { state: RiskState; enteredAt: number } | null
 }
 
 function getDefaultMemoryState(): CoinMemoryState {
   return {
-    crowdingConfirmCount: 0,
-    liquidityConfirmCount: 0,
-    lastCrowdingRaw: false,
-    lastLiquidityRaw: false,
+    alarm1ConfirmCount: 0,
+    alarm2ConfirmCount: 0,
+    lastAlarm1Raw: false,
+    lastAlarm2Raw: false,
     lastState: null,
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Structure computation (Pillar 2)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function computeStructure(args: {
-  crowdingDirection: 'LONG' | 'SHORT'
-  return15m: number | null
-  return1h: number | null
-}): {
-  state: 'INTACT' | 'WEAKENING' | 'BROKEN' | null
-  ruleUsed: string
-  reason: string
-} {
-  const { crowdingDirection, return15m, return1h } = args
-
-  if (return15m == null || return1h == null) {
-    return { state: null, ruleUsed: 'N/A', reason: 'Missing candle data for returns' }
-  }
-
-  if (crowdingDirection === 'LONG') {
-    // For LONG crowding: price should be rising; negative returns are bad
-    if (return15m > 0 && return1h > 0) {
-      return { state: 'INTACT', ruleUsed: 'LONG: r15>0 && r1h>0', reason: 'Price rising (15m and 1h positive)' }
-    }
-    if (return15m <= -STRUCTURE_BROKEN_15M_THRESHOLD || return1h <= -STRUCTURE_BROKEN_1H_THRESHOLD) {
-      return { state: 'BROKEN', ruleUsed: `LONG: r15<=-${STRUCTURE_BROKEN_15M_THRESHOLD * 100}% OR r1h<=-${STRUCTURE_BROKEN_1H_THRESHOLD * 100}%`, reason: 'Structure broken (significant negative move)' }
-    }
-    if (return15m <= -STRUCTURE_WEAKENING_THRESHOLD) {
-      return { state: 'WEAKENING', ruleUsed: `LONG: r15<=-${STRUCTURE_WEAKENING_THRESHOLD * 100}%`, reason: 'Structure weakening (15m return negative)' }
-    }
-    return { state: 'INTACT', ruleUsed: 'LONG: default', reason: 'Structure intact (no significant negative)' }
-  }
-
-  // SHORT crowding: price should be falling; positive returns are bad
-  if (return15m < 0 && return1h < 0) {
-    return { state: 'INTACT', ruleUsed: 'SHORT: r15<0 && r1h<0', reason: 'Price falling (15m and 1h negative)' }
-  }
-  if (return15m >= STRUCTURE_BROKEN_15M_THRESHOLD || return1h >= STRUCTURE_BROKEN_1H_THRESHOLD) {
-    return { state: 'BROKEN', ruleUsed: `SHORT: r15>=${STRUCTURE_BROKEN_15M_THRESHOLD * 100}% OR r1h>=${STRUCTURE_BROKEN_1H_THRESHOLD * 100}%`, reason: 'Structure broken (significant positive move)' }
-  }
-  if (return15m >= STRUCTURE_WEAKENING_THRESHOLD) {
-    return { state: 'WEAKENING', ruleUsed: `SHORT: r15>=${STRUCTURE_WEAKENING_THRESHOLD * 100}%`, reason: 'Structure weakening (15m return positive)' }
-  }
-  return { state: 'INTACT', ruleUsed: 'SHORT: default', reason: 'Structure intact (no significant positive)' }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -333,74 +266,55 @@ function buildTooltipText(args: { coin: string; debug: Omit<RiskDotDebug, 'toolt
   }
   lines.push('')
 
-  lines.push('SECTION 2 — PILLAR 1: CROWDING')
-  if (d.pillar1.skipped) lines.push('SKIPPED (disabled)')
+  lines.push('SECTION 2 — ALARM 1: CROWDING')
+  if (d.alarm1.skipped) lines.push('SKIPPED (disabled)')
   lines.push('Inputs:')
-  lines.push(`- funding (now): ${formatNumber(d.pillar1.funding, 6)}`)
-  lines.push(`- funding_z: ${formatNumber(d.pillar1.funding_z, 3)}  threshold: ±${d.pillar1.funding_z_th}`)
-  lines.push(`- fundingHistory: ${d.pillar1.fundingHistorySamples} samples (${d.pillar1.fundingHistoryLookback})`)
-  lines.push(`- isAtOiCap: ${String(d.pillar1.isAtOiCap)}  (oiCapAvailable: ${String(d.pillar1.oiCapAvailable)})`)
-  lines.push('Derived:')
-  lines.push(`- direction: ${d.pillar1.direction}`)
+  lines.push(`- funding (now): ${formatNumber(d.alarm1.funding, 6)}`)
+  lines.push(`- funding_z: ${formatNumber(d.alarm1.funding_z, 3)}  threshold: ±${d.alarm1.funding_z_th}`)
+  lines.push(`- fundingHistory: ${d.alarm1.fundingHistorySamples} samples (${d.alarm1.fundingHistoryLookback})`)
+  lines.push(`- isAtOiCap: ${String(d.alarm1.isAtOiCap)}  (oiCapAvailable: ${String(d.alarm1.oiCapAvailable)})`)
   lines.push('Decision:')
-  lines.push(`- crowdingRaw: ${String(d.pillar1.crowdingRaw)}`)
-  lines.push(`- crowdingConfirmed: ${String(d.pillar1.crowdingConfirmed)}`)
-  lines.push(`- confirmCounter: ${d.pillar1.confirmCounter}/${d.pillar1.confirmRequired}`)
-  lines.push(`Reason: ${d.pillar1.reason}`)
+  lines.push(`- alarmRaw: ${String(d.alarm1.alarmRaw)}`)
+  lines.push(`- alarmConfirmed: ${String(d.alarm1.alarmConfirmed)}`)
+  lines.push(`- confirmCounter: ${d.alarm1.confirmCounter}/${d.alarm1.confirmRequired}`)
+  lines.push(`Reason: ${d.alarm1.reason}`)
   lines.push('')
 
-  lines.push('SECTION 3 — PILLAR 2: STRUCTURE')
-  if (d.pillar2.skipped) lines.push('SKIPPED (disabled)')
-  lines.push('Inputs:')
-  lines.push(`- markPx now: ${formatNumber(d.pillar2.markNow, 4)}`)
-  lines.push(`- return15m: ${d.pillar2.return15m == null ? '–' : `${(d.pillar2.return15m * 100).toFixed(3)}%`}`)
-  lines.push(`- return1h:  ${d.pillar2.return1h == null ? '–' : `${(d.pillar2.return1h * 100).toFixed(3)}%`}`)
-  lines.push(`- candlesAvailable: ${String(d.pillar2.candlesAvailable)}`)
-  lines.push('Thresholds:')
-  lines.push(`- weakening: ${(d.pillar2.return15m_th_weakening * 100).toFixed(1)}%`)
-  lines.push(`- broken: r15>=${(d.pillar2.return15m_th_broken * 100).toFixed(1)}% OR r1h>=${(d.pillar2.return1h_th_broken * 100).toFixed(1)}%`)
-  lines.push(`- crowdDirection used: ${d.pillar2.directionUsed}`)
-  lines.push('Decision:')
-  lines.push(`- structureState: ${d.pillar2.structureState}`)
-  lines.push(`- ruleUsed: ${d.pillar2.ruleUsed}`)
-  lines.push(`Reason: ${d.pillar2.reason}`)
-  lines.push('')
-
-  lines.push('SECTION 4 — PILLAR 3: LIQUIDITY')
-  if (d.pillar3.skipped) lines.push('SKIPPED (disabled)')
-  lines.push(`source: ${d.pillar3.source}`)
-  if (d.pillar3.source === 'impactPxs') {
+  lines.push('SECTION 3 — ALARM 2: LIQUIDITY')
+  if (d.alarm2.skipped) lines.push('SKIPPED (disabled)')
+  lines.push(`source: ${d.alarm2.source}`)
+  if (d.alarm2.source === 'impactPxs') {
     lines.push('Inputs (impactPxs path):')
-    lines.push(`- impactCost: ${d.pillar3.impactCostBps == null ? '–' : `${d.pillar3.impactCostBps.toFixed(1)} bps`}  threshold: ${d.pillar3.impactCostBps_th} bps`)
-  } else if (d.pillar3.source === 'l2Book') {
+    lines.push(`- impactCost: ${d.alarm2.impactCostBps == null ? '–' : `${d.alarm2.impactCostBps.toFixed(1)} bps`}  threshold: ${d.alarm2.impactCostBps_th} bps`)
+  } else if (d.alarm2.source === 'l2Book') {
     lines.push('Inputs (l2Book path):')
-    lines.push(`- spread: ${d.pillar3.spreadBps == null ? '–' : `${d.pillar3.spreadBps.toFixed(1)} bps`}  threshold: ${d.pillar3.spreadBps_th} bps`)
-    lines.push(`- depth(0.2%): ${formatUsdCompact(d.pillar3.depthNotional)}  threshold: ${formatUsdCompact(d.pillar3.depthNotional_th)}`)
+    lines.push(`- spread: ${d.alarm2.spreadBps == null ? '–' : `${d.alarm2.spreadBps.toFixed(1)} bps`}  threshold: ${d.alarm2.spreadBps_th} bps`)
+    lines.push(`- depth(0.2%): ${formatUsdCompact(d.alarm2.depthNotional)}  threshold: ${formatUsdCompact(d.alarm2.depthNotional_th)}`)
   } else {
     lines.push('Inputs: –')
   }
   lines.push('Decision:')
-  lines.push(`- liquidityFragileRaw: ${String(d.pillar3.liquidityFragileRaw)}`)
-  lines.push(`- liquidityFragileConfirmed: ${String(d.pillar3.liquidityFragileConfirmed)}`)
-  lines.push(`- confirmCounter: ${d.pillar3.confirmCounter}/${d.pillar3.confirmRequired}`)
-  lines.push(`Reason: ${d.pillar3.reason}`)
+  lines.push(`- alarmRaw: ${String(d.alarm2.alarmRaw)}`)
+  lines.push(`- alarmConfirmed: ${String(d.alarm2.alarmConfirmed)}`)
+  lines.push(`- confirmCounter: ${d.alarm2.confirmCounter}/${d.alarm2.confirmRequired}`)
+  lines.push(`Reason: ${d.alarm2.reason}`)
   lines.push('')
 
-  lines.push('SECTION 5 — CONFIRMATION & COOLDOWN (ANTI-FLIP)')
+  lines.push('SECTION 4 — CONFIRMATION & COOLDOWN (ANTI-FLIP)')
   lines.push(`- confirmationRequired: ${d.antiFlip.confirmationRequired}`)
-  lines.push(`- crowdingConfirm: ${d.antiFlip.crowdingConfirm.n}/${d.antiFlip.crowdingConfirm.required}`)
-  lines.push(`- liquidityConfirm: ${d.antiFlip.liquidityConfirm.n}/${d.antiFlip.liquidityConfirm.required}`)
+  lines.push(`- alarm1Confirm: ${d.antiFlip.alarm1Confirm.n}/${d.antiFlip.alarm1Confirm.required}`)
+  lines.push(`- alarm2Confirm: ${d.antiFlip.alarm2Confirm.n}/${d.antiFlip.alarm2Confirm.required}`)
   lines.push('- stateCooldown:')
   lines.push(`  - orangeMinHold: 15m, remaining: ${formatMs(d.antiFlip.stateCooldown.orangeRemainingMs)}`)
   lines.push(`  - redMinHold: 30m, remaining: ${formatMs(d.antiFlip.stateCooldown.redRemainingMs)}`)
   lines.push(`- stateChangeBlocked: ${String(d.antiFlip.stateChangeBlocked)}${d.antiFlip.blockedReason ? ` (${d.antiFlip.blockedReason})` : ''}`)
   lines.push('')
 
-  lines.push('SECTION 6 — DECISION TRACE (MAPPING)')
+  lines.push('SECTION 5 — DECISION TRACE (MAPPING)')
   lines.push(`- universeEligible? ${String(d.decisionTrace.universeEligible)}`)
-  lines.push(`- crowdingConfirmed? ${String(d.decisionTrace.crowdingConfirmed)}`)
-  lines.push(`- structureState? ${d.decisionTrace.structureState}`)
-  lines.push(`- liquidityFragileConfirmed? ${String(d.decisionTrace.liquidityFragileConfirmed)}`)
+  lines.push(`- alarm1Confirmed? ${String(d.decisionTrace.alarm1Confirmed)}`)
+  lines.push(`- alarm2Confirmed? ${String(d.decisionTrace.alarm2Confirmed)}`)
+  lines.push(`- alarmsActive: ${d.decisionTrace.alarmsActive}`)
   lines.push(`- finalState rule matched: ${d.decisionTrace.ruleMatched}`)
 
   return lines.join('\n')
@@ -502,7 +416,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
 
           // Check if at OI cap
           const oiCapSet = oiCapByDex[parsedDex] ?? new Set()
-          const oiCapAvailable = oiCapSet.size > 0 || oiCapByDex[parsedDex] !== undefined
+          const oiCapAvailable = oiCapByDex[parsedDex] !== undefined
           const isAtOiCap = oiCapSet.has(parsedCoin.toUpperCase()) || oiCapSet.has(requestedTicker.toUpperCase())
 
           // Data availability check
@@ -519,13 +433,12 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
           const confirmRequired = 2
 
           // ─────────────────────────────────────────────────────────────────
-          // Pillar 1: Crowding (funding_z from fundingHistory + isAtOiCap)
+          // ALARM 1: CROWDING (isAtOiCap AND |funding_z| >= threshold)
           // ─────────────────────────────────────────────────────────────────
           let funding_z: number | null = null
           let fundingHistorySamples = 0
-          let crowdingRaw = false
-          let crowdingDirection: 'LONG' | 'SHORT' | 'NEUTRAL' = 'NEUTRAL'
-          let pillar1Reason = ''
+          let alarm1Raw = false
+          let alarm1Reason = ''
 
           if (!dataUnavailable && stabilityOk) {
             try {
@@ -538,115 +451,46 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
                 funding_z = zscore(funding, rates)
               }
             } catch {
-              // fundingHistory unavailable - treat as crowding=false
-              pillar1Reason = 'fundingHistory unavailable'
+              // fundingHistory unavailable - alarm1 = false (fail-safe)
+              alarm1Reason = 'fundingHistory unavailable (fail-safe: alarm1=false)'
             }
 
             if (funding_z != null && Math.abs(funding_z) >= FUNDING_Z_THRESHOLD && isAtOiCap) {
-              crowdingRaw = true
-              crowdingDirection = funding_z > 0 ? 'LONG' : 'SHORT'
-              pillar1Reason = `crowdingRaw=true (|funding_z|>=${FUNDING_Z_THRESHOLD} AND isAtOiCap=true)`
-            } else if (!pillar1Reason) {
+              alarm1Raw = true
+              alarm1Reason = `alarm1=true (|funding_z|=${Math.abs(funding_z).toFixed(2)} >= ${FUNDING_Z_THRESHOLD} AND isAtOiCap=true)`
+            } else if (!alarm1Reason) {
               const reasons: string[] = []
               if (funding_z == null) reasons.push('funding_z unavailable')
-              else if (Math.abs(funding_z) < FUNDING_Z_THRESHOLD) reasons.push(`|funding_z|<${FUNDING_Z_THRESHOLD}`)
-              if (!isAtOiCap) reasons.push('not at OI cap')
-              pillar1Reason = `crowdingRaw=false (${reasons.join(', ')})`
+              else if (Math.abs(funding_z) < FUNDING_Z_THRESHOLD) reasons.push(`|funding_z|=${Math.abs(funding_z).toFixed(2)} < ${FUNDING_Z_THRESHOLD}`)
+              if (!isAtOiCap) reasons.push('isAtOiCap=false')
+              alarm1Reason = `alarm1=false (${reasons.join(', ')})`
             }
           } else {
-            pillar1Reason = dataUnavailable ? 'data unavailable' : 'universe filter failed'
+            alarm1Reason = dataUnavailable ? 'data unavailable (fail-safe: alarm1=false)' : 'universe filter failed (fail-safe: alarm1=false)'
           }
 
-          // Crowding confirmation (2 consecutive)
-          if (crowdingRaw) {
-            if (mem.lastCrowdingRaw) {
-              mem.crowdingConfirmCount = Math.min(mem.crowdingConfirmCount + 1, confirmRequired)
+          // Alarm 1 confirmation (2 consecutive)
+          if (alarm1Raw) {
+            if (mem.lastAlarm1Raw) {
+              mem.alarm1ConfirmCount = Math.min(mem.alarm1ConfirmCount + 1, confirmRequired)
             } else {
-              mem.crowdingConfirmCount = 1
+              mem.alarm1ConfirmCount = 1
             }
           } else {
-            mem.crowdingConfirmCount = 0
+            mem.alarm1ConfirmCount = 0
           }
-          mem.lastCrowdingRaw = crowdingRaw
-          const crowdingConfirmed = mem.crowdingConfirmCount >= confirmRequired
+          mem.lastAlarm1Raw = alarm1Raw
+          const alarm1Confirmed = mem.alarm1ConfirmCount >= confirmRequired
 
           // ─────────────────────────────────────────────────────────────────
-          // Pillar 2: Structure (from candleSnapshot)
+          // ALARM 2: LIQUIDITY (absolute thresholds)
           // ─────────────────────────────────────────────────────────────────
-          let return15m: number | null = null
-          let return1h: number | null = null
-          let candlesAvailable = false
-          let structure: 'INTACT' | 'WEAKENING' | 'BROKEN' | null = null
-          let structureRuleUsed = 'N/A'
-          let structureReason = 'Not evaluated'
-
-          if (crowdingConfirmed && crowdingDirection !== 'NEUTRAL' && !dataUnavailable && stabilityOk) {
-            try {
-              // Fetch 15m candles (last 2 for close-to-close return)
-              const candleCoin = parsedCoin
-
-              const candles15m = await fetchCandleSnapshot({
-                coin: candleCoin,
-                interval: '15m',
-                startTime: now - 90 * 60 * 1000, // 90 min
-                endTime: now,
-                signal: abort.signal,
-              })
-              
-              const candles1h = await fetchCandleSnapshot({
-                coin: candleCoin,
-                interval: '1h',
-                startTime: now - 4 * 60 * 60 * 1000, // 4 hours
-                endTime: now,
-                signal: abort.signal,
-              })
-
-              if (candles15m.length >= 2) {
-                const prev = candles15m[candles15m.length - 2]
-                const curr = candles15m[candles15m.length - 1]
-                if (prev.close > 0) {
-                  return15m = (curr.close - prev.close) / prev.close
-                }
-              }
-
-              if (candles1h.length >= 2) {
-                const prev = candles1h[candles1h.length - 2]
-                const curr = candles1h[candles1h.length - 1]
-                if (prev.close > 0) {
-                  return1h = (curr.close - prev.close) / prev.close
-                }
-              }
-
-              candlesAvailable = return15m != null || return1h != null
-
-              if (candlesAvailable) {
-                const s = computeStructure({
-                  crowdingDirection: crowdingDirection as 'LONG' | 'SHORT',
-                  return15m,
-                  return1h,
-                })
-                structure = s.state
-                structureRuleUsed = s.ruleUsed
-                structureReason = s.reason
-              } else {
-                structureReason = 'No candle data available'
-              }
-            } catch {
-              structureReason = 'candleSnapshot unavailable'
-            }
-          } else if (!crowdingConfirmed) {
-            structureReason = 'Not crowded (structure not evaluated)'
-          }
-
-          // ─────────────────────────────────────────────────────────────────
-          // Pillar 3: Liquidity (absolute thresholds)
-          // ─────────────────────────────────────────────────────────────────
-          let liquidityRaw = false
+          let alarm2Raw = false
           let liquiditySource: 'impactPxs' | 'l2Book' | 'none' = 'none'
           let impactCostBps: number | null = null
           let spreadBps: number | null = null
           let depthNotional: number | null = null
-          let pillar3Reason = ''
+          let alarm2Reason = ''
 
           if (!dataUnavailable && stabilityOk) {
             // Try impact cost first
@@ -654,10 +498,10 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             if (impactCostPct != null) {
               liquiditySource = 'impactPxs'
               impactCostBps = impactCostPct * 10_000
-              liquidityRaw = impactCostBps >= IMPACT_BPS_THRESHOLD
-              pillar3Reason = liquidityRaw
-                ? `fragile (impactCost ${impactCostBps.toFixed(1)} bps >= ${IMPACT_BPS_THRESHOLD} bps)`
-                : `ok (impactCost ${impactCostBps.toFixed(1)} bps < ${IMPACT_BPS_THRESHOLD} bps)`
+              alarm2Raw = impactCostBps >= IMPACT_BPS_THRESHOLD
+              alarm2Reason = alarm2Raw
+                ? `alarm2=true (impactCost ${impactCostBps.toFixed(1)} bps >= ${IMPACT_BPS_THRESHOLD} bps)`
+                : `alarm2=false (impactCost ${impactCostBps.toFixed(1)} bps < ${IMPACT_BPS_THRESHOLD} bps)`
             } else {
               // Fallback to l2Book
               try {
@@ -669,38 +513,39 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
 
                   const spreadFragile = spreadBps >= SPREAD_BPS_THRESHOLD
                   const depthFragile = depthNotional != null && depthNotional < DEPTH_MIN_NOTIONAL
-                  liquidityRaw = spreadFragile && depthFragile
+                  alarm2Raw = spreadFragile && depthFragile
 
-                  pillar3Reason = liquidityRaw
-                    ? `fragile (spread ${spreadBps.toFixed(1)} bps >= ${SPREAD_BPS_THRESHOLD} AND depth ${formatUsdCompact(depthNotional)} < ${formatUsdCompact(DEPTH_MIN_NOTIONAL)})`
-                    : `ok (spread=${spreadBps.toFixed(1)} bps, depth=${formatUsdCompact(depthNotional)})`
+                  alarm2Reason = alarm2Raw
+                    ? `alarm2=true (spread ${spreadBps.toFixed(1)} bps >= ${SPREAD_BPS_THRESHOLD} AND depth ${formatUsdCompact(depthNotional)} < ${formatUsdCompact(DEPTH_MIN_NOTIONAL)})`
+                    : `alarm2=false (spread=${spreadBps.toFixed(1)} bps, depth=${formatUsdCompact(depthNotional)})`
                 } else {
-                  pillar3Reason = 'l2Book missing spread data'
+                  alarm2Reason = 'l2Book missing spread data (fail-safe: alarm2=false)'
                 }
               } catch {
-                pillar3Reason = 'l2Book unavailable'
+                alarm2Reason = 'l2Book unavailable (fail-safe: alarm2=false)'
               }
             }
           } else {
-            pillar3Reason = dataUnavailable ? 'data unavailable' : 'universe filter failed'
+            alarm2Reason = dataUnavailable ? 'data unavailable (fail-safe: alarm2=false)' : 'universe filter failed (fail-safe: alarm2=false)'
           }
 
-          // Liquidity confirmation (2 consecutive)
-          if (liquidityRaw) {
-            if (mem.lastLiquidityRaw) {
-              mem.liquidityConfirmCount = Math.min(mem.liquidityConfirmCount + 1, confirmRequired)
+          // Alarm 2 confirmation (2 consecutive)
+          if (alarm2Raw) {
+            if (mem.lastAlarm2Raw) {
+              mem.alarm2ConfirmCount = Math.min(mem.alarm2ConfirmCount + 1, confirmRequired)
             } else {
-              mem.liquidityConfirmCount = 1
+              mem.alarm2ConfirmCount = 1
             }
           } else {
-            mem.liquidityConfirmCount = 0
+            mem.alarm2ConfirmCount = 0
           }
-          mem.lastLiquidityRaw = liquidityRaw
-          const liquidityConfirmed = mem.liquidityConfirmCount >= confirmRequired
+          mem.lastAlarm2Raw = alarm2Raw
+          const alarm2Confirmed = mem.alarm2ConfirmCount >= confirmRequired
 
           // ─────────────────────────────────────────────────────────────────
-          // Final state logic
+          // FINAL STATE LOGIC (0/1/2 alarms)
           // ─────────────────────────────────────────────────────────────────
+          const alarmsActive = (alarm1Confirmed ? 1 : 0) + (alarm2Confirmed ? 1 : 0)
           let computed: RiskState = 'GREEN'
           let finalRuleMatched = ''
 
@@ -709,32 +554,18 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             finalRuleMatched = 'GRAY: data unavailable'
           } else if (!stabilityOk) {
             computed = 'UNSUPPORTED'
-            finalRuleMatched = 'GRAY: universeEligible=false'
-          } else if (!crowdingConfirmed) {
+            finalRuleMatched = 'GRAY: universe filter failed'
+          } else if (alarmsActive === 0) {
             computed = 'GREEN'
-            finalRuleMatched = 'GREEN: crowdingConfirmed=false'
-          } else if (structure === 'INTACT') {
-            computed = 'GREEN'
-            finalRuleMatched = 'GREEN: structure=INTACT'
-          } else if (structure === 'WEAKENING' && !liquidityConfirmed) {
+            finalRuleMatched = 'GREEN: no alarms confirmed'
+          } else if (alarmsActive === 1) {
             computed = 'ORANGE'
-            finalRuleMatched = 'ORANGE: crowdingConfirmed=true & structure=WEAKENING & liquidityFragile=false'
-          } else if (structure === 'BROKEN' && liquidityConfirmed) {
-            computed = 'RED'
-            finalRuleMatched = 'RED: crowdingConfirmed=true & structure=BROKEN & liquidityFragileConfirmed=true'
-          } else if (structure === 'WEAKENING' && liquidityConfirmed) {
-            computed = 'ORANGE'
-            finalRuleMatched = 'ORANGE: crowdingConfirmed=true & structure=WEAKENING & liquidityFragile=true'
-          } else if (structure === 'BROKEN' && !liquidityConfirmed) {
-            computed = 'ORANGE'
-            finalRuleMatched = 'ORANGE: crowdingConfirmed=true & structure=BROKEN & liquidityFragile=false'
-          } else if (structure == null && crowdingConfirmed) {
-            // Structure unavailable but crowding confirmed - stay GREEN (fail safe)
-            computed = 'GREEN'
-            finalRuleMatched = 'GREEN: structure unavailable (fail safe)'
+            finalRuleMatched = alarm1Confirmed
+              ? 'ORANGE: alarm1 (crowding) confirmed only'
+              : 'ORANGE: alarm2 (liquidity) confirmed only'
           } else {
-            computed = 'GREEN'
-            finalRuleMatched = 'GREEN: default'
+            computed = 'RED'
+            finalRuleMatched = 'RED: both alarms confirmed'
           }
 
           // Cooldowns
@@ -756,11 +587,11 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             effective === 'UNSUPPORTED'
               ? dataUnavailable ? 'Data unavailable' : 'Universe filter failed'
               : effective === 'GREEN'
-                ? 'Crowding=false OR structure intact'
+                ? 'No alarms active'
                 : effective === 'ORANGE'
-                  ? 'Crowding=true + structure weakening/broken + liquidity ok/fragile'
+                  ? 'One alarm active'
                   : effective === 'RED'
-                    ? 'Crowding=true + structure broken + liquidity fragile (confirmed)'
+                    ? 'Both alarms active'
                     : 'Unknown'
 
           // Build debug object
@@ -787,7 +618,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               failedChecks,
               disabledBecause: dataUnavailable ? 'data unavailable' : (failedChecks.join(', ') || null),
             },
-            pillar1: {
+            alarm1: {
               skipped: dataUnavailable || !stabilityOk,
               funding,
               funding_z,
@@ -796,28 +627,13 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               fundingHistoryLookback: '24h',
               isAtOiCap,
               oiCapAvailable,
-              direction: crowdingDirection === 'LONG' ? 'LONG_CROWDED' : crowdingDirection === 'SHORT' ? 'SHORT_CROWDED' : 'NEUTRAL',
-              crowdingRaw,
-              crowdingConfirmed,
-              confirmCounter: mem.crowdingConfirmCount,
+              alarmRaw: alarm1Raw,
+              alarmConfirmed: alarm1Confirmed,
+              confirmCounter: mem.alarm1ConfirmCount,
               confirmRequired,
-              reason: pillar1Reason,
+              reason: alarm1Reason,
             },
-            pillar2: {
-              skipped: !crowdingConfirmed || dataUnavailable || !stabilityOk,
-              markNow: markPx,
-              return15m,
-              return1h,
-              return15m_th_weakening: STRUCTURE_WEAKENING_THRESHOLD,
-              return15m_th_broken: STRUCTURE_BROKEN_15M_THRESHOLD,
-              return1h_th_broken: STRUCTURE_BROKEN_1H_THRESHOLD,
-              candlesAvailable,
-              directionUsed: crowdingDirection === 'LONG' ? 'LONG_CROWDED' : crowdingDirection === 'SHORT' ? 'SHORT_CROWDED' : 'NEUTRAL',
-              structureState: structure ?? 'N/A',
-              ruleUsed: structureRuleUsed,
-              reason: structureReason,
-            },
-            pillar3: {
+            alarm2: {
               skipped: dataUnavailable || !stabilityOk,
               source: liquiditySource,
               impactCostBps,
@@ -826,16 +642,16 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               spreadBps_th: SPREAD_BPS_THRESHOLD,
               depthNotional,
               depthNotional_th: DEPTH_MIN_NOTIONAL,
-              liquidityFragileRaw: liquidityRaw,
-              liquidityFragileConfirmed: liquidityConfirmed,
-              confirmCounter: mem.liquidityConfirmCount,
+              alarmRaw: alarm2Raw,
+              alarmConfirmed: alarm2Confirmed,
+              confirmCounter: mem.alarm2ConfirmCount,
               confirmRequired,
-              reason: pillar3Reason,
+              reason: alarm2Reason,
             },
             antiFlip: {
               confirmationRequired: confirmRequired,
-              crowdingConfirm: { n: mem.crowdingConfirmCount, required: confirmRequired },
-              liquidityConfirm: { n: mem.liquidityConfirmCount, required: confirmRequired },
+              alarm1Confirm: { n: mem.alarm1ConfirmCount, required: confirmRequired },
+              alarm2Confirm: { n: mem.alarm2ConfirmCount, required: confirmRequired },
               stateCooldown: {
                 orangeMinHoldMs: COOL_DOWN_ORANGE_MS,
                 orangeRemainingMs: orangeRemaining,
@@ -847,9 +663,9 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             },
             decisionTrace: {
               universeEligible: stabilityOk && !dataUnavailable,
-              crowdingConfirmed,
-              structureState: structure ?? 'N/A',
-              liquidityFragileConfirmed: liquidityConfirmed,
+              alarm1Confirmed,
+              alarm2Confirmed,
+              alarmsActive,
               computedState: computed,
               effectiveState: effective,
               ruleMatched: finalRuleMatched,
@@ -918,7 +734,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
                 failedChecks: ['data stale'],
                 disabledBecause: 'data stale (>60s)',
               },
-              pillar1: {
+              alarm1: {
                 skipped: true,
                 funding: null,
                 funding_z: null,
@@ -927,28 +743,13 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
                 fundingHistoryLookback: '24h',
                 isAtOiCap: false,
                 oiCapAvailable: false,
-                direction: 'NEUTRAL',
-                crowdingRaw: false,
-                crowdingConfirmed: false,
+                alarmRaw: false,
+                alarmConfirmed: false,
                 confirmCounter: 0,
                 confirmRequired: 2,
                 reason: 'SKIPPED (data stale)',
               },
-              pillar2: {
-                skipped: true,
-                markNow: null,
-                return15m: null,
-                return1h: null,
-                return15m_th_weakening: STRUCTURE_WEAKENING_THRESHOLD,
-                return15m_th_broken: STRUCTURE_BROKEN_15M_THRESHOLD,
-                return1h_th_broken: STRUCTURE_BROKEN_1H_THRESHOLD,
-                candlesAvailable: false,
-                directionUsed: 'NEUTRAL',
-                structureState: 'N/A',
-                ruleUsed: 'N/A',
-                reason: 'SKIPPED (data stale)',
-              },
-              pillar3: {
+              alarm2: {
                 skipped: true,
                 source: 'none',
                 impactCostBps: null,
@@ -957,16 +758,16 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
                 spreadBps_th: SPREAD_BPS_THRESHOLD,
                 depthNotional: null,
                 depthNotional_th: DEPTH_MIN_NOTIONAL,
-                liquidityFragileRaw: false,
-                liquidityFragileConfirmed: false,
+                alarmRaw: false,
+                alarmConfirmed: false,
                 confirmCounter: 0,
                 confirmRequired: 2,
                 reason: 'SKIPPED (data stale)',
               },
               antiFlip: {
                 confirmationRequired: 2,
-                crowdingConfirm: { n: 0, required: 2 },
-                liquidityConfirm: { n: 0, required: 2 },
+                alarm1Confirm: { n: 0, required: 2 },
+                alarm2Confirm: { n: 0, required: 2 },
                 stateCooldown: {
                   orangeMinHoldMs: COOL_DOWN_ORANGE_MS,
                   orangeRemainingMs: 0,
@@ -978,9 +779,9 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               },
               decisionTrace: {
                 universeEligible: false,
-                crowdingConfirmed: false,
-                structureState: 'N/A',
-                liquidityFragileConfirmed: false,
+                alarm1Confirmed: false,
+                alarm2Confirmed: false,
+                alarmsActive: 0,
                 computedState: 'UNSUPPORTED',
                 effectiveState: 'UNSUPPORTED',
                 ruleMatched: 'GRAY: data stale',
