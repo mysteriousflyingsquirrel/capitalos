@@ -526,11 +526,14 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
         for (const { requestedTicker, parsedDex, parsedCoin } of parsed) {
           const dexResp = ctxByDex[parsedDex] ?? { universe: [], assetCtxsRaw: [], byCoin: {} }
           const idxMap = indexByDex[parsedDex] ?? {}
-          const assetIndex = idxMap[parsedCoin.toUpperCase()]
+          const assetIndex = idxMap[parsedCoin.toUpperCase()] ?? idxMap[requestedTicker.toUpperCase()]
           const assetFound = typeof assetIndex === 'number'
 
           const ctx: HyperliquidAssetCtx | undefined =
-            dexResp.byCoin[parsedCoin] ?? dexResp.byCoin[parsedCoin.toUpperCase()]
+            dexResp.byCoin[parsedCoin] ??
+            dexResp.byCoin[parsedCoin.toUpperCase()] ??
+            dexResp.byCoin[requestedTicker] ??
+            dexResp.byCoin[requestedTicker.toUpperCase()]
 
           const markPx = ctx?.markPx ?? null
           const funding = ctx?.funding ?? null
