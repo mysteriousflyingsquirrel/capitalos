@@ -234,6 +234,7 @@ function Hyperliquid() {
 
   // Profit reminder milestones (fire once per position, reset on close)
   const [profitFired, setProfitFired] = useState<Record<string, { m5: boolean; m10: boolean }>>({})
+  const [openDebugId, setOpenDebugId] = useState<string | null>(null)
 
   useEffect(() => {
     const currentIds = new Set(positions.map((p) => p.id))
@@ -269,28 +270,28 @@ function Hyperliquid() {
 
   const dashboardEntries = useMemo(() => {
     const entries = positions.map((p) => {
-      const risk =
-        (riskByCoin[p.token] ?? riskByCoin[p.token.toUpperCase()]) ?? {
-          state: 'UNSUPPORTED' as RiskState,
-          message: 'Market too unstable for reliable risk signals.',
-          dotColor: '#A0AEC0',
-        }
+      const risk = riskByCoin[p.token] ?? riskByCoin[p.token.toUpperCase()] ?? null
+      const riskState: RiskState = risk?.state ?? 'UNSUPPORTED'
+      const riskMessage: string = risk?.message ?? 'Market too unstable for reliable risk signals.'
+      const dotColor: string | null = risk?.dotColor ?? '#A0AEC0'
+      const debugText: string = risk?.debug?.tooltipText ?? `Risk Dot Debug — ${p.token}\n\n(no debug available)`
 
       const fired = profitFired[p.id]
       let profitReminder: string | null = null
       if (fired?.m10) profitReminder = 'You’re up ~10%. Consider trailing your stop to lock in profits.'
       else if (fired?.m5) profitReminder = 'You’re up ~5%. Consider moving your stop to break-even.'
 
-      if (profitReminder && risk.state === 'RED') {
+      if (profitReminder && riskState === 'RED') {
         profitReminder = 'You’re in profit, but risk is high. Protect gains now.'
       }
 
       return {
         id: p.id,
         token: p.token,
-        riskState: risk.state as RiskState,
-        riskMessage: risk.message as string,
-        dotColor: risk.dotColor as string | null,
+        riskState,
+        riskMessage,
+        dotColor,
+        debugText,
         profitReminder,
       }
     })
@@ -358,12 +359,33 @@ function Hyperliquid() {
               {dashboardEntries.map((e) => (
                 <div key={e.id} className="bg-bg-surface-2 border border-border-subtle rounded-card p-4">
                   <div className="flex items-center gap-3 mb-3">
-                    <div
-                      className="w-5 h-5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: e.dotColor ?? '#A0AEC0' }}
-                      aria-label={`Risk: ${e.riskState}`}
-                      title={`Risk: ${e.riskState}`}
-                    />
+                    <div className="relative group">
+                      <button
+                        type="button"
+                        className="w-5 h-5 rounded-full flex-shrink-0 outline-none ring-0 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-frame focus-visible:ring-border-strong"
+                        style={{ backgroundColor: e.dotColor ?? '#A0AEC0' }}
+                        aria-label={`Risk: ${e.riskState}. Tap for debug.`}
+                        onClick={() => setOpenDebugId((prev) => (prev === e.id ? null : e.id))}
+                      />
+                      <div
+                        className={[
+                          'absolute z-50 left-0 top-full mt-2',
+                          'w-[min(520px,calc(100vw-2rem))]',
+                          'bg-bg-frame border border-border-strong rounded-card shadow-card',
+                          'p-3',
+                          'text-[11px] leading-[1.35] font-mono text-text-primary',
+                          'max-h-[60vh] overflow-auto whitespace-pre-wrap',
+                          'opacity-0 pointer-events-none',
+                          'transition-opacity duration-100',
+                          'group-hover:opacity-100 group-hover:pointer-events-auto',
+                          'group-focus-within:opacity-100 group-focus-within:pointer-events-auto',
+                          openDebugId === e.id ? 'opacity-100 pointer-events-auto' : '',
+                        ].join(' ')}
+                        role="tooltip"
+                      >
+                        {e.debugText ?? `Risk Dot Debug — ${e.token}\n\n(no debug available)`}
+                      </div>
+                    </div>
                     <Heading level={3}>{e.token}</Heading>
                   </div>
                   <div className="space-y-1 pl-8">
