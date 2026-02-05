@@ -34,22 +34,30 @@ export type RiskDotDebug = {
     failedChecks: string[]
     disabledBecause: string | null
   }
-  alarm1: {
+  fundingWeirdness: {
     skipped: boolean
     funding: number | null
     funding_z: number | null
     funding_z_th: number
     fundingHistorySamples: number
     fundingHistoryLookback: string
-    isAtOiCap: boolean
-    oiCapAvailable: boolean
-    alarmRaw: boolean
-    alarmConfirmed: boolean
+    indicatorRaw: boolean
+    indicatorConfirmed: boolean
     confirmCounter: number
     confirmRequired: number
     reason: string
   }
-  alarm2: {
+  oiCapHit: {
+    skipped: boolean
+    isAtOiCap: boolean
+    oiCapAvailable: boolean
+    indicatorRaw: boolean
+    indicatorConfirmed: boolean
+    confirmCounter: number
+    confirmRequired: number
+    reason: string
+  }
+  liquidityStress: {
     skipped: boolean
     source: 'impactPxs' | 'l2Book' | 'none'
     impactCostBps: number | null
@@ -58,16 +66,17 @@ export type RiskDotDebug = {
     spreadBps_th: number
     depthNotional: number | null
     depthNotional_th: number
-    alarmRaw: boolean
-    alarmConfirmed: boolean
+    indicatorRaw: boolean
+    indicatorConfirmed: boolean
     confirmCounter: number
     confirmRequired: number
     reason: string
   }
   antiFlip: {
     confirmationRequired: number
-    alarm1Confirm: { n: number; required: number }
-    alarm2Confirm: { n: number; required: number }
+    fundingWeirdnessConfirm: { n: number; required: number }
+    oiCapConfirm: { n: number; required: number }
+    liquidityConfirm: { n: number; required: number }
     stateCooldown: {
       orangeMinHoldMs: number
       orangeRemainingMs: number
@@ -79,11 +88,15 @@ export type RiskDotDebug = {
   }
   decisionTrace: {
     universeEligible: boolean
-    alarm1Confirmed: boolean
-    alarm2Confirmed: boolean
-    alarmsActive: number
+    activeIndicators: {
+      fundingWeirdness: boolean
+      oiCapHit: boolean
+      liquidityStress: boolean
+    }
+    activeCount: number
     computedState: RiskState
     effectiveState: RiskState
+    selectedMessage: string
     ruleMatched: string
   }
   tooltipText: string
@@ -108,11 +121,11 @@ export type RiskPerCoin = {
 const STABILITY_DAY_NTL_VLM_MIN = 25_000_000
 const STABILITY_OPEN_INTEREST_MIN = 10_000_000
 
-// Alarm 1: Crowding
+// Indicator 1: Funding Weirdness
 const FUNDING_Z_THRESHOLD = 1.5
 const FUNDING_HISTORY_LOOKBACK_MS = 24 * 60 * 60 * 1000 // 24h
 
-// Alarm 2: Liquidity absolute thresholds
+// Indicator 3: Liquidity Stress absolute thresholds
 const IMPACT_BPS_THRESHOLD = 25
 const SPREAD_BPS_THRESHOLD = 8
 const DEPTH_MIN_NOTIONAL = 500_000 // $500k
@@ -128,11 +141,23 @@ const DOT_COLORS: Record<RiskState, string> = {
   UNSUPPORTED: '#A0AEC0',
 }
 
-const MSG: Record<RiskState, string> = {
-  GREEN: 'Market is stable. Trade as planned.',
-  ORANGE: 'Risk is rising. Consider reducing size or tightening your stop.',
-  RED: 'High crash risk. Protect capital or exit.',
-  UNSUPPORTED: 'Market too unstable for reliable risk signals.',
+// ─────────────────────────────────────────────────────────────────────────────
+// Message Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MSG_GREEN = 'Nothing suspicious happening - chill'
+const MSG_RED = 'Shit hitting the fan! Leverage is crowded, the market is constrained, and liquidity is thin. Consider exiting with tight SL'
+const MSG_UNSUPPORTED = 'Market too unstable for reliable risk signals.'
+
+// Reason fragments for ORANGE message
+const REASON_FUNDING_WEIRDNESS = 'leverage positioning is no longer normal. Too many people on one side.'
+const REASON_OI_CAP_HIT = 'the market is hitting leverage limits (OI cap). Pressure is building.'
+const REASON_LIQUIDITY_STRESS = 'liquidity is thinning. Fast moves can hurt.'
+
+function buildOrangeMessage(reasons: string[]): string {
+  if (reasons.length === 0) return MSG_GREEN // fallback
+  const combinedReason = reasons.length === 1 ? reasons[0] : `${reasons[0]} and ${reasons[1]}`
+  return `Stranger things happening because of ${combinedReason} - Consider De-Risking or SL Adustment`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -195,19 +220,23 @@ function zscore(current: number, history: number[]): number | null {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type CoinMemoryState = {
-  alarm1ConfirmCount: number
-  alarm2ConfirmCount: number
-  lastAlarm1Raw: boolean
-  lastAlarm2Raw: boolean
+  fundingWeirdnessConfirmCount: number
+  oiCapConfirmCount: number
+  liquidityConfirmCount: number
+  lastFundingWeirdnessRaw: boolean
+  lastOiCapRaw: boolean
+  lastLiquidityRaw: boolean
   lastState: { state: RiskState; enteredAt: number } | null
 }
 
 function getDefaultMemoryState(): CoinMemoryState {
   return {
-    alarm1ConfirmCount: 0,
-    alarm2ConfirmCount: 0,
-    lastAlarm1Raw: false,
-    lastAlarm2Raw: false,
+    fundingWeirdnessConfirmCount: 0,
+    oiCapConfirmCount: 0,
+    liquidityConfirmCount: 0,
+    lastFundingWeirdnessRaw: false,
+    lastOiCapRaw: false,
+    lastLiquidityRaw: false,
     lastState: null,
   }
 }
@@ -266,56 +295,67 @@ function buildTooltipText(args: { coin: string; debug: Omit<RiskDotDebug, 'toolt
   }
   lines.push('')
 
-  lines.push('SECTION 2 — ALARM 1: CROWDING')
-  if (d.alarm1.skipped) lines.push('SKIPPED (disabled)')
+  lines.push('SECTION 2 — INDICATOR 1: FUNDING WEIRDNESS')
+  if (d.fundingWeirdness.skipped) lines.push('SKIPPED (disabled)')
   lines.push('Inputs:')
-  lines.push(`- funding (now): ${formatNumber(d.alarm1.funding, 6)}`)
-  lines.push(`- funding_z: ${formatNumber(d.alarm1.funding_z, 3)}  threshold: ±${d.alarm1.funding_z_th}`)
-  lines.push(`- fundingHistory: ${d.alarm1.fundingHistorySamples} samples (${d.alarm1.fundingHistoryLookback})`)
-  lines.push(`- isAtOiCap: ${String(d.alarm1.isAtOiCap)}  (oiCapAvailable: ${String(d.alarm1.oiCapAvailable)})`)
+  lines.push(`- funding (now): ${formatNumber(d.fundingWeirdness.funding, 6)}`)
+  lines.push(`- funding_z: ${formatNumber(d.fundingWeirdness.funding_z, 3)}  threshold: ±${d.fundingWeirdness.funding_z_th}`)
+  lines.push(`- fundingHistory: ${d.fundingWeirdness.fundingHistorySamples} samples (${d.fundingWeirdness.fundingHistoryLookback})`)
   lines.push('Decision:')
-  lines.push(`- alarmRaw: ${String(d.alarm1.alarmRaw)}`)
-  lines.push(`- alarmConfirmed: ${String(d.alarm1.alarmConfirmed)}`)
-  lines.push(`- confirmCounter: ${d.alarm1.confirmCounter}/${d.alarm1.confirmRequired}`)
-  lines.push(`Reason: ${d.alarm1.reason}`)
+  lines.push(`- indicatorRaw: ${String(d.fundingWeirdness.indicatorRaw)}`)
+  lines.push(`- indicatorConfirmed: ${String(d.fundingWeirdness.indicatorConfirmed)}`)
+  lines.push(`- confirmCounter: ${d.fundingWeirdness.confirmCounter}/${d.fundingWeirdness.confirmRequired}`)
+  lines.push(`Reason: ${d.fundingWeirdness.reason}`)
   lines.push('')
 
-  lines.push('SECTION 3 — ALARM 2: LIQUIDITY')
-  if (d.alarm2.skipped) lines.push('SKIPPED (disabled)')
-  lines.push(`source: ${d.alarm2.source}`)
-  if (d.alarm2.source === 'impactPxs') {
+  lines.push('SECTION 3 — INDICATOR 2: OI CAP HIT')
+  if (d.oiCapHit.skipped) lines.push('SKIPPED (disabled)')
+  lines.push('Inputs:')
+  lines.push(`- isAtOiCap: ${String(d.oiCapHit.isAtOiCap)}  (oiCapAvailable: ${String(d.oiCapHit.oiCapAvailable)})`)
+  lines.push('Decision:')
+  lines.push(`- indicatorRaw: ${String(d.oiCapHit.indicatorRaw)}`)
+  lines.push(`- indicatorConfirmed: ${String(d.oiCapHit.indicatorConfirmed)}`)
+  lines.push(`- confirmCounter: ${d.oiCapHit.confirmCounter}/${d.oiCapHit.confirmRequired}`)
+  lines.push(`Reason: ${d.oiCapHit.reason}`)
+  lines.push('')
+
+  lines.push('SECTION 4 — INDICATOR 3: LIQUIDITY STRESS')
+  if (d.liquidityStress.skipped) lines.push('SKIPPED (disabled)')
+  lines.push(`source: ${d.liquidityStress.source}`)
+  if (d.liquidityStress.source === 'impactPxs') {
     lines.push('Inputs (impactPxs path):')
-    lines.push(`- impactCost: ${d.alarm2.impactCostBps == null ? '–' : `${d.alarm2.impactCostBps.toFixed(1)} bps`}  threshold: ${d.alarm2.impactCostBps_th} bps`)
-  } else if (d.alarm2.source === 'l2Book') {
+    lines.push(`- impactCost: ${d.liquidityStress.impactCostBps == null ? '–' : `${d.liquidityStress.impactCostBps.toFixed(1)} bps`}  threshold: ${d.liquidityStress.impactCostBps_th} bps`)
+  } else if (d.liquidityStress.source === 'l2Book') {
     lines.push('Inputs (l2Book path):')
-    lines.push(`- spread: ${d.alarm2.spreadBps == null ? '–' : `${d.alarm2.spreadBps.toFixed(1)} bps`}  threshold: ${d.alarm2.spreadBps_th} bps`)
-    lines.push(`- depth(0.2%): ${formatUsdCompact(d.alarm2.depthNotional)}  threshold: ${formatUsdCompact(d.alarm2.depthNotional_th)}`)
+    lines.push(`- spread: ${d.liquidityStress.spreadBps == null ? '–' : `${d.liquidityStress.spreadBps.toFixed(1)} bps`}  threshold: ${d.liquidityStress.spreadBps_th} bps`)
+    lines.push(`- depth(0.2%): ${formatUsdCompact(d.liquidityStress.depthNotional)}  threshold: ${formatUsdCompact(d.liquidityStress.depthNotional_th)}`)
   } else {
     lines.push('Inputs: –')
   }
   lines.push('Decision:')
-  lines.push(`- alarmRaw: ${String(d.alarm2.alarmRaw)}`)
-  lines.push(`- alarmConfirmed: ${String(d.alarm2.alarmConfirmed)}`)
-  lines.push(`- confirmCounter: ${d.alarm2.confirmCounter}/${d.alarm2.confirmRequired}`)
-  lines.push(`Reason: ${d.alarm2.reason}`)
+  lines.push(`- indicatorRaw: ${String(d.liquidityStress.indicatorRaw)}`)
+  lines.push(`- indicatorConfirmed: ${String(d.liquidityStress.indicatorConfirmed)}`)
+  lines.push(`- confirmCounter: ${d.liquidityStress.confirmCounter}/${d.liquidityStress.confirmRequired}`)
+  lines.push(`Reason: ${d.liquidityStress.reason}`)
   lines.push('')
 
-  lines.push('SECTION 4 — CONFIRMATION & COOLDOWN (ANTI-FLIP)')
+  lines.push('SECTION 5 — CONFIRMATION & COOLDOWN (ANTI-FLIP)')
   lines.push(`- confirmationRequired: ${d.antiFlip.confirmationRequired}`)
-  lines.push(`- alarm1Confirm: ${d.antiFlip.alarm1Confirm.n}/${d.antiFlip.alarm1Confirm.required}`)
-  lines.push(`- alarm2Confirm: ${d.antiFlip.alarm2Confirm.n}/${d.antiFlip.alarm2Confirm.required}`)
+  lines.push(`- fundingWeirdnessConfirm: ${d.antiFlip.fundingWeirdnessConfirm.n}/${d.antiFlip.fundingWeirdnessConfirm.required}`)
+  lines.push(`- oiCapConfirm: ${d.antiFlip.oiCapConfirm.n}/${d.antiFlip.oiCapConfirm.required}`)
+  lines.push(`- liquidityConfirm: ${d.antiFlip.liquidityConfirm.n}/${d.antiFlip.liquidityConfirm.required}`)
   lines.push('- stateCooldown:')
   lines.push(`  - orangeMinHold: 15m, remaining: ${formatMs(d.antiFlip.stateCooldown.orangeRemainingMs)}`)
   lines.push(`  - redMinHold: 30m, remaining: ${formatMs(d.antiFlip.stateCooldown.redRemainingMs)}`)
   lines.push(`- stateChangeBlocked: ${String(d.antiFlip.stateChangeBlocked)}${d.antiFlip.blockedReason ? ` (${d.antiFlip.blockedReason})` : ''}`)
   lines.push('')
 
-  lines.push('SECTION 5 — DECISION TRACE (MAPPING)')
+  lines.push('SECTION 6 — DECISION TRACE (MAPPING)')
   lines.push(`- universeEligible? ${String(d.decisionTrace.universeEligible)}`)
-  lines.push(`- alarm1Confirmed? ${String(d.decisionTrace.alarm1Confirmed)}`)
-  lines.push(`- alarm2Confirmed? ${String(d.decisionTrace.alarm2Confirmed)}`)
-  lines.push(`- alarmsActive: ${d.decisionTrace.alarmsActive}`)
+  lines.push(`- activeIndicators: [fundingWeirdness=${String(d.decisionTrace.activeIndicators.fundingWeirdness)}, oiCapHit=${String(d.decisionTrace.activeIndicators.oiCapHit)}, liquidityStress=${String(d.decisionTrace.activeIndicators.liquidityStress)}]`)
+  lines.push(`- activeCount: ${d.decisionTrace.activeCount}`)
   lines.push(`- finalState rule matched: ${d.decisionTrace.ruleMatched}`)
+  lines.push(`- selectedMessage: ${d.decisionTrace.selectedMessage}`)
 
   return lines.join('\n')
 }
@@ -433,12 +473,12 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
           const confirmRequired = 2
 
           // ─────────────────────────────────────────────────────────────────
-          // ALARM 1: CROWDING (isAtOiCap AND |funding_z| >= threshold)
+          // INDICATOR 1: FUNDING WEIRDNESS (|funding_z| >= threshold)
           // ─────────────────────────────────────────────────────────────────
           let funding_z: number | null = null
           let fundingHistorySamples = 0
-          let alarm1Raw = false
-          let alarm1Reason = ''
+          let fundingWeirdnessRaw = false
+          let fundingWeirdnessReason = ''
 
           if (!dataUnavailable && stabilityOk) {
             try {
@@ -451,46 +491,73 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
                 funding_z = zscore(funding, rates)
               }
             } catch {
-              // fundingHistory unavailable - alarm1 = false (fail-safe)
-              alarm1Reason = 'fundingHistory unavailable (fail-safe: alarm1=false)'
+              fundingWeirdnessReason = 'fundingHistory unavailable (fail-safe: indicator=false)'
             }
 
-            if (funding_z != null && Math.abs(funding_z) >= FUNDING_Z_THRESHOLD && isAtOiCap) {
-              alarm1Raw = true
-              alarm1Reason = `alarm1=true (|funding_z|=${Math.abs(funding_z).toFixed(2)} >= ${FUNDING_Z_THRESHOLD} AND isAtOiCap=true)`
-            } else if (!alarm1Reason) {
-              const reasons: string[] = []
-              if (funding_z == null) reasons.push('funding_z unavailable')
-              else if (Math.abs(funding_z) < FUNDING_Z_THRESHOLD) reasons.push(`|funding_z|=${Math.abs(funding_z).toFixed(2)} < ${FUNDING_Z_THRESHOLD}`)
-              if (!isAtOiCap) reasons.push('isAtOiCap=false')
-              alarm1Reason = `alarm1=false (${reasons.join(', ')})`
+            if (funding_z != null && Math.abs(funding_z) >= FUNDING_Z_THRESHOLD) {
+              fundingWeirdnessRaw = true
+              fundingWeirdnessReason = `indicator=true (|funding_z|=${Math.abs(funding_z).toFixed(2)} >= ${FUNDING_Z_THRESHOLD})`
+            } else if (!fundingWeirdnessReason) {
+              if (funding_z == null) {
+                fundingWeirdnessReason = 'indicator=false (funding_z unavailable)'
+              } else {
+                fundingWeirdnessReason = `indicator=false (|funding_z|=${Math.abs(funding_z).toFixed(2)} < ${FUNDING_Z_THRESHOLD})`
+              }
             }
           } else {
-            alarm1Reason = dataUnavailable ? 'data unavailable (fail-safe: alarm1=false)' : 'universe filter failed (fail-safe: alarm1=false)'
+            fundingWeirdnessReason = dataUnavailable ? 'data unavailable (fail-safe: indicator=false)' : 'universe filter failed (fail-safe: indicator=false)'
           }
 
-          // Alarm 1 confirmation (2 consecutive)
-          if (alarm1Raw) {
-            if (mem.lastAlarm1Raw) {
-              mem.alarm1ConfirmCount = Math.min(mem.alarm1ConfirmCount + 1, confirmRequired)
+          // Funding Weirdness confirmation (2 consecutive)
+          if (fundingWeirdnessRaw) {
+            if (mem.lastFundingWeirdnessRaw) {
+              mem.fundingWeirdnessConfirmCount = Math.min(mem.fundingWeirdnessConfirmCount + 1, confirmRequired)
             } else {
-              mem.alarm1ConfirmCount = 1
+              mem.fundingWeirdnessConfirmCount = 1
             }
           } else {
-            mem.alarm1ConfirmCount = 0
+            mem.fundingWeirdnessConfirmCount = 0
           }
-          mem.lastAlarm1Raw = alarm1Raw
-          const alarm1Confirmed = mem.alarm1ConfirmCount >= confirmRequired
+          mem.lastFundingWeirdnessRaw = fundingWeirdnessRaw
+          const fundingWeirdnessConfirmed = mem.fundingWeirdnessConfirmCount >= confirmRequired
 
           // ─────────────────────────────────────────────────────────────────
-          // ALARM 2: LIQUIDITY (absolute thresholds)
+          // INDICATOR 2: OI CAP HIT (isAtOiCap == true)
           // ─────────────────────────────────────────────────────────────────
-          let alarm2Raw = false
+          let oiCapRaw = false
+          let oiCapReason = ''
+
+          if (!dataUnavailable && stabilityOk) {
+            oiCapRaw = isAtOiCap
+            oiCapReason = isAtOiCap
+              ? 'indicator=true (isAtOiCap=true)'
+              : 'indicator=false (isAtOiCap=false)'
+          } else {
+            oiCapReason = dataUnavailable ? 'data unavailable (fail-safe: indicator=false)' : 'universe filter failed (fail-safe: indicator=false)'
+          }
+
+          // OI Cap confirmation (2 consecutive)
+          if (oiCapRaw) {
+            if (mem.lastOiCapRaw) {
+              mem.oiCapConfirmCount = Math.min(mem.oiCapConfirmCount + 1, confirmRequired)
+            } else {
+              mem.oiCapConfirmCount = 1
+            }
+          } else {
+            mem.oiCapConfirmCount = 0
+          }
+          mem.lastOiCapRaw = oiCapRaw
+          const oiCapConfirmed = mem.oiCapConfirmCount >= confirmRequired
+
+          // ─────────────────────────────────────────────────────────────────
+          // INDICATOR 3: LIQUIDITY STRESS (absolute thresholds)
+          // ─────────────────────────────────────────────────────────────────
+          let liquidityRaw = false
           let liquiditySource: 'impactPxs' | 'l2Book' | 'none' = 'none'
           let impactCostBps: number | null = null
           let spreadBps: number | null = null
           let depthNotional: number | null = null
-          let alarm2Reason = ''
+          let liquidityReason = ''
 
           if (!dataUnavailable && stabilityOk) {
             // Try impact cost first
@@ -498,10 +565,10 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             if (impactCostPct != null) {
               liquiditySource = 'impactPxs'
               impactCostBps = impactCostPct * 10_000
-              alarm2Raw = impactCostBps >= IMPACT_BPS_THRESHOLD
-              alarm2Reason = alarm2Raw
-                ? `alarm2=true (impactCost ${impactCostBps.toFixed(1)} bps >= ${IMPACT_BPS_THRESHOLD} bps)`
-                : `alarm2=false (impactCost ${impactCostBps.toFixed(1)} bps < ${IMPACT_BPS_THRESHOLD} bps)`
+              liquidityRaw = impactCostBps >= IMPACT_BPS_THRESHOLD
+              liquidityReason = liquidityRaw
+                ? `indicator=true (impactCost ${impactCostBps.toFixed(1)} bps >= ${IMPACT_BPS_THRESHOLD} bps)`
+                : `indicator=false (impactCost ${impactCostBps.toFixed(1)} bps < ${IMPACT_BPS_THRESHOLD} bps)`
             } else {
               // Fallback to l2Book
               try {
@@ -513,59 +580,69 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
 
                   const spreadFragile = spreadBps >= SPREAD_BPS_THRESHOLD
                   const depthFragile = depthNotional != null && depthNotional < DEPTH_MIN_NOTIONAL
-                  alarm2Raw = spreadFragile && depthFragile
+                  liquidityRaw = spreadFragile && depthFragile
 
-                  alarm2Reason = alarm2Raw
-                    ? `alarm2=true (spread ${spreadBps.toFixed(1)} bps >= ${SPREAD_BPS_THRESHOLD} AND depth ${formatUsdCompact(depthNotional)} < ${formatUsdCompact(DEPTH_MIN_NOTIONAL)})`
-                    : `alarm2=false (spread=${spreadBps.toFixed(1)} bps, depth=${formatUsdCompact(depthNotional)})`
+                  liquidityReason = liquidityRaw
+                    ? `indicator=true (spread ${spreadBps.toFixed(1)} bps >= ${SPREAD_BPS_THRESHOLD} AND depth ${formatUsdCompact(depthNotional)} < ${formatUsdCompact(DEPTH_MIN_NOTIONAL)})`
+                    : `indicator=false (spread=${spreadBps.toFixed(1)} bps, depth=${formatUsdCompact(depthNotional)})`
                 } else {
-                  alarm2Reason = 'l2Book missing spread data (fail-safe: alarm2=false)'
+                  liquidityReason = 'l2Book missing spread data (fail-safe: indicator=false)'
                 }
               } catch {
-                alarm2Reason = 'l2Book unavailable (fail-safe: alarm2=false)'
+                liquidityReason = 'l2Book unavailable (fail-safe: indicator=false)'
               }
             }
           } else {
-            alarm2Reason = dataUnavailable ? 'data unavailable (fail-safe: alarm2=false)' : 'universe filter failed (fail-safe: alarm2=false)'
+            liquidityReason = dataUnavailable ? 'data unavailable (fail-safe: indicator=false)' : 'universe filter failed (fail-safe: indicator=false)'
           }
 
-          // Alarm 2 confirmation (2 consecutive)
-          if (alarm2Raw) {
-            if (mem.lastAlarm2Raw) {
-              mem.alarm2ConfirmCount = Math.min(mem.alarm2ConfirmCount + 1, confirmRequired)
+          // Liquidity confirmation (2 consecutive)
+          if (liquidityRaw) {
+            if (mem.lastLiquidityRaw) {
+              mem.liquidityConfirmCount = Math.min(mem.liquidityConfirmCount + 1, confirmRequired)
             } else {
-              mem.alarm2ConfirmCount = 1
+              mem.liquidityConfirmCount = 1
             }
           } else {
-            mem.alarm2ConfirmCount = 0
+            mem.liquidityConfirmCount = 0
           }
-          mem.lastAlarm2Raw = alarm2Raw
-          const alarm2Confirmed = mem.alarm2ConfirmCount >= confirmRequired
+          mem.lastLiquidityRaw = liquidityRaw
+          const liquidityConfirmed = mem.liquidityConfirmCount >= confirmRequired
 
           // ─────────────────────────────────────────────────────────────────
-          // FINAL STATE LOGIC (0/1/2 alarms)
+          // FINAL STATE LOGIC (0/1-2/3 indicators)
           // ─────────────────────────────────────────────────────────────────
-          const alarmsActive = (alarm1Confirmed ? 1 : 0) + (alarm2Confirmed ? 1 : 0)
+          const activeCount = (fundingWeirdnessConfirmed ? 1 : 0) + (oiCapConfirmed ? 1 : 0) + (liquidityConfirmed ? 1 : 0)
           let computed: RiskState = 'GREEN'
           let finalRuleMatched = ''
+          let selectedMessage = ''
 
           if (dataUnavailable) {
             computed = 'UNSUPPORTED'
             finalRuleMatched = 'GRAY: data unavailable'
+            selectedMessage = MSG_UNSUPPORTED
           } else if (!stabilityOk) {
             computed = 'UNSUPPORTED'
             finalRuleMatched = 'GRAY: universe filter failed'
-          } else if (alarmsActive === 0) {
+            selectedMessage = MSG_UNSUPPORTED
+          } else if (activeCount === 0) {
             computed = 'GREEN'
-            finalRuleMatched = 'GREEN: no alarms confirmed'
-          } else if (alarmsActive === 1) {
+            finalRuleMatched = 'GREEN: no indicators active'
+            selectedMessage = MSG_GREEN
+          } else if (activeCount === 1 || activeCount === 2) {
             computed = 'ORANGE'
-            finalRuleMatched = alarm1Confirmed
-              ? 'ORANGE: alarm1 (crowding) confirmed only'
-              : 'ORANGE: alarm2 (liquidity) confirmed only'
+            // Build reasons array in stable order
+            const reasons: string[] = []
+            if (fundingWeirdnessConfirmed) reasons.push(REASON_FUNDING_WEIRDNESS)
+            if (oiCapConfirmed) reasons.push(REASON_OI_CAP_HIT)
+            if (liquidityConfirmed) reasons.push(REASON_LIQUIDITY_STRESS)
+            selectedMessage = buildOrangeMessage(reasons)
+            finalRuleMatched = `ORANGE: ${activeCount} indicator(s) active`
           } else {
+            // activeCount === 3
             computed = 'RED'
-            finalRuleMatched = 'RED: both alarms confirmed'
+            finalRuleMatched = 'RED: all 3 indicators active'
+            selectedMessage = MSG_RED
           }
 
           // Cooldowns
@@ -582,16 +659,31 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             mem.lastState = { state: effective, enteredAt: now }
           }
 
+          // If effective differs from computed due to cooldown, keep the higher-severity message
+          let effectiveMessage = selectedMessage
+          if (stateBlocked && effective !== computed) {
+            // Recompute message for effective state
+            if (effective === 'RED') {
+              effectiveMessage = MSG_RED
+            } else if (effective === 'ORANGE') {
+              const reasons: string[] = []
+              if (fundingWeirdnessConfirmed) reasons.push(REASON_FUNDING_WEIRDNESS)
+              if (oiCapConfirmed) reasons.push(REASON_OI_CAP_HIT)
+              if (liquidityConfirmed) reasons.push(REASON_LIQUIDITY_STRESS)
+              effectiveMessage = reasons.length > 0 ? buildOrangeMessage(reasons) : selectedMessage
+            }
+          }
+
           // Debug reason
           const debugReason =
             effective === 'UNSUPPORTED'
               ? dataUnavailable ? 'Data unavailable' : 'Universe filter failed'
               : effective === 'GREEN'
-                ? 'No alarms active'
+                ? 'No indicators active'
                 : effective === 'ORANGE'
-                  ? 'One alarm active'
+                  ? `${activeCount} indicator(s) active`
                   : effective === 'RED'
-                    ? 'Both alarms active'
+                    ? 'All 3 indicators active'
                     : 'Unknown'
 
           // Build debug object
@@ -618,22 +710,30 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               failedChecks,
               disabledBecause: dataUnavailable ? 'data unavailable' : (failedChecks.join(', ') || null),
             },
-            alarm1: {
+            fundingWeirdness: {
               skipped: dataUnavailable || !stabilityOk,
               funding,
               funding_z,
               funding_z_th: FUNDING_Z_THRESHOLD,
               fundingHistorySamples,
               fundingHistoryLookback: '24h',
+              indicatorRaw: fundingWeirdnessRaw,
+              indicatorConfirmed: fundingWeirdnessConfirmed,
+              confirmCounter: mem.fundingWeirdnessConfirmCount,
+              confirmRequired,
+              reason: fundingWeirdnessReason,
+            },
+            oiCapHit: {
+              skipped: dataUnavailable || !stabilityOk,
               isAtOiCap,
               oiCapAvailable,
-              alarmRaw: alarm1Raw,
-              alarmConfirmed: alarm1Confirmed,
-              confirmCounter: mem.alarm1ConfirmCount,
+              indicatorRaw: oiCapRaw,
+              indicatorConfirmed: oiCapConfirmed,
+              confirmCounter: mem.oiCapConfirmCount,
               confirmRequired,
-              reason: alarm1Reason,
+              reason: oiCapReason,
             },
-            alarm2: {
+            liquidityStress: {
               skipped: dataUnavailable || !stabilityOk,
               source: liquiditySource,
               impactCostBps,
@@ -642,16 +742,17 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               spreadBps_th: SPREAD_BPS_THRESHOLD,
               depthNotional,
               depthNotional_th: DEPTH_MIN_NOTIONAL,
-              alarmRaw: alarm2Raw,
-              alarmConfirmed: alarm2Confirmed,
-              confirmCounter: mem.alarm2ConfirmCount,
+              indicatorRaw: liquidityRaw,
+              indicatorConfirmed: liquidityConfirmed,
+              confirmCounter: mem.liquidityConfirmCount,
               confirmRequired,
-              reason: alarm2Reason,
+              reason: liquidityReason,
             },
             antiFlip: {
               confirmationRequired: confirmRequired,
-              alarm1Confirm: { n: mem.alarm1ConfirmCount, required: confirmRequired },
-              alarm2Confirm: { n: mem.alarm2ConfirmCount, required: confirmRequired },
+              fundingWeirdnessConfirm: { n: mem.fundingWeirdnessConfirmCount, required: confirmRequired },
+              oiCapConfirm: { n: mem.oiCapConfirmCount, required: confirmRequired },
+              liquidityConfirm: { n: mem.liquidityConfirmCount, required: confirmRequired },
               stateCooldown: {
                 orangeMinHoldMs: COOL_DOWN_ORANGE_MS,
                 orangeRemainingMs: orangeRemaining,
@@ -663,11 +764,15 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             },
             decisionTrace: {
               universeEligible: stabilityOk && !dataUnavailable,
-              alarm1Confirmed,
-              alarm2Confirmed,
-              alarmsActive,
+              activeIndicators: {
+                fundingWeirdness: fundingWeirdnessConfirmed,
+                oiCapHit: oiCapConfirmed,
+                liquidityStress: liquidityConfirmed,
+              },
+              activeCount,
               computedState: computed,
               effectiveState: effective,
+              selectedMessage: effectiveMessage,
               ruleMatched: finalRuleMatched,
             },
           }
@@ -677,7 +782,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
           nextRisk[requestedTicker] = {
             coin: requestedTicker,
             state: effective,
-            message: MSG[effective],
+            message: effectiveMessage,
             dotColor: DOT_COLORS[effective],
             funding,
             openInterest,
@@ -734,22 +839,30 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
                 failedChecks: ['data stale'],
                 disabledBecause: 'data stale (>60s)',
               },
-              alarm1: {
+              fundingWeirdness: {
                 skipped: true,
                 funding: null,
                 funding_z: null,
                 funding_z_th: FUNDING_Z_THRESHOLD,
                 fundingHistorySamples: 0,
                 fundingHistoryLookback: '24h',
-                isAtOiCap: false,
-                oiCapAvailable: false,
-                alarmRaw: false,
-                alarmConfirmed: false,
+                indicatorRaw: false,
+                indicatorConfirmed: false,
                 confirmCounter: 0,
                 confirmRequired: 2,
                 reason: 'SKIPPED (data stale)',
               },
-              alarm2: {
+              oiCapHit: {
+                skipped: true,
+                isAtOiCap: false,
+                oiCapAvailable: false,
+                indicatorRaw: false,
+                indicatorConfirmed: false,
+                confirmCounter: 0,
+                confirmRequired: 2,
+                reason: 'SKIPPED (data stale)',
+              },
+              liquidityStress: {
                 skipped: true,
                 source: 'none',
                 impactCostBps: null,
@@ -758,16 +871,17 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
                 spreadBps_th: SPREAD_BPS_THRESHOLD,
                 depthNotional: null,
                 depthNotional_th: DEPTH_MIN_NOTIONAL,
-                alarmRaw: false,
-                alarmConfirmed: false,
+                indicatorRaw: false,
+                indicatorConfirmed: false,
                 confirmCounter: 0,
                 confirmRequired: 2,
                 reason: 'SKIPPED (data stale)',
               },
               antiFlip: {
                 confirmationRequired: 2,
-                alarm1Confirm: { n: 0, required: 2 },
-                alarm2Confirm: { n: 0, required: 2 },
+                fundingWeirdnessConfirm: { n: 0, required: 2 },
+                oiCapConfirm: { n: 0, required: 2 },
+                liquidityConfirm: { n: 0, required: 2 },
                 stateCooldown: {
                   orangeMinHoldMs: COOL_DOWN_ORANGE_MS,
                   orangeRemainingMs: 0,
@@ -779,11 +893,15 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               },
               decisionTrace: {
                 universeEligible: false,
-                alarm1Confirmed: false,
-                alarm2Confirmed: false,
-                alarmsActive: 0,
+                activeIndicators: {
+                  fundingWeirdness: false,
+                  oiCapHit: false,
+                  liquidityStress: false,
+                },
+                activeCount: 0,
                 computedState: 'UNSUPPORTED',
                 effectiveState: 'UNSUPPORTED',
+                selectedMessage: MSG_UNSUPPORTED,
                 ruleMatched: 'GRAY: data stale',
               },
             }
@@ -791,7 +909,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
             next[coin] = {
               coin,
               state: 'UNSUPPORTED',
-              message: 'Risk data unavailable.',
+              message: MSG_UNSUPPORTED,
               dotColor: DOT_COLORS.UNSUPPORTED,
               funding: null,
               openInterest: null,
