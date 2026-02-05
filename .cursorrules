@@ -19,6 +19,7 @@ IMPLEMENTATION RULES:
 - Never change the PRD during implementation.
 - If anything is unclear, ask to update requirements/spec/PRD first.
 - No partial implementations.
+- Never guess. Always ask when something is unclear.
 
 COMPLETION VERIFICATION (before marking a feature complete):
 - Before considering a feature complete, explicitly verify the implementation against the PRD and the relevant spec.

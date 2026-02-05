@@ -643,7 +643,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
 
           // Pillar 2 precompute (only meaningful if crowding direction known)
           const structureDbg =
-            crowdingConfirmed && (crowDir === 'LONG_CROWDED' || crowdDir === 'SHORT_CROWDED')
+            crowdingConfirmed && (crowdDir === 'LONG_CROWDED' || crowdDir === 'SHORT_CROWDED')
               ? computeStructureDebug({ crowdingDirection: crowdDir === 'LONG_CROWDED' ? 'LONG' : 'SHORT', markPxPoints: hist.markPxPoints, now })
               : { nowPx: markPx, r15: null, r1h: null, state: null as any, ruleUsed: 'N/A', reason: crowdingConfirmed ? 'Missing crowding direction' : 'Not crowded (structure not evaluated)' }
 
@@ -651,7 +651,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
           const liquidityChecksPruned = hist.liquidityFragileChecks.filter((c) => c.ts >= now - 60 * 60 * 1000)
           hist.liquidityFragileChecks = liquidityChecksPruned
 
-          const snap = lastL2BookRef.current[coin]?.snapshot
+          const snap = lastL2BookRef.current[requestedTicker]?.snapshot
           const spreadPctNow = snap?.spreadPct ?? null
           const depthNow = snap?.depthNotionalNearMid ?? null
 
@@ -1056,7 +1056,7 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
               f_z: fZ,
               oi_z_th: CROWDING_OI_Z_THRESHOLD,
               f_z_th: CROWDING_F_Z_THRESHOLD,
-              direction: crowdingRaw ? (crowDir as any) : 'NEUTRAL',
+              direction: crowdingRaw ? (crowdDir as any) : 'NEUTRAL',
               crowdingRaw,
               crowdingConfirmed: crowdingConfirmed,
               confirmCounter: crowdingCounter,
