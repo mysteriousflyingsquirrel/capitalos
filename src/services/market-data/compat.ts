@@ -5,7 +5,7 @@
  */
 
 import { getPricesMap as getCryptoPricesMap } from './CryptoPriceService'
-import { getPricesMap as getMarketPricesMap } from './MarketPriceService'
+import { getDailyPricesMap } from './DailyPriceService'
 import { getRate } from './FxRateService'
 
 /**
@@ -35,17 +35,14 @@ export async function fetchCryptoPrices(tickers: string[]): Promise<Record<strin
 
 /**
  * Fetch stock/ETF/commodity prices (backward compatible)
- * @deprecated Use MarketPriceService directly
+ * @deprecated Use DailyPriceService directly - reads from daily Firestore cache
  */
 export async function fetchStockPrices(
   tickers: string[],
-  apiKey?: string | null
+  _apiKey?: string | null // API key no longer needed - prices come from Firestore cache
 ): Promise<Record<string, number>> {
-  if (!apiKey) {
-    console.warn('[fetchStockPrices] No API key provided, returning empty prices')
-    return {}
-  }
-  return getMarketPricesMap(tickers, apiKey)
+  // Use daily Firestore cache - no direct Yahoo calls
+  return getDailyPricesMap(tickers)
 }
 
 /**

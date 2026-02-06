@@ -32,7 +32,7 @@ export interface ValuationConfig {
   /** Display currency (what the user wants to see) */
   displayCurrency: CurrencyCode
 
-  /** RapidAPI key for Yahoo Finance (required for stock/ETF/commodity prices) */
+  /** @deprecated RapidAPI key no longer needed - market prices come from daily Firestore cache */
   rapidApiKey?: string | null
 }
 
@@ -44,7 +44,7 @@ export async function computeValuation(
   transactions: NetWorthTransaction[],
   config: ValuationConfig
 ): Promise<ValuationResult> {
-  const { baseCurrency, displayCurrency, rapidApiKey } = config
+  const { baseCurrency, displayCurrency } = config
   const asOf = Date.now()
 
   // Step 1: Collect all symbols that need pricing
@@ -66,11 +66,10 @@ export async function computeValuation(
   }
 
   // Step 2: Fetch all prices in parallel
+  // Market prices come from daily Firestore cache - no API key needed
   const [cryptoPricesMap, marketPricesMap] = await Promise.all([
     cryptoSymbols.length > 0 ? getCryptoPricesMap(cryptoSymbols) : Promise.resolve({}),
-    marketSymbols.length > 0 && rapidApiKey
-      ? getMarketPricesMap(marketSymbols, rapidApiKey)
-      : Promise.resolve({}),
+    marketSymbols.length > 0 ? getMarketPricesMap(marketSymbols) : Promise.resolve({}),
   ])
 
   // Step 3: Preload FX rates (one snapshot for entire valuation)

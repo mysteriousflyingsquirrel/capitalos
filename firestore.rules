@@ -21,6 +21,30 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
     }
+    
+    // Shared market prices - any authenticated user can read
+    // Only server (admin SDK) can write via GitHub Actions
+    match /marketDailyPrices/{dateKey} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only admin SDK can write
+      
+      match /symbols/{symbolKey} {
+        allow read: if isAuthenticated();
+        allow write: if false; // Only admin SDK can write
+      }
+      
+      match /locks/{lockId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+    
+    // Symbols registry - authenticated users can read and add symbols
+    match /marketSymbolsRegistry/{symbolKey} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false; // Don't allow deletion
+    }
   }
 }
 

@@ -9,7 +9,7 @@ import { formatMoney, formatNumber } from '../lib/currency'
 import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
-import { fetchStockPrices } from '../services/yahooFinanceService'
+import { getDailyPricesMap, registerSymbol, categoryUsesYahoo, deriveAssetClass } from '../services/market-data/DailyPriceService'
 import { useData } from '../contexts/DataContext'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
@@ -992,18 +992,14 @@ function NetWorth() {
     }
   }
 
-  // Fetch stock/index fund/commodity prices for all relevant items
+  // Fetch stock/index fund/commodity prices for all relevant items (from daily Firestore cache)
   const fetchAllStockPrices = async (showLoading = false) => {
     if (showLoading) {
       setIsRefreshingPrices(true)
     }
     
     try {
-      const stockItems = netWorthItems.filter(item => 
-        item.category === 'Index Funds' || 
-        item.category === 'Stocks' || 
-        item.category === 'Commodities'
-      )
+      const stockItems = netWorthItems.filter(item => categoryUsesYahoo(item.category))
       
       if (stockItems.length === 0) {
         return
@@ -1012,7 +1008,8 @@ function NetWorth() {
       const tickers = stockItems.map(item => item.name.trim().toUpperCase())
       const uniqueTickers = [...new Set(tickers)]
       
-      const prices = await fetchStockPrices(uniqueTickers, rapidApiKey)
+      // Use daily Firestore cache - no direct Yahoo calls
+      const prices = await getDailyPricesMap(uniqueTickers)
       
       // Update stock prices
       setStockPrices(prev => ({ ...prev, ...prices }))
@@ -1130,6 +1127,18 @@ function NetWorth() {
         console.error('[NetWorth] Failed to save new item:', result.reason)
         // Optionally revert optimistic update on error
         // For now, we keep it and let the user retry
+      }
+      
+      // Register symbol in market registry for Yahoo-backed categories
+      // This ensures the GitHub Action will fetch this symbol in the future
+      if (categoryUsesYahoo(category)) {
+        try {
+          await registerSymbol(data.name, uid, deriveAssetClass(category))
+          console.log(`[NetWorth] Registered symbol: ${data.name}`)
+        } catch (err) {
+          console.error('[NetWorth] Failed to register symbol:', err)
+          // Non-fatal - continue even if registration fails
+        }
       }
     }
     
@@ -1578,8 +1587,9 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   }, [isCrypto, name]) // Run when name changes for crypto items
 
   // Fetch stock/index fund/commodity price when name is entered (debounced by 1 second)
+  // Uses daily Firestore cache - no direct Yahoo calls
   useEffect(() => {
-    if (isStockCategory && name.trim() && rapidApiKey) {
+    if (isStockCategory && name.trim()) {
       const ticker = name.trim().toUpperCase()
       
       // Debounce: wait 1 second after user stops typing
@@ -1587,15 +1597,15 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
         setIsLoadingPrice(true)
         setPriceError(null)
 
-        fetchStockPrices([ticker], rapidApiKey)
+        getDailyPricesMap([ticker])
           .then((prices) => {
             const price = prices[ticker]
             if (price !== undefined && price !== null) {
-              // Set the USD price directly from API (always in USD for stocks/index funds/commodities)
+              // Set the USD price directly from cache (always in USD for stocks/index funds/commodities)
               setPricePerItem(price.toString())
               setPriceError(null)
             } else {
-              setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
+              setPriceError(`Price for ${ticker} not in daily cache. Please enter price manually.`)
             }
           })
           .catch((err) => {
@@ -2400,34 +2410,35 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
   }, [isCrypto, item.name, isEditing]) // Run when modal opens or when editing
 
   // Fetch stock/index fund/commodity price when modal opens (both for new transactions and when editing)
+  // Uses daily Firestore cache - no direct Yahoo calls
   useEffect(() => {
-    if (isStockCategory && item.name && rapidApiKey) {
-      // For editing, always fetch fresh price from API (in USD)
+    if (isStockCategory && item.name) {
+      // For editing, always fetch fresh price from cache (in USD)
       // For new transactions, fetch if no price is set
       if (isEditing || !pricePerItemChf) {
         const ticker = item.name.trim().toUpperCase()
         setIsLoadingPrice(true)
         setPriceError(null)
 
-        fetchStockPrices([ticker], rapidApiKey)
+        getDailyPricesMap([ticker])
           .then((prices) => {
             const price = prices[ticker]
             if (price !== undefined && price !== null) {
-              // Set the USD price directly from API (always in USD for stocks/index funds/commodities)
+              // Set the USD price directly from cache (always in USD for stocks/index funds/commodities)
               setPricePerItemChf(price.toString())
               setPriceError(null)
             } else {
-              // If API fails and we're editing, fall back to converting from stored CHF
+              // If cache miss and we're editing, fall back to converting from stored CHF
               if (isEditing && transaction) {
                 const baseAmount = convert(transaction.pricePerItemChf, 'CHF')
                 if (exchangeRates && exchangeRates.rates['USD']) {
                   const usdAmount = baseAmount * exchangeRates.rates['USD']
                   setPricePerItemChf(usdAmount.toString())
                 } else {
-                  setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
+                  setPriceError(`Price for ${ticker} not in daily cache. Please enter price manually.`)
                 }
               } else {
-                setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
+                setPriceError(`Price for ${ticker} not in daily cache. Please enter price manually.`)
               }
             }
           })
