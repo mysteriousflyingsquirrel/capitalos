@@ -9,6 +9,7 @@ import type { PerpetualsOpenPosition, PerpetualsOpenOrder } from './NetWorth'
 import { useHyperliquidAssetCtx } from '../hooks/valuation/useHyperliquidAssetCtx'
 import { useHyperliquidWsPositions } from '../hooks/valuation/useHyperliquidWsPositions'
 import { useHyperliquidCrashRisk, type RiskState } from '../hooks/valuation/useHyperliquidCrashRisk'
+import RiskIndicatorPopup from '../components/RiskIndicatorPopup'
 
 // Helper component: SectionCard
 interface SectionCardProps {
@@ -274,7 +275,7 @@ function Hyperliquid() {
       const riskState: RiskState = risk?.state ?? 'UNSUPPORTED'
       const riskMessage: string = risk?.message ?? 'Market too unstable for reliable risk signals.'
       const dotColor: string | null = risk?.dotColor ?? '#A0AEC0'
-      const debugText: string = risk?.debug?.tooltipText ?? `Risk Dot Debug — ${p.token}\n\n(no debug available)`
+      const debug = risk?.debug ?? null
 
       const fired = profitFired[p.id]
       let profitReminder: string | null = null
@@ -291,7 +292,7 @@ function Hyperliquid() {
         riskState,
         riskMessage,
         dotColor,
-        debugText,
+        debug,
         profitReminder,
       }
     })
@@ -359,39 +360,27 @@ function Hyperliquid() {
               {dashboardEntries.map((e) => (
                 <div key={e.id} className="bg-bg-surface-2 border border-border-subtle rounded-card p-4">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="relative group">
-                      <button
-                        type="button"
-                        className="w-5 h-5 rounded-full flex-shrink-0 outline-none ring-0 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-frame focus-visible:ring-border-strong"
-                        style={{ backgroundColor: e.dotColor ?? '#A0AEC0' }}
-                        aria-label={`Risk: ${e.riskState}. Tap for debug.`}
-                        onClick={() => setOpenDebugId((prev) => (prev === e.id ? null : e.id))}
-                      />
-                      <div
-                        className={[
-                          'absolute z-50 left-0 top-full mt-2',
-                          'w-[min(520px,calc(100vw-2rem))]',
-                          'bg-bg-frame border border-border-strong rounded-card shadow-card',
-                          'p-3',
-                          'text-[11px] leading-[1.35] font-mono text-text-primary',
-                          'max-h-[60vh] overflow-auto whitespace-pre-wrap',
-                          'opacity-0 pointer-events-none',
-                          'transition-opacity duration-100',
-                          'group-hover:opacity-100 group-hover:pointer-events-auto',
-                          'group-focus-within:opacity-100 group-focus-within:pointer-events-auto',
-                          openDebugId === e.id ? 'opacity-100 pointer-events-auto' : '',
-                        ].join(' ')}
-                        role="tooltip"
-                      >
-                        {e.debugText ?? `Risk Dot Debug — ${e.token}\n\n(no debug available)`}
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      className="w-5 h-5 rounded-full flex-shrink-0 outline-none ring-0 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-frame focus-visible:ring-border-strong cursor-pointer hover:scale-110 transition-transform"
+                      style={{ backgroundColor: e.dotColor ?? '#A0AEC0' }}
+                      aria-label={`Risk: ${e.riskState}. Click for details.`}
+                      onClick={() => setOpenDebugId((prev) => (prev === e.id ? null : e.id))}
+                    />
                     <Heading level={3}>{e.token}</Heading>
                   </div>
                   <div className="space-y-1 pl-8">
                     <div className="text2 text-text-primary">{e.riskMessage}</div>
                     {e.profitReminder ? <div className="text2 text-text-muted">{e.profitReminder}</div> : null}
                   </div>
+                  {openDebugId === e.id && e.debug && (
+                    <RiskIndicatorPopup
+                      token={e.token}
+                      debug={e.debug}
+                      dotColor={e.dotColor ?? '#A0AEC0'}
+                      onClose={() => setOpenDebugId(null)}
+                    />
+                  )}
                 </div>
               ))}
             </div>
