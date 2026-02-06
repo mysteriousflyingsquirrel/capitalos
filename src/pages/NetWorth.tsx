@@ -1008,8 +1008,8 @@ function NetWorth() {
       const tickers = stockItems.map(item => item.name.trim().toUpperCase())
       const uniqueTickers = [...new Set(tickers)]
       
-      // Use daily Firestore cache - no direct Yahoo calls
-      const prices = await getDailyPricesMap(uniqueTickers)
+      // Use daily Firestore cache - triggers API fetch if needed
+      const prices = await getDailyPricesMap(uniqueTickers, uid || undefined)
       
       // Update stock prices
       setStockPrices(prev => ({ ...prev, ...prices }))
@@ -1597,7 +1597,7 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
         setIsLoadingPrice(true)
         setPriceError(null)
 
-        getDailyPricesMap([ticker])
+        getDailyPricesMap([ticker], uid || undefined)
           .then((prices) => {
             const price = prices[ticker]
             if (price !== undefined && price !== null) {
@@ -2420,7 +2420,7 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
         setIsLoadingPrice(true)
         setPriceError(null)
 
-        getDailyPricesMap([ticker])
+        getDailyPricesMap([ticker], uid || undefined)
           .then((prices) => {
             const price = prices[ticker]
             if (price !== undefined && price !== null) {

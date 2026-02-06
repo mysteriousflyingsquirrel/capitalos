@@ -2,13 +2,19 @@
  * Daily Price Service (SSOT)
  * 
  * Manages daily market price snapshots stored in Firestore.
- * Prices are fetched once per day by a GitHub Action and cached in Firestore.
- * Client devices read from Firestore only - no direct Yahoo API calls.
+ * 
+ * Architecture:
+ * - First client request of the day triggers a Vercel API route
+ * - API reads user's RapidAPI key from Firestore, fetches from Yahoo, writes to shared cache
+ * - Subsequent requests (same user or other users) read from Firestore cache
+ * - No client-side API key exposure
  * 
  * Fallback strategy:
- * 1. Try today's snapshot
- * 2. If missing, try previous days (up to 7 days back)
- * 3. If still missing, return null (UI shows "—")
+ * 1. Check session cache (in-memory)
+ * 2. Read today's snapshot from Firestore
+ * 3. If missing, call API to fetch and cache
+ * 4. If API fails or no key, fall back to previous days (up to 7 days back)
+ * 5. If still missing, return undefined (UI shows "—")
  */
 
 import {
@@ -262,6 +268,65 @@ export async function getRegisteredSymbols(): Promise<string[]> {
 }
 
 // ============================================================================
+// API Route Call
+// ============================================================================
+
+interface ApiUpdateResponse {
+  success: boolean
+  dateKey: string
+  prices: Record<string, { price: number; currency: string | null; marketTime: number | null }>
+  fetched: string[]
+  cached: string[]
+  missing?: string[]
+  source: string
+  warning?: string
+  error?: string
+}
+
+/**
+ * Call the Vercel API route to fetch and cache missing prices
+ * Uses the user's RapidAPI key stored in Firestore
+ */
+async function fetchMissingPricesFromApi(
+  uid: string,
+  symbols: string[]
+): Promise<ApiUpdateResponse | null> {
+  if (symbols.length === 0 || !uid) return null
+
+  try {
+    const response = await fetch('/api/market/update-daily-prices', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ uid, symbols }),
+    })
+
+    if (!response.ok) {
+      console.error(`[DailyPriceService] API returned ${response.status}`)
+      return null
+    }
+
+    const data: ApiUpdateResponse = await response.json()
+    
+    if (import.meta.env.DEV) {
+      console.log(`[DailyPriceService] API response:`, {
+        fetched: data.fetched?.length || 0,
+        cached: data.cached?.length || 0,
+        missing: data.missing?.length || 0,
+        source: data.source,
+        warning: data.warning,
+      })
+    }
+
+    return data
+  } catch (err) {
+    console.error('[DailyPriceService] Error calling API:', err)
+    return null
+  }
+}
+
+// ============================================================================
 // Main API
 // ============================================================================
 
@@ -271,18 +336,19 @@ export async function getRegisteredSymbols(): Promise<string[]> {
  * This is the main SSOT function. It:
  * 1. Checks session cache
  * 2. Reads from Firestore (today's snapshot)
- * 3. Falls back to previous days if needed
- * 4. Never calls Yahoo directly (that's done by GitHub Action)
+ * 3. If missing, calls API to fetch from Yahoo and cache
+ * 4. Falls back to previous days if API fails
+ * 5. Returns undefined for symbols that can't be found (UI shows "—")
  */
 export async function getDailyPrices(
   symbolsRaw: string[],
-  opts: { forceRefresh?: boolean } = {}
+  opts: { forceRefresh?: boolean; uid?: string } = {}
 ): Promise<Record<string, DailyPriceResult>> {
   if (symbolsRaw.length === 0) {
     return {}
   }
 
-  const { forceRefresh = false } = opts
+  const { forceRefresh = false, uid } = opts
   const today = getUtcDateKey()
   const result: Record<string, DailyPriceResult> = {}
   
@@ -321,39 +387,93 @@ export async function getDailyPrices(
     }
   }
   
-  // 2. Read from Firestore - try today first, then fall back to previous days
-  for (let daysBack = 0; daysBack <= MAX_FALLBACK_DAYS && missingKeys.size > 0; daysBack++) {
-    const dateKey = getUtcDateKey(daysAgo(daysBack))
-    const isStale = daysBack > 0
+  // 2. Read today's prices from Firestore
+  try {
+    const firestoreData = await readSymbolsFromFirestore(today, Array.from(missingKeys))
     
-    try {
-      const firestoreData = await readSymbolsFromFirestore(dateKey, Array.from(missingKeys))
-      
-      for (const [symbolKey, entry] of firestoreData) {
-        // Update session cache
-        setSessionCache(today, symbolKey, { ...entry, isStale, asOfDate: dateKey })
-        
-        // Add to result
-        result[symbolKey] = {
-          price: entry.price,
-          currency: entry.currency,
-          marketTime: entry.marketTime,
-          isStale,
-          asOfDate: dateKey,
+    for (const [symbolKey, entry] of firestoreData) {
+      setSessionCache(today, symbolKey, { ...entry, isStale: false, asOfDate: today })
+      result[symbolKey] = {
+        price: entry.price,
+        currency: entry.currency,
+        marketTime: entry.marketTime,
+        isStale: false,
+        asOfDate: today,
+      }
+      missingKeys.delete(symbolKey)
+    }
+    
+    if (import.meta.env.DEV && firestoreData.size > 0) {
+      console.log(`[DailyPriceService] Found ${firestoreData.size} symbols in Firestore (${today})`)
+    }
+  } catch (err) {
+    console.error(`[DailyPriceService] Error reading from Firestore:`, err)
+  }
+
+  // 3. If we still have missing symbols and have a uid, call API to fetch them
+  if (missingKeys.size > 0 && uid) {
+    const apiResponse = await fetchMissingPricesFromApi(uid, Array.from(missingKeys))
+    
+    if (apiResponse?.success && apiResponse.prices) {
+      for (const [symbolKey, priceData] of Object.entries(apiResponse.prices)) {
+        if (missingKeys.has(symbolKey)) {
+          // Update session cache
+          const entry: DailyPriceEntry = {
+            symbolKey,
+            symbolRaw: symbolMap.get(symbolKey) || symbolKey,
+            price: priceData.price,
+            currency: priceData.currency,
+            marketTime: priceData.marketTime,
+            source: 'yahoo',
+            fetchedAt: null,
+            isStale: false,
+            asOfDate: today,
+          }
+          setSessionCache(today, symbolKey, entry)
+          
+          result[symbolKey] = {
+            price: priceData.price,
+            currency: priceData.currency,
+            marketTime: priceData.marketTime,
+            isStale: false,
+            asOfDate: today,
+          }
+          missingKeys.delete(symbolKey)
         }
-        missingKeys.delete(symbolKey)
       }
-      
-      if (import.meta.env.DEV && firestoreData.size > 0) {
-        console.log(`[DailyPriceService] Found ${firestoreData.size} symbols in Firestore (${dateKey})${isStale ? ' [STALE]' : ''}`)
-      }
-    } catch (err) {
-      console.error(`[DailyPriceService] Error reading from Firestore for ${dateKey}:`, err)
-      // Continue to try older dates
     }
   }
   
-  // 3. Log any symbols that couldn't be found
+  // 4. Fallback: try previous days for any remaining missing symbols
+  if (missingKeys.size > 0) {
+    for (let daysBack = 1; daysBack <= MAX_FALLBACK_DAYS && missingKeys.size > 0; daysBack++) {
+      const dateKey = getUtcDateKey(daysAgo(daysBack))
+      
+      try {
+        const firestoreData = await readSymbolsFromFirestore(dateKey, Array.from(missingKeys))
+        
+        for (const [symbolKey, entry] of firestoreData) {
+          setSessionCache(today, symbolKey, { ...entry, isStale: true, asOfDate: dateKey })
+          result[symbolKey] = {
+            price: entry.price,
+            currency: entry.currency,
+            marketTime: entry.marketTime,
+            isStale: true,
+            asOfDate: dateKey,
+          }
+          missingKeys.delete(symbolKey)
+        }
+        
+        if (import.meta.env.DEV && firestoreData.size > 0) {
+          console.log(`[DailyPriceService] Found ${firestoreData.size} symbols in Firestore (${dateKey}) [STALE]`)
+        }
+      } catch (err) {
+        console.error(`[DailyPriceService] Error reading fallback from Firestore for ${dateKey}:`, err)
+      }
+    }
+  }
+  
+  // 5. Log any symbols that couldn't be found
   if (missingKeys.size > 0 && import.meta.env.DEV) {
     console.warn(`[DailyPriceService] No prices found for: ${Array.from(missingKeys).join(', ')}`)
   }
@@ -363,9 +483,14 @@ export async function getDailyPrices(
 
 /**
  * Get a simple price map (symbol -> price) for backward compatibility
+ * @param symbolsRaw - Array of raw symbol strings
+ * @param uid - User ID (required to fetch missing prices from API)
  */
-export async function getDailyPricesMap(symbolsRaw: string[]): Promise<Record<string, number>> {
-  const prices = await getDailyPrices(symbolsRaw)
+export async function getDailyPricesMap(
+  symbolsRaw: string[],
+  uid?: string
+): Promise<Record<string, number>> {
+  const prices = await getDailyPrices(symbolsRaw, { uid })
   const result: Record<string, number> = {}
   
   for (const [symbol, data] of Object.entries(prices)) {

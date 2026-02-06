@@ -2,7 +2,7 @@
  * Market Price Service (SSOT)
  * 
  * Now uses daily Firestore cache via DailyPriceService.
- * No direct Yahoo API calls from client - prices are fetched by GitHub Action.
+ * Missing prices are fetched via a Vercel API route using the user's RapidAPI key.
  * 
  * This service maintains backward compatibility with the old API.
  */
@@ -79,9 +79,10 @@ export async function getPrices(
  */
 export async function getPricesMap(
   symbols: string[],
-  _apiKey?: string
+  _apiKey?: string,
+  uid?: string
 ): Promise<Record<string, number>> {
-  return getDailyPricesMap(symbols)
+  return getDailyPricesMap(symbols, uid)
 }
 
 /**
@@ -89,9 +90,10 @@ export async function getPricesMap(
  */
 export async function getMarketPrices(
   symbols: string[],
-  _apiKey?: string
+  _apiKey?: string,
+  uid?: string
 ): Promise<{ prices: Record<string, number>; timestamp: number; source: string }> {
-  const prices = await getDailyPricesMap(symbols)
+  const prices = await getDailyPricesMap(symbols, uid)
   return {
     prices,
     timestamp: Date.now(),

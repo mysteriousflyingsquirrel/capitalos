@@ -39,10 +39,11 @@ export async function fetchCryptoPrices(tickers: string[]): Promise<Record<strin
  */
 export async function fetchStockPrices(
   tickers: string[],
-  _apiKey?: string | null // API key no longer needed - prices come from Firestore cache
+  _apiKey?: string | null, // API key no longer needed - prices come from Firestore cache
+  uid?: string
 ): Promise<Record<string, number>> {
-  // Use daily Firestore cache - no direct Yahoo calls
-  return getDailyPricesMap(tickers)
+  // Use daily Firestore cache - triggers API fetch if needed
+  return getDailyPricesMap(tickers, uid)
 }
 
 /**

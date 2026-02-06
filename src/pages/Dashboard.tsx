@@ -301,8 +301,8 @@ function Dashboard() {
       const tickers = stockItems.map((item: NetWorthItem) => item.name.trim().toUpperCase())
       const uniqueTickers = [...new Set(tickers)]
       
-      // Use daily Firestore cache - no direct Yahoo calls
-      const prices = await getDailyPricesMap(uniqueTickers)
+      // Use daily Firestore cache - triggers API fetch if needed
+      const prices = await getDailyPricesMap(uniqueTickers, uid || undefined)
       
       // Update stock prices
       setStockPrices(prev => ({ ...prev, ...prices }))

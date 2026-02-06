@@ -164,10 +164,10 @@ export function DataProvider({ children }: DataProviderProps) {
     try {
       console.log('[DataContext] fetchStockPricesData:', {
         tickers: uniqueTickers,
-        source: 'DailyPriceService (Firestore cache)',
+        source: 'DailyPriceService (Firestore cache + API)',
       })
-      // Use the daily Firestore cache - no direct Yahoo calls from client
-      const prices = await getDailyPricesMap(uniqueTickers)
+      // Use the daily Firestore cache - triggers API fetch if needed
+      const prices = await getDailyPricesMap(uniqueTickers, uid || undefined)
       console.log('[DataContext] fetchStockPricesData result:', prices)
       return prices
     } catch (error) {
