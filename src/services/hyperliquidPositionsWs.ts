@@ -106,7 +106,8 @@ export class HyperliquidPositionsWs {
           const unrealizedPnl = toNumber(p.unrealizedPnl) ?? 0
 
           // Leverage is usually an object with a numeric `value`
-          const leverage = toNumber(p.leverage?.value)
+          //const leverage = toNumber(p.leverage?.value)
+          const leverage = toNumber(p.Leverage.effective?.value)
 
           // Funding: match existing REST behavior (invert HL sign)
           const sinceOpenFunding = toNumber(p.cumFunding?.sinceOpen)

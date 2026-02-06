@@ -192,12 +192,13 @@ function Hyperliquid() {
         pos.positionSide === 'LONG' ? 'LONG' : pos.positionSide === 'SHORT' ? 'SHORT' : null
 
       const side = sideRaw === 'LONG' ? 'Long' : sideRaw === 'SHORT' ? 'Short' : 'Long'
-      const leverageStr = pos.leverage !== null && pos.leverage !== undefined 
-        ? `${Math.round(pos.leverage)}x` 
+      const leverage = pos.leverage ?? 1
+      const leverageStr = leverage !== null && leverage !== undefined 
+        ? `${Math.round(leverage)}x` 
         : '1x'
       
       const size = pos.margin + pos.pnl
-      const pnlPercent = pos.margin !== 0 ? (pos.pnl / pos.margin) * 100 : 0
+      const pnlPercent = pos.margin !== 0 ? (pos.pnl / size) * leverage * 100 : 0
 
       const markPx =
         (pos.ticker ? markPrices[pos.ticker] : undefined) ??
