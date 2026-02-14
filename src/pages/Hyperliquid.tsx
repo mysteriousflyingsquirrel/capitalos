@@ -85,10 +85,10 @@ interface PositionRow {
 // Open Order row data interface
 interface OpenOrderRow {
   token: string
-  activity: string
+  type: string
   side: 'Buy' | 'Sell'
-  price: number // numeric price for calculations
-  priceDisplay: string // formatted price (e.g., "87000" or "85000 → 87000")
+  price: number // limit/execution price
+  triggerPx: number | null // trigger price for stop/TP orders
   size: number
   amount: string
 }
@@ -105,7 +105,7 @@ function Hyperliquid() {
 
   // Column widths - easily adjustable per column
   const positionsColumnWidths = ['100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '120px', '140px']
-  const openOrdersColumnWidths = ['100px', '100px', '100px', '100px', '100px']
+  const openOrdersColumnWidths = ['100px', '100px', '120px', '100px', '100px', '100px']
 
   // Base positions from net worth snapshot (fallback if WS not connected)
   const basePositions: PerpetualsOpenPosition[] = useMemo(() => {
@@ -331,10 +331,10 @@ function Hyperliquid() {
 
       return {
         token: order.token,
-        activity: order.activity,
+        type: order.type,
         side: order.side,
         price: order.price,
-        priceDisplay: order.priceDisplay,
+        triggerPx: order.triggerPx,
         size: order.size,
         amount: amountStr,
       }
@@ -563,10 +563,13 @@ function Hyperliquid() {
                     <Heading level={4}>Side</Heading>
                   </th>
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Activity</Heading>
+                    <Heading level={4}>Type</Heading>
                   </th>
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Price</Heading>
+                  </th>
+                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Trigger Price</Heading>
                   </th>
                   <th className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Size</Heading>
@@ -576,7 +579,7 @@ function Hyperliquid() {
               <tbody>
                 {openOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center">
+                    <td colSpan={6} className="py-8 text-center">
                       <div className="text2 text-text-muted">No open orders</div>
                     </td>
                   </tr>
@@ -601,23 +604,20 @@ function Hyperliquid() {
                           </span>
                         </td>
                         <td className="py-3 pr-4 whitespace-nowrap">
-                          <div className="text2 text-text-primary">{order.activity}</div>
+                          <div className="text2 text-text-primary">{order.type}</div>
                         </td>
                         <td className="py-3 pr-4 text-left whitespace-nowrap">
                           <div className="text2 text-text-primary">
-                            {order.priceDisplay && order.priceDisplay.includes('→') 
-                              ? order.priceDisplay.split('→').map((p, i) => {
-                                  const num = parseFloat(p.trim())
-                                  if (isNaN(num)) return null
-                                  return (
-                                    <span key={i}>
-                                      {i > 0 && ' → '}
-                                      ${formatNumber(num, 'us', { incognito: isIncognito })}
-                                    </span>
-                                  )
-                                })
-                              : `$${formatNumber(order.price, 'us', { incognito: isIncognito })}`
-                            }
+                            {order.price > 0
+                              ? `$${formatNumber(order.price, 'us', { incognito: isIncognito })}`
+                              : '-'}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4 text-left whitespace-nowrap">
+                          <div className="text2 text-text-primary">
+                            {order.triggerPx !== null
+                              ? `$${formatNumber(order.triggerPx, 'us', { incognito: isIncognito })}`
+                              : '-'}
                           </div>
                         </td>
                         <td className="py-3 pr-4 text-left whitespace-nowrap">

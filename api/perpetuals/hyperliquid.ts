@@ -53,13 +53,38 @@ interface ExchangeBalance {
 interface PerpetualsOpenOrder {
   id: string
   token: string // coin symbol
-  activity: string // Limit, Stop, Limit Stop, etc.
+  type: string // Limit, Stop Market, Stop Limit, Take Profit (Market), Take Profit (Limit), etc.
   side: 'Buy' | 'Sell' // normalized from "B"/"A"
-  price: number // display price (numeric)
-  priceDisplay: string // formatted price (e.g., "87000" or "85000 → 87000")
+  price: number // limit/execution price (numeric)
+  triggerPx: number | null // trigger price for stop/TP orders
   size: number // USD notional
   amount: number // token amount
   platform: string // "Hyperliquid"
+}
+
+/** Derive order type from Hyperliquid's orderType object structure */
+function getOrderType(order: any): string {
+  const ot = order?.orderType
+
+  if (ot?.limit) {
+    return 'Limit'
+  }
+
+  if (ot?.trigger) {
+    const { isMarket, tpsl } = ot.trigger
+
+    if (tpsl === 'tp') {
+      return isMarket ? 'Take Profit (Market)' : 'Take Profit (Limit)'
+    }
+
+    if (tpsl === 'sl') {
+      return isMarket ? 'Stop Market' : 'Stop Limit'
+    }
+
+    return isMarket ? 'Trigger Market' : 'Trigger Limit'
+  }
+
+  return 'Unknown'
 }
 
 interface PortfolioPnL {
@@ -616,68 +641,35 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
             }
           }
           
-          const isTrigger = order.isTrigger === true || order.isTrigger === 'true' || !!triggerPx
-          
-          // Determine activity
-          let activity = 'Limit'
-          if (isTrigger) {
-            const orderType = order.orderType || ''
-            // Check if orderType indicates a limit order
-            if (orderType.toLowerCase().includes('limit') || (limitPx !== null && triggerPx !== null)) {
-              activity = 'Limit Stop'
-            } else {
-              activity = 'Stop'
-            }
-            
-            // Optionally append trigger condition
-            if (order.triggerCondition) {
-              const condition = order.triggerCondition
-              if (condition === 'Above' || condition === 'above') {
-                activity += ' Above'
-              } else if (condition === 'Below' || condition === 'below') {
-                activity += ' Below'
-              }
+          // Determine order type from orderType object structure
+          const type = getOrderType(order)
+
+          // Also extract triggerPx from the orderType.trigger object if available
+          // (more reliable than the top-level triggerPx which may not always be present)
+          if (triggerPx === null && order.orderType?.trigger?.triggerPx != null) {
+            const tp = typeof order.orderType.trigger.triggerPx === 'string'
+              ? parseFloat(order.orderType.trigger.triggerPx)
+              : typeof order.orderType.trigger.triggerPx === 'number'
+                ? order.orderType.trigger.triggerPx
+                : NaN
+            if (!isNaN(tp) && isFinite(tp)) {
+              triggerPx = tp
             }
           }
           
-          // Determine price display
-          let price: number
-          let priceDisplay: string
+          // Price is the limit/execution price
+          const price = limitPx || 0
           
-          if (!isTrigger) {
-            // Regular limit order
-            price = limitPx || 0
-            priceDisplay = limitPx !== null ? limitPx.toString() : '0'
-          } else {
-            // Trigger order
-            if (limitPx !== null && triggerPx !== null) {
-              // Stop-limit: show both
-              price = limitPx // Use limit price as the main price
-              priceDisplay = `${triggerPx} → ${limitPx}`
-            } else if (triggerPx !== null) {
-              // Stop order with only trigger
-              price = triggerPx
-              priceDisplay = triggerPx.toString()
-            } else {
-              // Fallback
-              price = limitPx || 0
-              priceDisplay = limitPx !== null ? limitPx.toString() : '0'
-            }
-          }
-          
-          // Calculate size (USD notional)
-          // Always use limitPx (execution price) for size calculation
-          const priceForNotional = limitPx !== null ? limitPx : 0
-          
-          const sizeUsd = amount * priceForNotional
+          // Calculate size (USD notional) using limitPx (execution price)
+          const sizeUsd = amount * price
           
           allOrders.push({
             id: `hyperliquid-order-${token}-${dex || 'default'}-${Date.now()}-${Math.random()}`,
             token,
-            activity,
+            type,
             side,
             price,
-            priceDisplay,
+            triggerPx,
             size: sizeUsd,
             amount,
             platform: 'Hyperliquid',
