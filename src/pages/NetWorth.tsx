@@ -52,6 +52,7 @@ export interface PerpetualsOpenPosition {
   liquidationPrice?: number | null // liquidation price
   fundingFeeUsd?: number | null // total funding fee in USD (cumFunding.sinceOpen)
   returnOnEquity?: number | null // official Hyperliquid ROE (decimal, e.g. 0.15 = 15%)
+  positionValue?: number | null // full notional position size in USD (from Hyperliquid positionValue)
 }
 
 export interface ExchangeBalance {

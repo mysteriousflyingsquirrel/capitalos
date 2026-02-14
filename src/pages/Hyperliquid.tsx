@@ -196,7 +196,11 @@ function Hyperliquid() {
         ? `${Math.round(pos.leverage)}x` 
         : '1x'
       
-      const size = pos.margin + pos.pnl
+      // Use official Hyperliquid positionValue for full notional size (USD)
+      const sizeUsd =
+        pos.positionValue !== null && pos.positionValue !== undefined
+          ? Math.abs(Number(pos.positionValue))
+          : 0
       // Use official Hyperliquid returnOnEquity instead of manual (pnl/margin) calculation
       const pnlPercent =
         pos.returnOnEquity !== null && pos.returnOnEquity !== undefined
@@ -225,7 +229,7 @@ function Hyperliquid() {
         leverage: leverageStr,
         pnl: pos.pnl,
         pnlPercent: pnlPercent,
-        size: size,
+        size: sizeUsd,
         markPx,
         amount: amountStr,
         entryPrice: pos.entryPrice ?? null,
@@ -488,10 +492,7 @@ function Hyperliquid() {
                         </div>
                       </td>
                       <td className="py-3 pr-4 text-left whitespace-nowrap">
-                        <div className="flex flex-col items-start">
-                          <div className="text2 text-text-primary">{formatCurrency(position.size)}</div>
-                          <div className="text2 mt-0.5 text-text-muted">{position.amount || '-'}</div>
-                        </div>
+                        <div className="text2 text-text-primary">{formatCurrency(position.size)}</div>
                       </td>
                       <td className="py-3 pr-4 text-left whitespace-nowrap">
                         <div className="text2 text-text-primary">

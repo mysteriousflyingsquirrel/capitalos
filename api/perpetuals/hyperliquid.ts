@@ -40,6 +40,7 @@ interface PerpetualsOpenPosition {
   liquidationPrice?: number | null // liquidation price
   fundingFeeUsd?: number | null // total funding fee in USD (cumFunding.sinceOpen)
   returnOnEquity?: number | null // official Hyperliquid ROE (decimal, e.g. 0.15 = 15%)
+  positionValue?: number | null // full notional position size in USD (from Hyperliquid positionValue)
 }
 
 interface ExchangeBalance {
@@ -342,6 +343,19 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
               returnOnEquity = roe
             }
           }
+
+          // Parse positionValue (full notional size in USD)
+          let positionValue: number | null = null
+          if (position.positionValue !== undefined && position.positionValue !== null) {
+            const pv = typeof position.positionValue === 'string'
+              ? parseFloat(position.positionValue)
+              : typeof position.positionValue === 'number'
+                ? position.positionValue
+                : NaN
+            if (!isNaN(pv) && isFinite(pv)) {
+              positionValue = pv
+            }
+          }
           
           const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
 
@@ -415,6 +429,7 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             liquidationPrice,
             fundingFeeUsd,
             returnOnEquity,
+            positionValue,
           })
         }
       } catch (error) {

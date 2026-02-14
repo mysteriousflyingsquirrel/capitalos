@@ -105,6 +105,7 @@ export class HyperliquidPositionsWs {
           const marginUsed = toNumber(p.marginUsed) ?? 0
           const unrealizedPnl = toNumber(p.unrealizedPnl) ?? 0
           const returnOnEquity = toNumber(p.returnOnEquity)
+          const positionValue = toNumber(p.positionValue)
 
           // Leverage is usually an object with a numeric `value`
           const leverage = toNumber(p.leverage?.value)
@@ -127,6 +128,7 @@ export class HyperliquidPositionsWs {
             liquidationPrice: liquidationPx,
             fundingFeeUsd,
             returnOnEquity,
+            positionValue,
           })
         }
 
