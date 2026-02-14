@@ -608,9 +608,11 @@ function Hyperliquid() {
                         </td>
                         <td className="py-3 pr-4 text-left whitespace-nowrap">
                           <div className="text2 text-text-primary">
-                            {order.price > 0
-                              ? `$${formatNumber(order.price, 'us', { incognito: isIncognito })}`
-                              : '-'}
+                            {order.type.includes('Market')
+                              ? 'Market'
+                              : order.price > 0
+                                ? `$${formatNumber(order.price, 'us', { incognito: isIncognito })}`
+                                : '-'}
                           </div>
                         </td>
                         <td className="py-3 pr-4 text-left whitespace-nowrap">
