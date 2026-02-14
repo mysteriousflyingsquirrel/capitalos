@@ -70,7 +70,7 @@ interface PositionRow {
   sideRaw: 'LONG' | 'SHORT' | null
   leverage: string
   pnl: number
-  pnlPercent: number
+  pnlPercent: number | null
   size: number
   markPx: number | null
   amount: string // Token amount (e.g., "0.0335 ETH")
@@ -179,7 +179,11 @@ function Hyperliquid() {
         : '1x'
       
       const size = pos.margin + pos.pnl
-      const pnlPercent = pos.margin !== 0 ? (pos.pnl / pos.margin) * 100 : 0
+      // Use official Hyperliquid returnOnEquity instead of manual (pnl/margin) calculation
+      const pnlPercent =
+        pos.returnOnEquity !== null && pos.returnOnEquity !== undefined
+          ? Number(pos.returnOnEquity) * 100
+          : null
 
       const markPx =
         (pos.ticker ? markPrices[pos.ticker] : undefined) ??
@@ -452,7 +456,9 @@ function Hyperliquid() {
                             {formatCurrency(position.pnl)}
                           </div>
                           <div className="text2 mt-0.5" style={{ color: pnlIsPositive ? '#2ECC71' : '#E74C3C' }}>
-                            {pnlIsPositive ? '+' : ''}{position.pnlPercent.toFixed(2)}%
+                            {position.pnlPercent !== null
+                              ? `${position.pnlPercent >= 0 ? '+' : ''}${position.pnlPercent.toFixed(2)}%`
+                              : '-'}
                           </div>
                         </div>
                       </td>

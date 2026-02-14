@@ -53,6 +53,7 @@ export interface PerpetualsOpenPosition {
   fundingFeeUsd?: number | null // total funding fee in USD (cumFunding.sinceOpen)
   fundingRatePct?: number | null // current funding rate in percent (e.g., +0.05% => 0.05)
   openInterest?: number | null // market open interest for the asset (from metaAndAssetCtxs)
+  returnOnEquity?: number | null // official Hyperliquid ROE (decimal, e.g. 0.15 = 15%)
 }
 
 export interface ExchangeBalance {

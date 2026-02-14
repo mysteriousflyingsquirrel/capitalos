@@ -41,6 +41,7 @@ interface PerpetualsOpenPosition {
   fundingFeeUsd?: number | null // total funding fee in USD (cumFunding.sinceOpen)
   fundingRatePct?: number | null // current funding rate in percent (e.g., +0.05% => 0.05)
   openInterest?: number | null // market open interest for the asset (from metaAndAssetCtxs; same units as API)
+  returnOnEquity?: number | null // official Hyperliquid ROE (decimal, e.g. 0.15 = 15%)
 }
 
 interface ExchangeBalance {
@@ -411,6 +412,19 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
           } else if (typeof position.unrealizedPnl === 'number') {
             unrealizedPnl = position.unrealizedPnl
           }
+
+          // Parse returnOnEquity (official Hyperliquid ROE, decimal e.g. 0.15 = 15%)
+          let returnOnEquity: number | null = null
+          if (position.returnOnEquity !== undefined && position.returnOnEquity !== null) {
+            const roe = typeof position.returnOnEquity === 'string'
+              ? parseFloat(position.returnOnEquity)
+              : typeof position.returnOnEquity === 'number'
+                ? position.returnOnEquity
+                : NaN
+            if (!isNaN(roe) && isFinite(roe)) {
+              returnOnEquity = roe
+            }
+          }
           
           const positionSide: 'LONG' | 'SHORT' | null = size > 0 ? 'LONG' : size < 0 ? 'SHORT' : null
 
@@ -495,6 +509,7 @@ async function fetchOpenPositions(walletAddress: string): Promise<PerpetualsOpen
             fundingFeeUsd,
             fundingRatePct,
             openInterest,
+            returnOnEquity,
           })
         }
       } catch (error) {

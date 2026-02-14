@@ -104,6 +104,7 @@ export class HyperliquidPositionsWs {
           const liquidationPx = toNumber(p.liquidationPx)
           const marginUsed = toNumber(p.marginUsed) ?? 0
           const unrealizedPnl = toNumber(p.unrealizedPnl) ?? 0
+          const returnOnEquity = toNumber(p.returnOnEquity)
 
           // Leverage is usually an object with a numeric `value`
           const leverage = toNumber(p.leverage?.value)
@@ -125,6 +126,7 @@ export class HyperliquidPositionsWs {
             entryPrice: entryPx,
             liquidationPrice: liquidationPx,
             fundingFeeUsd,
+            returnOnEquity,
             // fundingRatePct and openInterest are provided by REST metaAndAssetCtxs; WS stream is positions-only.
             fundingRatePct: null,
             openInterest: null,
