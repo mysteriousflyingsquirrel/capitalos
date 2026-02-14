@@ -11,7 +11,7 @@ import {
 } from '../services/storageService'
 import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotService'
 import { fetchCryptoData } from '../services/cryptoCompareService'
-import { fetchStockPrices } from '../services/yahooFinanceService'
+import { getDailyPricesMap, categoryUsesYahoo } from '../services/market-data/DailyPriceService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
 import { MexcFuturesPositionsWs, type MexcWsStatus } from '../services/mexcFuturesPositionsWs'
 import { fetchMexcEquityUsd, fetchMexcOpenOrders, fetchMexcOpenPositions, fetchMexcUnrealizedPnlWindows } from '../services/mexcFuturesService'
@@ -149,14 +149,9 @@ export function DataProvider({ children }: DataProviderProps) {
     }
   }
 
-  // Fetch stock/index fund/commodity prices
+  // Fetch stock/index fund/commodity prices from daily Firestore cache
   const fetchStockPricesData = async (items: NetWorthItem[]): Promise<Record<string, number>> => {
-    const stockItems = items.filter(
-      (item) =>
-        item.category === 'Index Funds' ||
-        item.category === 'Stocks' ||
-        item.category === 'Commodities'
-    )
+    const stockItems = items.filter((item) => categoryUsesYahoo(item.category))
 
     if (stockItems.length === 0) {
       console.log('[DataContext] fetchStockPricesData: No stock items found')
@@ -167,14 +162,12 @@ export function DataProvider({ children }: DataProviderProps) {
     const uniqueTickers = [...new Set(tickers)]
 
     try {
-      // Use getCurrentKeys() to get the current API key from ref (not stale closure value)
-      const currentKeys = getCurrentKeys()
       console.log('[DataContext] fetchStockPricesData:', {
         tickers: uniqueTickers,
-        hasApiKey: !!currentKeys.rapidApiKey,
-        apiKeyLength: currentKeys.rapidApiKey?.length || 0,
+        source: 'DailyPriceService (Firestore cache + API)',
       })
-      const prices = await fetchStockPrices(uniqueTickers, currentKeys.rapidApiKey)
+      // Use the daily Firestore cache - triggers API fetch if needed
+      const prices = await getDailyPricesMap(uniqueTickers, uid || undefined)
       console.log('[DataContext] fetchStockPricesData result:', prices)
       return prices
     } catch (error) {

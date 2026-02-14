@@ -127,9 +127,6 @@ export class HyperliquidPositionsWs {
             liquidationPrice: liquidationPx,
             fundingFeeUsd,
             returnOnEquity,
-            // fundingRatePct and openInterest are provided by REST metaAndAssetCtxs; WS stream is positions-only.
-            fundingRatePct: null,
-            openInterest: null,
           })
         }
 

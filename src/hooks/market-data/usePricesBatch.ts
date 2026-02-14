@@ -2,13 +2,13 @@
  * usePricesBatch Hook
  * 
  * Hook for fetching multiple prices in a batch (recommended approach).
+ * Market prices come from daily Firestore cache - no API key required.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { CurrencyCode } from '../../lib/currency'
 import { getCryptoPrices, getMarketPrices, getFxRates } from '../../services/market-data'
 import type { FxRateSnapshot } from '../../services/market-data/types'
-import { useApiKeys } from '../../contexts/ApiKeysContext'
 
 interface UsePricesBatchOptions {
   /** Crypto tickers to fetch */
@@ -47,6 +47,7 @@ interface UsePricesBatchResult {
 /**
  * Hook for fetching multiple prices in a batch
  * This is the recommended hook for pages that need multiple prices.
+ * Market prices come from daily Firestore cache - no API key required.
  */
 export function usePricesBatch({
   cryptoSymbols = [],
@@ -55,8 +56,6 @@ export function usePricesBatch({
   autoFetch = true,
   refreshIntervalMs = 0,
 }: UsePricesBatchOptions = {}): UsePricesBatchResult {
-  const { rapidApiKey } = useApiKeys()
-  
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
   const [marketPrices, setMarketPrices] = useState<Record<string, number>>({})
   const [fxRates, setFxRates] = useState<FxRateSnapshot | null>(null)
@@ -78,13 +77,13 @@ export function usePricesBatch({
       const uniqueCrypto = [...new Set(cryptoSymbols.map(s => s.toUpperCase()))]
       const uniqueMarket = [...new Set(marketSymbols.map(s => s.toUpperCase()))]
       
-      // Fetch all in parallel
+      // Fetch all in parallel - market prices come from daily Firestore cache
       const [cryptoResult, marketResult, fxSnapshot] = await Promise.all([
         uniqueCrypto.length > 0 
           ? getCryptoPrices(uniqueCrypto) 
           : Promise.resolve({ prices: {}, timestamp: Date.now(), source: 'cache' as const }),
         uniqueMarket.length > 0 
-          ? getMarketPrices(uniqueMarket, rapidApiKey) 
+          ? getMarketPrices(uniqueMarket) 
           : Promise.resolve({ prices: {}, timestamp: Date.now(), source: 'cache' as const }),
         getFxRates(baseCurrency),
       ])
@@ -105,7 +104,7 @@ export function usePricesBatch({
     } finally {
       setIsLoading(false)
     }
-  }, [cryptoSymbols, marketSymbols, baseCurrency, rapidApiKey])
+  }, [cryptoSymbols, marketSymbols, baseCurrency])
   
   const refresh = useCallback(async (): Promise<void> => {
     // For refresh, we could invalidate cache first

@@ -117,55 +117,116 @@ Capitalos is a unified wealth management web application. It tracks total net wo
 
 ## Exchanges – Hyperliquid
 
-### Funding Health Indicator (Hyperliquid)
+### Crash-Risk & Profit Reminder Indicator (Hyperliquid)
 
-1) New top frame:
+**Goal:** Provide a calm, high-accuracy indicator that helps the user de-risk before flash crashes/squeezes, counter greed when in profit, and stay calm (no flipping, no panic). Works for stable assets (BTC, ETH, GOLD, SILVER), for BOTH longs and shorts.
 
-- Add a new frame at the TOP of the Hyperliquid page named: "Dashboard"
-- It appears ABOVE the existing frames: Performance, Positions, Open Orders.
-- Purpose: comment the "health" of each open position using funding rate and open interest.
+#### 1) Data Sources (Hyperliquid ONLY)
 
-2) Dashboard frame rendering:
+All data from Hyperliquid Info endpoints:
 
-- Render one line PER open Hyperliquid perp position.
-- Each line MUST contain ONLY:
-  - A colored dot (green/orange/red) at the beginning
-  - One sentence (exactly one sentence, no extra stats)
-- No tooltips, no hover behavior, no secondary text.
-- Default sorting: highest risk first (RED, then ORANGE, then GREEN).
+- **metaAndAssetCtxs**: markPx, oraclePx (optional), funding, openInterest, premium, dayNtlVlm, impactPxs (if available)
+- **l2Book**: bestBid/bestAsk, bid/ask depth within ±0.2%
+- **recentTrades** (optional): price impulse confirmation
 
-3) Dashboard health messages (exact strings):
+NO user-specific data required. NO SL or order detection. Profit reminders are PnL-based only.
 
-- GREEN: "Funding favors your {TICKER} position. No pressure."
-- ORANGE: "Funding is mildly against your {TICKER} position. Stay alert."
-- RED: "High funding pressure on {TICKER}. Consider de-risking or SL in profit."
-- UNKNOWN (missing data): "Funding data unavailable for {TICKER}."
+#### 2) Universe Filter (Stability Gate)
 
-Note: UNKNOWN uses "-" in table (see below). Dot can be neutral/gray if the doc supports it, otherwise just "neutral dot".
+The indicator MUST only activate if ALL are true:
 
-4) Positions table additions:
+- `dayNtlVlm` > $25M (configurable minimum)
+- `openInterest` > defined minimum
 
-- Add column: "Funding Signal" (shows the dot or "-" if unavailable)
-- Add column: "Funding Rate" (raw signed percent value or "-" if unavailable)
-- Add column: "Open Interest" (market open interest for the asset, or "-" if unavailable)
-- Missing/unavailable data MUST be shown as "-" (dash). Do not show blank or 0.
+If conditions not met, display: "Market too unstable for reliable risk signals."
 
-5) Scope / Non-goals:
+#### 3) 3-Pillar Indicator Logic
 
-- Hyperliquid only (no Kraken/MEXC/Aster yet).
-- No bot alerts / no automation in this requirement.
-- No tooltips, no drill-down details.
+The indicator answers THREE questions. Only when ALL 3 agree does it escalate to RED.
 
-6) Open interest in the formula:
+**PILLAR 1 — CROWDING (Positioning)**
 
-- The funding health signal MAY take open interest (OI) into account: when the funding-only signal would be ORANGE and market open interest for that asset is "elevated" (above a defined threshold), the displayed signal SHALL be RED (one step worse). Otherwise the signal is based on funding (and side) only.
-- Open interest is per-asset market OI from the same data source as funding (e.g. Hyperliquid metaAndAssetCtxs). If OI is missing, the formula uses funding (and side) only.
+Metrics: openInterest, funding (directional)
 
-**Acceptance Criteria:**
+Formulas:
+- `OI_z = zscore(openInterest, 7d lookback)`
+- `F_z = zscore(funding, 7d lookback)`
 
-- Dashboard frame exists above Performance/Positions/Open Orders.
-- Dashboard shows one line per open position with ONLY dot + one sentence.
-- No tooltips for this feature.
-- Positions table has Funding Signal, Funding Rate, and Open Interest columns.
-- When funding-only signal is ORANGE and OI is elevated, displayed signal is RED.
-- Missing values show "-" and rendering never crashes.
+Crowding = TRUE if:
+- `OI_z ≥ +1.5`
+- `|F_z| ≥ 1.5`
+- Confirmed for 2 consecutive 15-minute windows
+
+Direction:
+- `F_z > 0` → Long crowding
+- `F_z < 0` → Short crowding
+
+**PILLAR 2 — STRUCTURE (Is the trade working?)**
+
+Metrics: markPx returns
+
+Logic (directional):
+- If long-crowded: Structure weak if price stops rising; broken if price turns clearly negative
+- If short-crowded: Structure weak if price stops falling; broken if price turns clearly positive
+
+Time windows:
+- 15m return for early signal
+- 1h return for confirmation
+
+**PILLAR 3 — LIQUIDITY (Can price air-pocket?)**
+
+Preferred: impactPxs from metaAndAssetCtxs
+Fallback: l2Book depth + spread
+
+Liquidity fragile = TRUE if:
+- Spread or impact cost elevated vs 7d median
+- Near-mid depth significantly reduced
+- Confirmed for 2 consecutive checks
+
+#### 4) Final State Logic (Anti-Flip)
+
+**GREEN:**
+- Crowding = FALSE
+- OR Crowding = TRUE but Structure intact
+
+**ORANGE:**
+- Crowding = TRUE
+- Structure weakening
+- Liquidity NOT fragile
+
+**RED:**
+- Crowding = TRUE
+- Structure broken
+- Liquidity fragile
+- All conditions confirmed (time confirmation required)
+
+**Cooldowns (Anti-Flip):**
+- RED persists at least 30 minutes
+- ORANGE persists at least 15 minutes
+
+#### 5) Profit Reminder System (Independent)
+
+This system NEVER changes indicator color.
+
+Milestones (fire once each):
+- +5% unrealized PnL: "You're up ~5%. Consider moving your stop to break-even."
+- +10% unrealized PnL: "You're up ~10%. Consider trailing your stop to lock in profits."
+- (Optional: +15%, +20%)
+
+If RED is active, replace with: "You're in profit, but risk is high. Protect gains now."
+
+#### 6) User-Facing Messages
+
+- **GREEN:** "Market is stable. Trade as planned."
+- **ORANGE:** "Risk is rising. Consider reducing size or tightening your stop."
+- **RED:** "High crash risk. Protect capital or exit."
+- **Unsupported:** "Market too unstable for reliable risk signals."
+
+#### 7) Acceptance Criteria
+
+- Indicator displays on Hyperliquid page above Performance frame
+- One line per open position with colored dot (GREEN/ORANGE/RED) + message
+- Stability gate blocks indicator for low-volume/low-OI markets
+- Cooldowns prevent rapid state flipping
+- Profit reminders fire at milestones, independently of indicator color
+- Missing data shows "–" and never crashes

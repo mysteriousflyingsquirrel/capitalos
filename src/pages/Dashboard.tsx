@@ -29,7 +29,7 @@ import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from '../
 import type { InflowItem, OutflowItem } from './Cashflow'
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
-import { fetchStockPrices } from '../services/yahooFinanceService'
+import { getDailyPricesMap, categoryUsesYahoo } from '../services/market-data/DailyPriceService'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -285,18 +285,14 @@ function Dashboard() {
     }
   }
 
-  // Fetch stock/index fund/commodity prices for all relevant items
+  // Fetch stock/index fund/commodity prices for all relevant items (from daily Firestore cache)
   const fetchAllStockPrices = async (showLoading = false) => {
     if (showLoading) {
       setIsRefreshingPrices(true)
     }
     
     try {
-      const stockItems = netWorthItems.filter((item: NetWorthItem) => 
-        item.category === 'Index Funds' || 
-        item.category === 'Stocks' || 
-        item.category === 'Commodities'
-      )
+      const stockItems = netWorthItems.filter((item: NetWorthItem) => categoryUsesYahoo(item.category))
       
       if (stockItems.length === 0) {
         return
@@ -305,7 +301,8 @@ function Dashboard() {
       const tickers = stockItems.map((item: NetWorthItem) => item.name.trim().toUpperCase())
       const uniqueTickers = [...new Set(tickers)]
       
-      const prices = await fetchStockPrices(uniqueTickers, rapidApiKey)
+      // Use daily Firestore cache - triggers API fetch if needed
+      const prices = await getDailyPricesMap(uniqueTickers, uid || undefined)
       
       // Update stock prices
       setStockPrices(prev => ({ ...prev, ...prices }))

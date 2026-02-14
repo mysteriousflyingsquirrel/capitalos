@@ -1,5 +1,7 @@
 /**
  * Hook for fetching a single quote (crypto or market)
+ * 
+ * Market prices now come from daily Firestore cache - no API key required.
  */
 
 import { useState, useEffect } from 'react'
@@ -8,7 +10,6 @@ import type { CurrencyCode } from '../../lib/currency'
 import { getPrice as getCryptoPrice } from '../../services/market-data/CryptoPriceService'
 import { getPrice as getMarketPrice } from '../../services/market-data/MarketPriceService'
 import { getRate } from '../../services/market-data/FxRateService'
-import { useApiKeys } from '../../contexts/ApiKeysContext'
 
 interface UseQuoteOptions {
   symbol: string
@@ -28,7 +29,6 @@ export function useQuote({
   const [quote, setQuote] = useState<Quote | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  const { rapidApiKey } = useApiKeys()
 
   useEffect(() => {
     let cancelled = false
@@ -46,10 +46,8 @@ export function useQuote({
           priceUsd = cryptoPrice.priceUsd
           source = cryptoPrice.source
         } else {
-          if (!rapidApiKey) {
-            throw new Error('RapidAPI key is required for market prices')
-          }
-          const marketPrice = await getMarketPrice(symbol, rapidApiKey)
+          // Market prices come from daily Firestore cache - no API key needed
+          const marketPrice = await getMarketPrice(symbol)
           priceUsd = marketPrice.priceUsd
           source = marketPrice.source
         }
@@ -91,7 +89,7 @@ export function useQuote({
     return () => {
       cancelled = true
     }
-  }, [symbol, assetType, targetCurrency, rapidApiKey])
+  }, [symbol, assetType, targetCurrency])
 
   return { quote, isLoading, error }
 }
