@@ -62,26 +62,43 @@ interface PerpetualsOpenOrder {
   platform: string // "Hyperliquid"
 }
 
-/** Derive order type from Hyperliquid's orderType object structure */
+/**
+ * Derive order type from Hyperliquid's frontendOpenOrders response.
+ *
+ * frontendOpenOrders returns:
+ *   orderType: string — "Limit", "Stop Market", "Stop Limit", "Take Profit Market", "Take Profit Limit", etc.
+ *   isTrigger: boolean
+ *   isPositionTpsl: boolean
+ *
+ * openOrders (fallback) returns:
+ *   orderType: { limit?: {...}, trigger?: { isMarket, tpsl, triggerPx } }
+ */
 function getOrderType(order: any): string {
   const ot = order?.orderType
 
-  if (ot?.limit) {
-    return 'Limit'
+  // frontendOpenOrders: orderType is a string
+  if (typeof ot === 'string' && ot.length > 0) {
+    // Normalize known Hyperliquid strings to our display format
+    const normalized = ot.trim()
+    if (normalized === 'Limit') return 'Limit'
+    if (normalized === 'Stop Market') return 'Stop Market'
+    if (normalized === 'Stop Limit') return 'Stop Limit'
+    if (normalized === 'Take Profit Market') return 'Take Profit (Market)'
+    if (normalized === 'Take Profit Limit') return 'Take Profit (Limit)'
+    // Return as-is for any other string (e.g. "Market")
+    return normalized
   }
 
-  if (ot?.trigger) {
-    const { isMarket, tpsl } = ot.trigger
+  // openOrders fallback: orderType is an object
+  if (ot && typeof ot === 'object') {
+    if (ot.limit) return 'Limit'
 
-    if (tpsl === 'tp') {
-      return isMarket ? 'Take Profit (Market)' : 'Take Profit (Limit)'
+    if (ot.trigger) {
+      const { isMarket, tpsl } = ot.trigger
+      if (tpsl === 'tp') return isMarket ? 'Take Profit (Market)' : 'Take Profit (Limit)'
+      if (tpsl === 'sl') return isMarket ? 'Stop Market' : 'Stop Limit'
+      return isMarket ? 'Trigger Market' : 'Trigger Limit'
     }
-
-    if (tpsl === 'sl') {
-      return isMarket ? 'Stop Market' : 'Stop Limit'
-    }
-
-    return isMarket ? 'Trigger Market' : 'Trigger Limit'
   }
 
   return 'Unknown'
@@ -636,7 +653,8 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
             } else if (typeof order.triggerPx === 'number') {
               triggerPx = order.triggerPx
             }
-            if (triggerPx === null || isNaN(triggerPx) || !isFinite(triggerPx)) {
+            // Treat 0 as null (Hyperliquid returns "0.0" for non-trigger orders)
+            if (triggerPx === null || isNaN(triggerPx) || !isFinite(triggerPx) || triggerPx === 0) {
               triggerPx = null
             }
           }
