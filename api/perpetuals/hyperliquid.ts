@@ -83,8 +83,8 @@ function getOrderType(order: any): string {
     if (normalized === 'Limit') return 'Limit'
     if (normalized === 'Stop Market') return 'Stop Market'
     if (normalized === 'Stop Limit') return 'Stop Limit'
-    if (normalized === 'Take Profit Market') return 'Take Profit (Market)'
-    if (normalized === 'Take Profit Limit') return 'Take Profit (Limit)'
+    if (normalized === 'Take Profit Market') return 'Take Profit Market'
+    if (normalized === 'Take Profit Limit') return 'Take Profit Market'
     // Return as-is for any other string (e.g. "Market")
     return normalized
   }
