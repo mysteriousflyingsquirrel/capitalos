@@ -541,11 +541,37 @@ async function fetchSpotTokenMap(): Promise<Record<string, string>> {
     if (!response.ok) return map
 
     const data = await response.json()
-    const universe = Array.isArray(data?.universe) ? data.universe : []
+    const tokens: any[] = Array.isArray(data?.tokens) ? data.tokens : []
+    const universe: any[] = Array.isArray(data?.universe) ? data.universe : []
 
+    // Build token-index-to-name lookup (e.g. 0 → "USDC", 1 → "PURR", 150 → "HYPE")
+    const tokenNames: Record<number, string> = {}
+    for (const t of tokens) {
+      if (t && typeof t.name === 'string' && typeof t.index === 'number') {
+        tokenNames[t.index] = t.name
+      }
+    }
+
+    // Build @index → pair name from universe
     for (const pair of universe) {
-      if (pair && typeof pair.name === 'string' && typeof pair.index === 'number') {
-        map[`@${pair.index}`] = pair.name
+      if (!pair || typeof pair.index !== 'number') continue
+
+      let pairName: string | null = null
+
+      // If pair.name is a readable name (not @N), use it directly
+      if (typeof pair.name === 'string' && pair.name.length > 0 && !pair.name.startsWith('@')) {
+        pairName = pair.name
+      } else if (Array.isArray(pair.tokens) && pair.tokens.length >= 2) {
+        // Construct name from token indices: tokens[0] = base, tokens[1] = quote
+        const baseName = tokenNames[pair.tokens[0]]
+        const quoteName = tokenNames[pair.tokens[1]]
+        if (baseName && quoteName) {
+          pairName = `${baseName}/${quoteName}`
+        }
+      }
+
+      if (pairName) {
+        map[`@${pair.index}`] = pairName
       }
     }
   } catch {
