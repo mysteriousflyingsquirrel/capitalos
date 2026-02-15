@@ -529,6 +529,31 @@ async function fetchMeta(dex: string = ''): Promise<{ universe: any[] } | null> 
 
 
 
+/** Fetch spot metadata to build a map from spot index (@N) to pair name (e.g. BTC/USDC) */
+async function fetchSpotTokenMap(): Promise<Record<string, string>> {
+  const map: Record<string, string> = {}
+  try {
+    const response = await fetch(`${HYPERLIQUID_BASE_URL}/info`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'spotMeta' }),
+    })
+    if (!response.ok) return map
+
+    const data = await response.json()
+    const universe = Array.isArray(data?.universe) ? data.universe : []
+
+    for (const pair of universe) {
+      if (pair && typeof pair.name === 'string' && typeof pair.index === 'number') {
+        map[`@${pair.index}`] = pair.name
+      }
+    }
+  } catch {
+    // non-critical — spot names just won't resolve
+  }
+  return map
+}
+
 async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrder[]> {
   try {
     const allDexs = await fetchAllPerpDexs()
@@ -549,6 +574,9 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
     if (dexWithSilver) {
       dexsToQuery.push(dexWithSilver)
     }
+    
+    // Fetch spot metadata to resolve @N indices to pair names (e.g. @142 → BTC/USDC)
+    const spotTokenMap = await fetchSpotTokenMap()
     
     const allOrders: PerpetualsOpenOrder[] = []
     
@@ -614,7 +642,9 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
             continue
           }
           
-          const token = order.coin
+          // Resolve spot token indices (@N) to human-readable pair names
+          const rawCoin: string = order.coin
+          const token = rawCoin.startsWith('@') ? (spotTokenMap[rawCoin] || rawCoin) : rawCoin
           const side = order.side === 'B' ? 'Buy' : order.side === 'A' ? 'Sell' : null
           if (!side) {
             continue
