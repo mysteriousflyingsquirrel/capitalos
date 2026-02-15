@@ -624,7 +624,7 @@ function Hyperliquid() {
                         </td>
                         <td className="py-3 pr-4 text-left whitespace-nowrap">
                           <div className="flex flex-col items-start">
-                            <div className="text2 text-text-primary">{formatCurrency(order.size)}</div>
+                            <div className="text2 text-text-primary">{order.size > 0 ? formatCurrency(order.size) : '-'}</div>
                             <div className="text2 mt-0.5 text-text-muted">{order.amount || '-'}</div>
                           </div>
                         </td>

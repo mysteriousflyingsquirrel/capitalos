@@ -628,7 +628,11 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
             amount = Math.abs(order.sz)
           }
           
-          if (amount <= 0) {
+          // Only skip zero-size orders for regular limit orders;
+          // TP/SL orders tied to positions may have sz=0 (they close the full position at trigger)
+          const isTriggerOrder = order.isTrigger === true || order.isTrigger === 'true'
+            || order.isPositionTpsl === true || order.isPositionTpsl === 'true'
+          if (amount <= 0 && !isTriggerOrder) {
             continue
           }
           
