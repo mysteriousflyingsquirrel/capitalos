@@ -2273,7 +2273,7 @@ function Cashflow() {
   }
 
   const handleEditAccountflowItem = (id: string) => {
-    console.log('Edit accountflow item', id)
+    if (import.meta.env.DEV) console.log('Edit accountflow item', id)
   }
 
   const handleRemoveInflowItem = async (id: string) => {
@@ -2334,6 +2334,17 @@ function Cashflow() {
         console.error('[Cashflow] Failed to delete mapping:', result.reason)
       }
     }
+  }
+
+  if (dataLoading && inflowItems.length === 0 && outflowItems.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-goldenrod mx-auto mb-4"></div>
+          <div className="text-text-secondary text-sm">Loading cashflow data...</div>
+        </div>
+      </div>
+    )
   }
 
   return (

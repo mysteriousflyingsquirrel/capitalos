@@ -471,6 +471,7 @@ export function DataProvider({ children }: DataProviderProps) {
       })
     } catch (err) {
       console.error('Error refreshing prices:', err)
+      setError(err instanceof Error ? err.message : 'Failed to refresh prices')
     }
   }
 
@@ -516,6 +517,7 @@ export function DataProvider({ children }: DataProviderProps) {
       })
     } catch (err) {
       console.error('Error refreshing Perpetuals data:', err)
+      setError(err instanceof Error ? err.message : 'Failed to refresh perpetuals data')
     }
   }
 

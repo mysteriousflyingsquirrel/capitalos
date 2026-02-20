@@ -76,8 +76,10 @@ export function getPlatformBalance(
   convert: (amount: number, from: CurrencyCode) => number,
   platformName?: string
 ): number {
-  // Find all items for this platform
-  // In netWorthItems, the platform field uses platform names (not IDs)
+  if (!netWorthItems) return 0
+  if (!transactions) transactions = []
+  if (!cryptoPrices) cryptoPrices = {}
+  if (!stockPrices) stockPrices = {}
   const platformMatch = platformName || platformId
   const platformItems = netWorthItems.filter(item => item.platform === platformMatch)
   
@@ -125,11 +127,11 @@ export function getPlatformSpareChangeInflow(
   convert: (amount: number, from: CurrencyCode) => number,
   platformName?: string
 ): number {
-  // Use provided platformName if available, otherwise use platformId
-  // In accountflow mappings, the account field uses platform names
+  if (!accountflowMappings) return 0
+  if (!inflowItems) inflowItems = []
+  if (!outflowItems) outflowItems = []
   const accountName = platformName || platformId
   
-  // Get all mappings for this platform
   const platformMappings = accountflowMappings.filter(mapping => {
     if (mapping.kind === 'inflowToAccount' && mapping.account === accountName) {
       return true

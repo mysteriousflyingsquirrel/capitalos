@@ -321,6 +321,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Symbols array is required' })
     }
 
+    if (!symbols.every(s => typeof s === 'string' && s.length > 0)) {
+      return res.status(400).json({ error: 'All symbols must be non-empty strings' })
+    }
+
     // Normalize symbols
     const symbolKeys = [...new Set(symbols.map(s => normalizeSymbolKey(s)))]
     const dateKey = getUtcDateKey()
@@ -329,7 +333,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const existingPrices = await readExistingPrices(db, dateKey, symbolKeys)
     const missingSymbolKeys = symbolKeys.filter(k => !existingPrices.has(k))
 
-    console.log(`[UpdatePrices] Date: ${dateKey}, Requested: ${symbolKeys.length}, Cached: ${existingPrices.size}, Missing: ${missingSymbolKeys.length}`)
+    if (process.env.NODE_ENV === 'development') console.log(`[UpdatePrices] Date: ${dateKey}, Requested: ${symbolKeys.length}, Cached: ${existingPrices.size}, Missing: ${missingSymbolKeys.length}`)
 
     // 2. If all prices exist, return immediately
     if (missingSymbolKeys.length === 0) {
@@ -390,21 +394,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (lockAcquired) {
       try {
         // 5. Fetch missing prices from Yahoo
-        console.log(`[UpdatePrices] Fetching ${missingSymbolKeys.length} symbols from Yahoo`)
+        if (process.env.NODE_ENV === 'development') console.log(`[UpdatePrices] Fetching ${missingSymbolKeys.length} symbols from Yahoo`)
         fetchedPrices = await fetchYahooQuotes(missingSymbolKeys, rapidApiKey)
 
         // 6. Write to Firestore
         if (fetchedPrices.length > 0) {
           await writePricesToFirestore(db, dateKey, fetchedPrices)
           fetchedSymbolKeys = fetchedPrices.map(p => normalizeSymbolKey(p.symbolRaw))
-          console.log(`[UpdatePrices] Wrote ${fetchedPrices.length} prices to Firestore`)
+          if (process.env.NODE_ENV === 'development') console.log(`[UpdatePrices] Wrote ${fetchedPrices.length} prices to Firestore`)
         }
       } finally {
         await releaseLock(db, dateKey, lockId)
       }
     } else {
       // Lock not acquired - re-read from Firestore (another request probably fetched)
-      console.log('[UpdatePrices] Lock not acquired, re-reading from Firestore')
+      if (process.env.NODE_ENV === 'development') console.log('[UpdatePrices] Lock not acquired, re-reading from Firestore')
       const refreshedPrices = await readExistingPrices(db, dateKey, missingSymbolKeys)
       for (const [key, value] of refreshedPrices) {
         existingPrices.set(key, value)

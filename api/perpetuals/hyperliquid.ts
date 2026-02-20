@@ -177,6 +177,7 @@ async function fetchAllPerpDexs(): Promise<string[]> {
     const uniqueDexNames = [...new Set(dexNames)]
     return ['', ...uniqueDexNames]
   } catch (error) {
+    console.error('[Hyperliquid] Failed to fetch perp dexs:', error)
     return ['']
   }
 }
@@ -523,6 +524,7 @@ async function fetchMeta(dex: string = ''): Promise<{ universe: any[] } | null> 
     
     return { universe }
   } catch (error) {
+    console.error('[Hyperliquid] Failed to fetch meta:', error)
     return null
   }
 }
@@ -782,6 +784,7 @@ async function fetchOpenOrders(walletAddress: string): Promise<PerpetualsOpenOrd
     
     return allOrders
   } catch (error) {
+    console.error('[Hyperliquid] Failed to fetch open orders:', error)
     return []
   }
 }
@@ -1003,9 +1006,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    if (!walletAddress) {
+    if (!walletAddress || typeof walletAddress !== 'string') {
       return res.status(400).json({ 
-        error: 'Hyperliquid wallet address is required in request body' 
+        error: 'Hyperliquid wallet address is required in request body and must be a string' 
       })
     }
 

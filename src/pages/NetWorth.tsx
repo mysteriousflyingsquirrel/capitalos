@@ -879,12 +879,13 @@ function NetWorth() {
 
   // Sync prices from DataContext (ensures prices are updated from periodic refresh)
   useEffect(() => {
-    console.log('[NetWorth] Sync effect triggered:', {
-      cryptoPricesCount: Object.keys(data.cryptoPrices).length,
-      stockPricesCount: Object.keys(data.stockPrices).length,
-      stockPrices: data.stockPrices,
-      usdToChfRate: data.usdToChfRate,
-    })
+    if (import.meta.env.DEV) {
+      console.log('[NetWorth] Sync effect triggered:', {
+        cryptoPricesCount: Object.keys(data.cryptoPrices).length,
+        stockPricesCount: Object.keys(data.stockPrices).length,
+        usdToChfRate: data.usdToChfRate,
+      })
+    }
     // Sync crypto prices from DataContext
     if (Object.keys(data.cryptoPrices).length > 0) {
       setCryptoPrices(prev => ({ ...prev, ...data.cryptoPrices }))
@@ -1382,6 +1383,17 @@ function NetWorth() {
     setEditingItemId(null)
   }
 
+  if (dataLoading && netWorthItems.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-goldenrod mx-auto mb-4"></div>
+          <div className="text-text-secondary text-sm">Loading net worth data...</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen px-2 lg:px-6 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -1452,37 +1464,49 @@ function NetWorth() {
         )}
 
         {/* Add Transaction Modal */}
-        {transactionItemId && (
-          <AddTransactionModal
-            item={netWorthItems.find(i => i.id === transactionItemId)!}
-            transactions={transactions}
-            onClose={() => setTransactionItemId(null)}
-            onSave={handleSaveTransaction}
-          />
-        )}
+        {transactionItemId && (() => {
+          const item = netWorthItems.find(i => i.id === transactionItemId)
+          if (!item) return null
+          return (
+            <AddTransactionModal
+              item={item}
+              transactions={transactions}
+              onClose={() => setTransactionItemId(null)}
+              onSave={handleSaveTransaction}
+            />
+          )
+        })()}
 
         {/* Show Transactions Modal */}
-        {showTransactionsItemId && (
-          <ShowTransactionsModal
-            item={netWorthItems.find(i => i.id === showTransactionsItemId)!}
-            transactions={transactions.filter(tx => tx.itemId === showTransactionsItemId)}
-            cryptoPrices={cryptoPrices}
-            platforms={platforms}
-            onClose={() => setShowTransactionsItemId(null)}
-            onEdit={handleEditTransaction}
-            onDelete={handleDeleteTransaction}
-          />
-        )}
+        {showTransactionsItemId && (() => {
+          const item = netWorthItems.find(i => i.id === showTransactionsItemId)
+          if (!item) return null
+          return (
+            <ShowTransactionsModal
+              item={item}
+              transactions={transactions.filter(tx => tx.itemId === showTransactionsItemId)}
+              cryptoPrices={cryptoPrices}
+              platforms={platforms}
+              onClose={() => setShowTransactionsItemId(null)}
+              onEdit={handleEditTransaction}
+              onDelete={handleDeleteTransaction}
+            />
+          )
+        })()}
 
         {/* Edit Item Modal */}
-        {editingItemId && (
-          <EditNetWorthItemModal
-            item={netWorthItems.find(i => i.id === editingItemId)!}
-            platforms={platforms}
-            onClose={() => setEditingItemId(null)}
-            onSave={handleSaveEditItem}
-          />
-        )}
+        {editingItemId && (() => {
+          const item = netWorthItems.find(i => i.id === editingItemId)
+          if (!item) return null
+          return (
+            <EditNetWorthItemModal
+              item={item}
+              platforms={platforms}
+              onClose={() => setEditingItemId(null)}
+              onSave={handleSaveEditItem}
+            />
+          )
+        })()}
 
         {/* Edit Transaction Modal */}
         {editingTransactionId && (() => {

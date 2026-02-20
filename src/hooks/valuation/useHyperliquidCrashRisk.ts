@@ -796,8 +796,8 @@ export function useHyperliquidCrashRisk(args: { coins: string[] }) {
           setRiskByCoin(nextRisk)
         }
         lastSuccessAtRef.current = now
-      } catch {
-        // fail silently - keep previous state
+      } catch (err) {
+        if (import.meta.env.DEV) console.warn('[useHyperliquidCrashRisk] Update failed:', err)
       }
     }
 

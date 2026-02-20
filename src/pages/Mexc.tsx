@@ -85,7 +85,7 @@ interface OpenOrderRow {
 
 export default function Mexc() {
   const { isIncognito } = useIncognito()
-  const { data, mexcPositionsWs, mexcPositionsWsStatus, mexcPositionsWsError } = useData()
+  const { data, loading: dataLoading, mexcPositionsWs, mexcPositionsWsStatus, mexcPositionsWsError } = useData()
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
 
   // Column widths - easily adjustable per column
@@ -160,6 +160,17 @@ export default function Mexc() {
     })
   }, [openOrdersData])
 
+  if (dataLoading && positions.length === 0 && openOrders.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-goldenrod mx-auto mb-4"></div>
+          <div className="text-text-secondary text-sm">Loading MEXC data...</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen px-2 lg:px-6 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -193,31 +204,31 @@ export default function Mexc() {
               </colgroup>
               <thead>
                 <tr className="border-b border-border-strong">
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Token</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Side</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Leverage</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>PnL</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Size</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Price</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Entry Price</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Liq. Price</Heading>
                   </th>
-                  <th className="text-left pb-3 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 whitespace-nowrap">
                     <Heading level={4}>Funding Fee</Heading>
                   </th>
                 </tr>
@@ -310,19 +321,19 @@ export default function Mexc() {
               </colgroup>
               <thead>
                 <tr className="border-b border-border-strong">
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Token</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Side</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Activity</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Price</Heading>
                   </th>
-                  <th className="text-left pb-3 pr-4 whitespace-nowrap">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Size</Heading>
                   </th>
                 </tr>

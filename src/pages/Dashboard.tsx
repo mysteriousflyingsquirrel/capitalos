@@ -214,7 +214,7 @@ function Dashboard() {
 
   // Load data from DataContext (includes merged Perpetuals data)
   const { uid } = useAuth()
-  const { data } = useData()
+  const { data, loading: dataLoading } = useData()
   const netWorthItems = data.netWorthItems
   const transactions = data.transactions
   const inflowItems = data.inflowItems
@@ -1075,6 +1075,17 @@ function Dashboard() {
     return interval
   }, [netWorthData.length, windowWidth])
 
+  if (dataLoading && netWorthItems.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-goldenrod mx-auto mb-4"></div>
+          <div className="text-text-secondary text-sm">Loading dashboard...</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen px-2 lg:px-6 pt-4 pb-12 lg:pt-6 lg:pb-16">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -1165,6 +1176,7 @@ function Dashboard() {
                 value={timeFrame}
                 onChange={(e) => setTimeFrame(e.target.value as 'YTD' | '6M' | '1Y' | '5Y' | 'MAX')}
                 className="bg-bg-surface-2 border border-border-subtle rounded-input pl-3 pr-8 py-2 text-text-primary text2 focus:outline-none focus:border-accent-blue"
+                aria-label="Time range for net worth chart"
               >
                 <option value="YTD">YTD</option>
                 <option value="6M">6M</option>
@@ -1174,6 +1186,11 @@ function Dashboard() {
               </select>
             </div>
           </div>
+          {netWorthData.length === 0 ? (
+            <div className="flex items-center justify-center h-[300px] text-text-muted text-sm">
+              No snapshots yet. Create a snapshot in Settings to see your net worth evolution.
+            </div>
+          ) : (
           <ResponsiveContainer width="100%" height={300}>
             <LineChart
               data={netWorthData}
@@ -1301,6 +1318,7 @@ function Dashboard() {
                 />
             </LineChart>
           </ResponsiveContainer>
+          )}
         </div>
 
         {/* Third Row: Asset Allocation + Inflow Breakdown + Outflow Breakdown */}

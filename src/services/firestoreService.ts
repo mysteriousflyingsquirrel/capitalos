@@ -13,8 +13,9 @@ import { db } from '../config/firebase'
 import { safeWrite, safeDelete } from '../lib/dataSafety/repository'
 import { safeUpsertDoc, safeUpdateDoc, safeDeleteDoc } from '../lib/firestoreSafeWrite'
 
-// Helper to get user-scoped collection path
 function getUserCollectionPath(uid: string, collectionName: string): string {
+  if (!uid) throw new Error('getUserCollectionPath: uid is required')
+  if (!collectionName) throw new Error('getUserCollectionPath: collectionName is required')
   return `users/${uid}/${collectionName}`
 }
 

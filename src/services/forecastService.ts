@@ -23,25 +23,24 @@ export async function saveForecastEntries(
   uid: string,
   entries: ForecastEntry[]
 ): Promise<void> {
+  if (!uid) throw new Error('saveForecastEntries: uid is required')
+  if (!Array.isArray(entries)) throw new Error('saveForecastEntries: entries must be an array')
   await saveDocuments(uid, 'forecastEntries', entries)
 }
 
-/**
- * Load forecast entries from Firestore
- */
 export async function loadForecastEntries(
   uid: string
 ): Promise<ForecastEntry[]> {
+  if (!uid) throw new Error('loadForecastEntries: uid is required')
   return loadDocuments<ForecastEntry>(uid, 'forecastEntries')
 }
 
-/**
- * Get forecast entries for a specific platform
- */
 export async function getForecastEntriesForPlatform(
   uid: string,
   platformId: string
 ): Promise<ForecastEntry[]> {
+  if (!uid) throw new Error('getForecastEntriesForPlatform: uid is required')
+  if (!platformId) throw new Error('getForecastEntriesForPlatform: platformId is required')
   const allEntries = await loadForecastEntries(uid)
   return allEntries.filter(entry => entry.platformId === platformId)
 }

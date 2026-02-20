@@ -1,6 +1,11 @@
+import { ReactNode } from 'react'
 import Sidebar from './Sidebar'
 
-function Layout({ children }) {
+interface LayoutProps {
+  children: ReactNode
+}
+
+function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-bg-page">
       <Sidebar />
@@ -14,4 +19,3 @@ function Layout({ children }) {
 }
 
 export default Layout
-

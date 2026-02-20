@@ -134,8 +134,8 @@ export class HyperliquidPositionsWs {
 
         this.onStatus?.('subscribed')
         this.onPositions(positions)
-      } catch {
-        // ignore malformed messages
+      } catch (error) {
+        if (import.meta.env.DEV) console.warn('[HyperliquidWS] Malformed message:', error)
       }
     }
 

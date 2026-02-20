@@ -62,14 +62,13 @@ function CryptoTaxReportModal({ onClose }: CryptoTaxReportModalProps) {
     }
   }
 
-  // Generate PDF
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!report) return
 
     setGeneratingPDF(true)
     try {
       const userName = user?.email || user?.displayName || undefined
-      generateCryptoTaxReportPDF(report, userName)
+      await generateCryptoTaxReportPDF(report, userName)
     } catch (err) {
       setError('PDF konnte nicht erstellt werden. Bitte später erneut versuchen.')
       console.error('Failed to generate PDF:', err)
@@ -83,18 +82,21 @@ function CryptoTaxReportModal({ onClose }: CryptoTaxReportModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4" onClick={onClose} role="presentation">
       <div
         className="w-full max-w-6xl bg-bg-surface-1 border border-border-strong rounded-card shadow-card p-6 relative max-h-[90vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="crypto-tax-report-title"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <Heading level={2}>Swiss Crypto Tax Report</Heading>
+          <Heading level={2} id="crypto-tax-report-title">Swiss Crypto Tax Report</Heading>
           <button
             onClick={onClose}
             className="p-2 hover:bg-bg-surface-2 rounded-input transition-colors text-text-secondary hover:text-text-primary"
-            title="Schliessen"
+            aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

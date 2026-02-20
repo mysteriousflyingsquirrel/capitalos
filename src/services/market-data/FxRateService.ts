@@ -221,6 +221,8 @@ export async function preloadRates(
   date: string = 'latest'
 ): Promise<void> {
   await Promise.all(
-    pairs.map(({ base, quote }) => getRate(base, quote, date).catch(() => {}))
+    pairs.map(({ base, quote }) => getRate(base, quote, date).catch((err) => {
+      if (import.meta.env.DEV) console.warn(`[FxRateService] preloadRates failed for ${base}→${quote}:`, err)
+    }))
   )
 }

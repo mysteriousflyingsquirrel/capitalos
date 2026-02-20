@@ -107,10 +107,10 @@ export function useCategoryItems(category: NetWorthCategory): {
       .map(item => ({
         itemId: item.itemId,
         name: item.name,
-        valueChf: item.valueBaseCurrency,
-        valueDisplay: item.valueDisplayCurrency,
-        quantity: item.quantity,
-        priceUsd: item.priceUsd,
+        valueChf: item.valueInBaseCurrency,
+        valueDisplay: item.valueInDisplayCurrency,
+        quantity: item.holdings,
+        priceUsd: item.currentPrice,
       }))
       .sort((a, b) => b.valueChf - a.valueChf)
     

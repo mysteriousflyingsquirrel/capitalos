@@ -81,7 +81,9 @@ export function createSnapshot(
   convert: (amount: number, from: CurrencyCode) => number,
   usdToChfRate: number | null
 ): NetWorthSnapshot {
-  // Use the same service as the frontend
+  if (!Array.isArray(items)) throw new Error('createSnapshot: items must be an array')
+  if (!Array.isArray(transactions)) throw new Error('createSnapshot: transactions must be an array')
+  if (typeof convert !== 'function') throw new Error('createSnapshot: convert must be a function')
   const result = NetWorthCalculationService.calculateTotals(
     items,
     transactions,

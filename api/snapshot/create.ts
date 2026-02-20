@@ -220,7 +220,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Read pre-computed summary from Firestore (computed by client on every data change)
     // NEW: compute snapshot directly (same engine as Settings → Create Snapshot),
     // so the GitHub Action does not depend on netWorthSummary/current.
-    console.log('[Snapshot] Computing snapshot server-side...')
+    if (process.env.NODE_ENV === 'development') console.log('[Snapshot] Computing snapshot server-side...')
     const db = admin.firestore()
 
     // Load settings for API keys (RapidAPI + Perpetuals)

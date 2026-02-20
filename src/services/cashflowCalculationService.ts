@@ -65,6 +65,7 @@ export function getInflowGroupSum(
   items: InflowItem[],
   convert: (amount: number, from: CurrencyCode) => number
 ): number {
+  if (!items) return 0
   return items
     .filter(i => i.group === group)
     .reduce((sum, i) => {
@@ -84,6 +85,7 @@ export function getOutflowGroupSum(
   items: OutflowItem[],
   convert: (amount: number, from: CurrencyCode) => number
 ): number {
+  if (!items) return 0
   return items
     .filter(i => i.group === group)
     .reduce((sum, i) => {
@@ -104,6 +106,8 @@ export function computeMappingAmount(
   outflowItems: OutflowItem[],
   convert: (amount: number, from: CurrencyCode) => number
 ): number {
+  if (!inflowItems) inflowItems = []
+  if (!outflowItems) outflowItems = []
   if (mapping.kind === 'inflowToAccount') {
     if (mapping.mode === 'group' && mapping.group) {
       return getInflowGroupSum(mapping.group, inflowItems, convert)

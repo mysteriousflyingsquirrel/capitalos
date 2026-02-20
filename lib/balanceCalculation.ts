@@ -13,6 +13,9 @@ export function calculateBalanceChf(
   currentCryptoPrices?: Record<string, number>,
   convert?: (amount: number, from: CurrencyCode) => number
 ): number {
+  if (!transactions) transactions = []
+  if (!itemId) return 0
+
   // For Crypto items, use current price * coin amount
   if (item?.category === 'Crypto' && currentCryptoPrices && item.name) {
     const coinAmount = calculateCoinAmount(itemId, transactions)
@@ -161,6 +164,7 @@ export function calculateBalanceChf(
  * Calculate coin amount for a crypto asset, handling all transaction types.
  */
 export function calculateCoinAmount(itemId: string, transactions: NetWorthTransaction[]): number {
+  if (!itemId || !transactions) return 0
   return transactions
     .filter((tx) => tx.itemId === itemId)
     .reduce((sum, tx) => {
@@ -184,6 +188,7 @@ export function calculateCoinAmount(itemId: string, transactions: NetWorthTransa
  * Calculate holdings (quantity) for all categories.
  */
 export function calculateHoldings(itemId: string, transactions: NetWorthTransaction[]): number {
+  if (!itemId || !transactions) return 0
   return transactions
     .filter((tx) => tx.itemId === itemId)
     .reduce((sum, tx) => {
@@ -202,6 +207,7 @@ export function calculateAveragePricePerItem(
   transactions: NetWorthTransaction[],
   convert?: (amount: number, from: CurrencyCode) => number
 ): number {
+  if (!itemId || !transactions) return 0
   const itemTransactions = transactions.filter((tx) => tx.itemId === itemId)
   if (itemTransactions.length === 0) return 0
 

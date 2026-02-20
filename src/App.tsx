@@ -20,18 +20,14 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 
 function ProtectedRoutes() {
   try {
-    const { user, loading: authLoading, authGateState, error: authError } = useAuth()
-    const { loading: dataLoading, error: dataError, isInitialLoad } = useData()
+    const { user, authGateState } = useAuth()
+    const { error: dataError } = useData()
 
-    // Show AuthGate UI for error states
     if (authGateState === AuthGateState.ERROR_QUOTA_EXCEEDED ||
         authGateState === AuthGateState.ERROR_FATAL) {
       return <AuthGateUI />
     }
 
-    // Show loading during auth transitions OR initial data load
-    // Keep showing AuthGateUI during SUBSCRIBING until data is loaded
-    // This ensures a continuous loading experience without flicker
     if (authGateState && authGateState !== AuthGateState.READY && authGateState !== AuthGateState.SIGNED_OUT) {
       return <AuthGateUI />
     }
@@ -58,10 +54,7 @@ function ProtectedRoutes() {
           <Route path="/cashflow" element={<Cashflow />} />
           <Route path="/net-worth" element={<NetWorth />} />
           <Route path="/analytics" element={<Analytics />} />
-          {/* Backwards-compat deep link: redirect old Investing route to Exchanges → Hyperliquid */}
           <Route path="/investing/*" element={<Navigate to="/exchanges/hyperliquid" replace />} />
-
-          {/* Exchanges */}
           <Route path="/exchanges/hyperliquid" element={<Hyperliquid />} />
           <Route path="/exchanges/mexc" element={<Mexc />} />
           <Route path="/settings" element={<Settings />} />

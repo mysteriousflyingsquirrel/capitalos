@@ -31,28 +31,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Check for redirect result FIRST (for Safari/iOS sign-in)
     // This must be called to complete the redirect sign-in flow
-    console.log('Checking for redirect result...')
+    if (import.meta.env.DEV) console.log('Checking for redirect result...')
     getRedirectResult(auth)
       .then((result) => {
         if (!isMounted) return
 
         if (result) {
-          // User signed in via redirect
-          console.log('✅ Redirect result received, user signed in:', result.user.email)
-          console.log('User UID:', result.user.uid)
-          // Set user immediately from redirect result
+          if (import.meta.env.DEV) console.log('Redirect result received, user signed in')
           setUser(result.user)
           setLoading(false)
         } else {
-          // No redirect result, normal page load
-          console.log('No redirect result (normal page load)')
+          if (import.meta.env.DEV) console.log('No redirect result (normal page load)')
         }
 
-        // Set up auth state listener after redirect check
-        // This handles future auth state changes
         unsubscribe = onAuthStateChanged(auth, (user) => {
           if (!isMounted) return
-          console.log('Auth state changed:', user ? user.email : 'signed out')
+          if (import.meta.env.DEV) console.log('Auth state changed:', user ? 'signed in' : 'signed out')
           setUser(user)
           
           // Only set loading to false if we didn't already handle redirect
@@ -86,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Fallback: if redirect check takes too long, set up listener anyway
     const fallbackTimer = setTimeout(() => {
       if (!unsubscribe && isMounted) {
-        console.log('Redirect check timeout, proceeding with normal flow')
+        if (import.meta.env.DEV) console.log('Redirect check timeout, proceeding with normal flow')
         unsubscribe = onAuthStateChanged(auth, (user) => {
           if (!isMounted) return
           setUser(user)

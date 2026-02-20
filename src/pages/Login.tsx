@@ -28,11 +28,9 @@ function Login() {
       if (!isSafari) {
         setLoading(false)
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsRedirecting(false)
-      // Don't show error if user closed the popup
-      if (err.code === 'auth/popup-closed-by-user') {
-        // User closed the popup, which is fine
+      if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'auth/popup-closed-by-user') {
         setLoading(false)
         return
       }
@@ -56,7 +54,7 @@ function Login() {
           
           
           {error && (
-            <div className="mb-4 p-3 bg-bg-surface-2 border border-danger rounded-input">
+            <div className="mb-4 p-3 bg-bg-surface-2 border border-danger rounded-input" role="alert">
               <p className="text-danger text-[0.567rem] md:text-xs">{error}</p>
             </div>
           )}

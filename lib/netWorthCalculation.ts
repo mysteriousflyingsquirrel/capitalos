@@ -25,6 +25,11 @@ export class NetWorthCalculationService {
     usdToChfRate: number | null,
     convert: (value: number, from: CurrencyCode) => number
   ): NetWorthCalculationResult {
+    if (!netWorthItems) netWorthItems = []
+    if (!transactions) transactions = []
+    if (!cryptoPrices) cryptoPrices = {}
+    if (!stockPrices) stockPrices = {}
+
     const categoryTotals: Record<NetWorthCategory, number> = {
       Cash: 0,
       'Bank Accounts': 0,

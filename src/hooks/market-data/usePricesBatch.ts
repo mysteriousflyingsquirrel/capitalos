@@ -7,8 +7,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { CurrencyCode } from '../../lib/currency'
-import { getCryptoPrices, getMarketPrices, getFxRates } from '../../services/market-data'
-import type { FxRateSnapshot } from '../../services/market-data/types'
+import { getPricesMap as getCryptoPricesMap, getMarketPrices, getRates } from '../../services/market-data'
+import type { FxRate } from '../../services/market-data/types'
 
 interface UsePricesBatchOptions {
   /** Crypto tickers to fetch */
@@ -23,24 +23,20 @@ interface UsePricesBatchOptions {
   refreshIntervalMs?: number
 }
 
+interface FxRatesResult {
+  rates: Record<string, number>
+  timestamp: number
+}
+
 interface UsePricesBatchResult {
-  /** Crypto prices (symbol -> USD price) */
   cryptoPrices: Record<string, number>
-  /** Market prices (symbol -> USD price) */
   marketPrices: Record<string, number>
-  /** FX rates snapshot */
-  fxRates: FxRateSnapshot | null
-  /** USD to CHF rate (convenience) */
+  fxRates: FxRatesResult | null
   usdToChfRate: number | null
-  /** Loading state */
   isLoading: boolean
-  /** Error message */
   error: string | null
-  /** Last fetch timestamp */
   lastFetchTimestamp: number | null
-  /** Fetch all prices */
   fetch: () => Promise<void>
-  /** Refresh (invalidate cache and fetch) */
   refresh: () => Promise<void>
 }
 
@@ -58,7 +54,7 @@ export function usePricesBatch({
 }: UsePricesBatchOptions = {}): UsePricesBatchResult {
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
   const [marketPrices, setMarketPrices] = useState<Record<string, number>>({})
-  const [fxRates, setFxRates] = useState<FxRateSnapshot | null>(null)
+  const [fxRates, setFxRates] = useState<FxRatesResult | null>(null)
   const [usdToChfRate, setUsdToChfRate] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -77,22 +73,26 @@ export function usePricesBatch({
       const uniqueCrypto = [...new Set(cryptoSymbols.map(s => s.toUpperCase()))]
       const uniqueMarket = [...new Set(marketSymbols.map(s => s.toUpperCase()))]
       
-      // Fetch all in parallel - market prices come from daily Firestore cache
-      const [cryptoResult, marketResult, fxSnapshot] = await Promise.all([
-        uniqueCrypto.length > 0 
-          ? getCryptoPrices(uniqueCrypto) 
-          : Promise.resolve({ prices: {}, timestamp: Date.now(), source: 'cache' as const }),
-        uniqueMarket.length > 0 
-          ? getMarketPrices(uniqueMarket) 
-          : Promise.resolve({ prices: {}, timestamp: Date.now(), source: 'cache' as const }),
-        getFxRates(baseCurrency),
+      const [cryptoResult, marketResult, fxRatesList] = await Promise.all([
+        uniqueCrypto.length > 0
+          ? getCryptoPricesMap(uniqueCrypto)
+          : Promise.resolve({} as Record<string, number>),
+        uniqueMarket.length > 0
+          ? getMarketPrices(uniqueMarket)
+          : Promise.resolve({ prices: {} as Record<string, number>, timestamp: Date.now(), source: 'cache' }),
+        getRates(baseCurrency, ['USD', 'EUR', 'GBP']),
       ])
-      
-      // Calculate USD to CHF rate
-      const usdRate = fxSnapshot.rates['USD']
+
+      const ratesMap: Record<string, number> = {}
+      for (const r of fxRatesList) {
+        ratesMap[r.quote] = r.rate
+      }
+      const fxSnapshot: FxRatesResult = { rates: ratesMap, timestamp: Date.now() }
+
+      const usdRate = ratesMap['USD']
       const calculatedUsdToChfRate = usdRate ? 1 / usdRate : null
-      
-      setCryptoPrices(prev => ({ ...prev, ...cryptoResult.prices }))
+
+      setCryptoPrices(prev => ({ ...prev, ...cryptoResult }))
       setMarketPrices(prev => ({ ...prev, ...marketResult.prices }))
       setFxRates(fxSnapshot)
       setUsdToChfRate(calculatedUsdToChfRate)
