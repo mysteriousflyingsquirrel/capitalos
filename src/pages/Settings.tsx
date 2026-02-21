@@ -26,6 +26,7 @@ import {
 import { getYearsWithCryptoActivity, generateCryptoTaxReport } from '../services/cryptoTaxReportService'
 import { generateCryptoTaxReportPDF } from '../services/pdfService'
 import { saveSnapshots, hasSnapshotForDate, createSnapshot, getTodayUTCDate, getToday2359UTCTimestamp } from '../services/snapshotService'
+import { isBiometricAvailable, isBiometricEnabled, registerBiometric, disableBiometric } from '../services/webAuthnService'
 
 function Settings() {
   const { baseCurrency, exchangeRates, isLoading, error, convert } = useCurrency()
@@ -74,6 +75,10 @@ function Settings() {
   const [showHyperliquidWalletAddress, setShowHyperliquidWalletAddress] = useState(false)
   const [showMexcApiKey, setShowMexcApiKey] = useState(false)
   const [showMexcSecretKey, setShowMexcSecretKey] = useState(false)
+  // Biometric lock
+  const [biometricAvailable, setBiometricAvailable] = useState(false)
+  const [biometricOn, setBiometricOn] = useState(false)
+  const [biometricLoading, setBiometricLoading] = useState(false)
   // Snapshot creation
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
@@ -248,7 +253,12 @@ function Settings() {
     }
   }, [rapidApiKey, hyperliquidWalletAddress, mexcApiKey, mexcSecretKey, apiKeysLoading])
 
-  // Load platforms on mount
+  // Check biometric availability
+  useEffect(() => {
+    isBiometricAvailable().then(setBiometricAvailable)
+    if (uid) setBiometricOn(isBiometricEnabled(uid))
+  }, [uid])
+
   // Load available years for crypto tax report
   useEffect(() => {
     const loadYears = async () => {
@@ -914,6 +924,56 @@ function Settings() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Security Section */}
+        <div className="bg-bg-frame border border-border-subtle rounded-card shadow-card px-3 py-3 lg:p-6">
+          <Heading level={2} className="mb-4">Security</Heading>
+
+          <p className="text-text-secondary text-[0.567rem] md:text-xs mb-4">
+            {biometricAvailable
+              ? 'Enable biometric lock to protect your data when the app is reopened or left idle.'
+              : 'On devices without biometrics, the app will automatically sign you out after 10 minutes of inactivity.'}
+          </p>
+
+          {biometricAvailable && (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-text-primary text-xs md:text-sm font-medium">Biometric Lock</p>
+                <p className="text-text-tertiary text-[0.567rem] md:text-xs">Face ID, Touch ID, or fingerprint</p>
+              </div>
+              <button
+                onClick={async () => {
+                  if (!uid || !user?.email) return
+                  setBiometricLoading(true)
+                  try {
+                    if (biometricOn) {
+                      disableBiometric(uid)
+                      setBiometricOn(false)
+                    } else {
+                      const ok = await registerBiometric(uid, user.email)
+                      setBiometricOn(ok)
+                    }
+                  } catch (err) {
+                    console.error('Biometric toggle failed:', err)
+                  } finally {
+                    setBiometricLoading(false)
+                  }
+                }}
+                disabled={biometricLoading || !uid}
+                className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${biometricOn ? 'bg-[#DAA520]' : 'bg-bg-surface-2 border border-border-subtle'} disabled:opacity-50`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${biometricOn ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
+          )}
+
+          {!biometricAvailable && (
+            <div className="flex items-center gap-2 text-text-secondary text-xs">
+              <span className="inline-block w-2 h-2 rounded-full bg-[#DAA520]" />
+              Auto-logout after 10 minutes of inactivity is active
+            </div>
+          )}
         </div>
 
         {/* Data Section */}

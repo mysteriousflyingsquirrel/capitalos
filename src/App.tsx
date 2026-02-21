@@ -17,6 +17,7 @@ import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { DataProvider, useData } from './contexts/DataContext'
 import { AuthGateUI, SyncStatusIndicator } from './components/AuthGateUI'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import SecurityGate from './components/SecurityGate'
 
 function ProtectedRoutes() {
   try {
@@ -48,18 +49,20 @@ function ProtectedRoutes() {
     }
 
     return (
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/cashflow" element={<Cashflow />} />
-          <Route path="/net-worth" element={<NetWorth />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/investing/*" element={<Navigate to="/exchanges/hyperliquid" replace />} />
-          <Route path="/exchanges/hyperliquid" element={<Hyperliquid />} />
-          <Route path="/exchanges/mexc" element={<Mexc />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </Layout>
+      <SecurityGate>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/cashflow" element={<Cashflow />} />
+            <Route path="/net-worth" element={<NetWorth />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/investing/*" element={<Navigate to="/exchanges/hyperliquid" replace />} />
+            <Route path="/exchanges/hyperliquid" element={<Hyperliquid />} />
+            <Route path="/exchanges/mexc" element={<Mexc />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </Layout>
+      </SecurityGate>
     )
   } catch (error) {
     console.error('[ProtectedRoutes] Error:', error)
