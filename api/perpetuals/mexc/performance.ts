@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import admin from 'firebase-admin'
-import { mexcPrivateGet, mexcPrivatePost, toNumber } from './shared'
+import { mexcPrivateGet, mexcPrivatePost, toNumber } from './shared.js'
 
 let _adminInitialized = false
 function initializeAdmin(): void {
