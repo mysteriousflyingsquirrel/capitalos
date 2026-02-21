@@ -546,7 +546,6 @@ export async function savePlatforms(
 export interface UserSettings {
   baseCurrency?: string
   apiKeys?: {
-    twelveDataApiKey?: string
     hyperliquidWalletAddress?: string
   }
   analyticsSafetyBuffer?: number

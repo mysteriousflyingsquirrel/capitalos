@@ -11,7 +11,7 @@ import {
 } from '../services/storageService'
 import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotService'
 import { fetchCryptoData } from '../services/cryptoCompareService'
-import { getDailyPricesMap, categoryUsesTwelveData } from '../services/market-data/DailyPriceService'
+import { getDailyPricesMap, categoryUsesMarketApi } from '../services/market-data/DailyPriceService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
 import { MexcFuturesPositionsWs, type MexcWsStatus } from '../services/mexcFuturesPositionsWs'
 import { fetchMexcEquityUsd, fetchMexcOpenOrders, fetchMexcOpenPositions, fetchMexcUnrealizedPnlWindows } from '../services/mexcFuturesService'
@@ -63,7 +63,6 @@ export function DataProvider({ children }: DataProviderProps) {
   const { uid } = useAuth()
   const { convert } = useCurrency()
   const { 
-    twelveDataApiKey, 
     hyperliquidWalletAddress,
     mexcApiKey,
     mexcSecretKey,
@@ -151,7 +150,7 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Fetch stock/index fund/commodity prices from daily Firestore cache
   const fetchStockPricesData = async (items: NetWorthItem[]): Promise<Record<string, number>> => {
-    const stockItems = items.filter((item) => categoryUsesTwelveData(item.category))
+    const stockItems = items.filter((item) => categoryUsesMarketApi(item.category))
 
     if (stockItems.length === 0) {
       console.log('[DataContext] fetchStockPricesData: No stock items found')
@@ -373,7 +372,7 @@ export function DataProvider({ children }: DataProviderProps) {
         console.log('[DataContext] Waited for API keys:', {
           apiKeysLoaded: isApiKeysLoaded(),
           waitedMs: Date.now() - startTime,
-          currentTwelveDataApiKey: getCurrentKeys().twelveDataApiKey ? 'present' : 'missing',
+          apiKeysReady: isApiKeysLoaded(),
         })
       }
       

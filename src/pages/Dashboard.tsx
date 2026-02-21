@@ -28,7 +28,7 @@ import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from '../
 import type { InflowItem, OutflowItem } from './Cashflow'
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
-import { getDailyPricesMap, categoryUsesTwelveData } from '../services/market-data/DailyPriceService'
+import { getDailyPricesMap, categoryUsesMarketApi } from '../services/market-data/DailyPriceService'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -287,7 +287,7 @@ function Dashboard() {
     }
     
     try {
-      const stockItems = netWorthItems.filter((item: NetWorthItem) => categoryUsesTwelveData(item.category))
+      const stockItems = netWorthItems.filter((item: NetWorthItem) => categoryUsesMarketApi(item.category))
       
       if (stockItems.length === 0) {
         return

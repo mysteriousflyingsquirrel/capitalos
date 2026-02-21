@@ -32,7 +32,7 @@ export interface ValuationConfig {
   /** Display currency (what the user wants to see) */
   displayCurrency: CurrencyCode
 
-  /** @deprecated Market prices fetched via Twelve Data proxy, no key needed here */
+  /** @deprecated Market prices fetched via Yahoo Finance proxy, no key needed here */
   rapidApiKey?: string | null
 }
 

@@ -1,13 +1,14 @@
-# Market Pricing - Twelve Data Integration
+# Market Pricing - Yahoo Finance Integration
 
 ## Overview
 
-Market prices for stocks, ETFs, and commodities are fetched on-demand from Twelve Data via a Vercel API proxy. Prices are fetched every time the app opens or the user refreshes — no Firestore caching.
+Market prices for stocks, ETFs, and commodities are fetched on-demand from Yahoo Finance via a Vercel API proxy. Prices are fetched every time the app opens or the user refreshes — no Firestore caching, no API key required.
 
 This architecture:
-- **Keeps API keys server-side** (user's Twelve Data key is read from Firestore by the API route)
+- **No API key needed** — Yahoo Finance's unofficial endpoints are free and keyless
 - **Always returns fresh prices** — no stale cache concerns
 - **Minimal complexity** — no locks, no session cache, no fallback logic
+- **Global coverage** — supports all Yahoo Finance symbols (US, Europe, Asia, commodities)
 
 ## Architecture
 
@@ -24,14 +25,12 @@ This architecture:
 │  (Serverless Function)  │
 └───────────┬─────────────┘
             │ 1. verifyAuth → uid
-            │ 2. Read Twelve Data API key from Firestore
-            │ 3. Map symbols to Twelve Data format
-            │ 4. Fetch prices from Twelve Data
+            │ 2. Fetch prices from Yahoo Finance
             ▼
-┌──────────────┐          ┌──────────────┐
-│  Firestore   │          │  Twelve Data │
-│  (API key)   │          │  /quote API  │
-└──────────────┘          └──────────────┘
+┌──────────────────────┐
+│  Yahoo Finance       │
+│  /v8/finance/chart   │
+└──────────────────────┘
 ```
 
 ## Flow
@@ -39,45 +38,24 @@ This architecture:
 1. **Client requests prices** via `getDailyPricesMap(symbols)`
 2. **DailyPriceService** calls Vercel API route `/api/market/update-daily-prices`
 3. **API route** authenticates via Bearer token, derives `uid`
-4. **API route** reads user's `twelveDataApiKey` from `users/{uid}/settings/user`
-5. **API route** maps symbols to Twelve Data format (exchange suffixes, commodity mappings)
-6. **API route** calls Twelve Data `/quote` endpoint (batched, up to 50 per request)
-7. **API route** returns normalized price map to client
-8. **Client** uses prices for display and calculations
+4. **API route** calls Yahoo Finance v8 chart endpoint for each symbol (concurrency-limited)
+5. **API route** extracts `regularMarketPrice`, `currency`, `regularMarketTime`
+6. **API route** returns normalized price map to client
+7. **Client** uses prices for display and calculations
 
-## Symbol Format Mapping
+## Symbol Format
 
-The API route translates between user-entered symbols (Yahoo-style) and Twelve Data's format:
+Symbols use Yahoo Finance format directly — no mapping needed:
 
-### Exchange Suffixes
-
-| Yahoo Suffix | Twelve Data Exchange | Example |
+| Type | Example | Description |
 |---|---|---|
-| `.DE` | `:XETR` | `VWCE.DE` → `VWCE:XETR` |
-| `.SW` | `:SIX` | `ZSIL.SW` → `ZSIL:SIX` |
-| `.L` | `:LSE` | `VUSA.L` → `VUSA:LSE` |
-| `.PA` | `:EPA` | `CAC.PA` → `CAC:EPA` |
-| `.AS` | `:AMS` | `INGA.AS` → `INGA:AMS` |
-| `.MI` | `:MIL` | `ENI.MI` → `ENI:MIL` |
-| `.TO` | `:TSX` | `BMO.TO` → `BMO:TSX` |
-| `.HK` | `:HKEX` | `0005.HK` → `0005:HKEX` |
-| `.T` | `:TSE` | `7203.T` → `7203:TSE` |
-| `.AX` | `:ASX` | `CBA.AX` → `CBA:ASX` |
-
-### Commodity Mappings
-
-| Yahoo Ticker | Twelve Data Symbol |
-|---|---|
-| `GC=F` | `XAU/USD` |
-| `SI=F` | `XAG/USD` |
-| `CL=F` | `WTI/USD` |
-| `BZ=F` | `BRENT/USD` |
-| `NG=F` | `NG/USD` |
-| `PL=F` | `XPT/USD` |
-| `PA=F` | `XPD/USD` |
-| `HG=F` | `COPPER/USD` |
-
-US stocks and ETFs (e.g., `AAPL`, `MSFT`, `VOO`) are passed through unchanged.
+| US stocks | `AAPL`, `MSFT`, `TSLA` | Plain ticker |
+| US ETFs | `SPY`, `VOO`, `QQQ` | Plain ticker |
+| Swiss (SIX) | `VWCE.SW`, `ZSIL.SW` | `.SW` suffix |
+| German (XETRA) | `SAP.DE`, `VWCE.DE` | `.DE` suffix |
+| London (LSE) | `VUSA.L`, `SHEL.L` | `.L` suffix |
+| Paris (EPA) | `CAC.PA` | `.PA` suffix |
+| Commodities | `GC=F` (gold), `SI=F` (silver), `CL=F` (oil) | Futures format |
 
 ## API Route
 
@@ -90,7 +68,7 @@ US stocks and ETFs (e.g., `AAPL`, `MSFT`, `VOO`) are passed through unchanged.
 **Request Body:**
 ```json
 {
-  "symbols": ["AAPL", "MSFT", "VWCE.DE"]
+  "symbols": ["AAPL", "MSFT", "VWCE.SW"]
 }
 ```
 
@@ -104,19 +82,9 @@ US stocks and ETFs (e.g., `AAPL`, `MSFT`, `VOO`) are passed through unchanged.
   },
   "fetched": ["AAPL", "MSFT"],
   "missing": ["INVALID"],
-  "source": "twelve-data"
+  "source": "yahoo"
 }
 ```
-
-## User Settings
-
-```
-users/{uid}/settings/user
-  └── apiKeys/
-        └── twelveDataApiKey: string
-```
-
-The user's Twelve Data API key is stored here and read server-side by the API route.
 
 ## Client Usage
 
@@ -124,7 +92,7 @@ The user's Twelve Data API key is stored here and read server-side by the API ro
 import { getDailyPrices, getDailyPricesMap } from '@/services/market-data/DailyPriceService'
 
 // Get detailed price data
-const prices = await getDailyPrices(['AAPL', 'MSFT', 'VWCE.DE'])
+const prices = await getDailyPrices(['AAPL', 'MSFT', 'VWCE.SW'])
 // Returns: { 'AAPL': { price: 175.50, currency: 'USD', isStale: false, asOfDate: '2024-01-15' }, ... }
 
 // Get simple price map
@@ -132,16 +100,17 @@ const priceMap = await getDailyPricesMap(['AAPL', 'MSFT'])
 // Returns: { 'AAPL': 175.50, 'MSFT': 390.25 }
 ```
 
-## Twelve Data API Details
+## Yahoo Finance API Details
 
-- **Endpoint:** `GET https://api.twelvedata.com/quote?symbol=AAPL,MSFT&apikey=KEY`
-- **Batch:** Comma-separated symbols (up to 120 per request; chunked at 50 for safety)
-- **Response fields:** `symbol`, `close` (latest price), `currency`, `datetime`, `timestamp`
-- **Free tier:** 800 credits/day, 8 credits/minute (1 credit per symbol in batch)
+- **Endpoint:** `GET https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1d&interval=1d`
+- **Per-symbol:** One request per symbol (no batch endpoint); concurrency-limited to 10 parallel requests
+- **Response fields:** `chart.result[0].meta.regularMarketPrice`, `.currency`, `.regularMarketTime`
+- **No API key required**
+- **Unofficial:** These endpoints are not officially documented; a browser-like User-Agent header is sent
 
 ## Supported Categories
 
-Only these categories use Twelve Data prices:
+Only these categories use Yahoo Finance prices:
 - `Index Funds` (ETFs)
 - `Stocks`
 - `Commodities`
@@ -152,21 +121,19 @@ Crypto, Perpetuals, and other categories use different data sources.
 
 | Scenario | Behavior |
 |----------|----------|
-| No API key configured | Return empty prices with warning |
-| Twelve Data rate limited | Partial results returned |
+| Yahoo returns 404 | Symbol returned in `missing` array |
+| Yahoo rate limits (429) | Partial results returned |
 | Network error | Log error, return empty |
 | Symbol not recognized | Returned in `missing` array, UI shows "—" |
 | Auth token invalid | 401 Unauthorized |
 
 ## Security
 
-1. **API keys stay server-side:** User's Twelve Data key is read from Firestore, never exposed to the client
+1. **No API key exposure risk:** Yahoo Finance endpoints are keyless
 2. **Authentication:** Bearer token required on every request; uid derived from token
-3. **Firebase Admin SDK:** API route uses Admin SDK for Firestore reads
+3. **Proxy pattern:** Client never calls Yahoo directly; the Vercel function acts as a proxy to avoid CORS issues and add auth
 
 ## Related Files
 
 - `src/services/market-data/DailyPriceService.ts` - Main client-side service
 - `api/market/update-daily-prices.ts` - Vercel API route (server-side proxy)
-- `src/contexts/ApiKeysContext.tsx` - Manages Twelve Data API key in client state
-- `src/lib/dataSafety/userSettingsRepo.ts` - Persists API key to Firestore

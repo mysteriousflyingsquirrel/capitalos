@@ -32,7 +32,7 @@ export interface MarketPrice {
   symbol: string
   priceUsd: number
   timestamp: number
-  source: 'twelve-data' | 'cache'
+  source: 'yahoo' | 'cache'
 }
 
 /**

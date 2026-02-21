@@ -1,7 +1,7 @@
 /**
  * Daily Price Service (SSOT)
  *
- * Fetches stock/ETF/commodity prices from Twelve Data via a Vercel API proxy.
+ * Fetches stock/ETF/commodity prices from Yahoo Finance via a Vercel API proxy.
  * Prices are fetched on every app open/refresh — no Firestore caching.
  */
 
@@ -89,7 +89,7 @@ async function fetchPricesFromApi(
 
 /**
  * Get daily prices for a list of symbols.
- * Calls the Twelve Data proxy API directly — no caching.
+ * Calls the Yahoo Finance proxy API directly — no caching.
  */
 export async function getDailyPrices(
   symbolsRaw: string[],
@@ -160,11 +160,13 @@ export function deriveAssetClass(
 }
 
 /**
- * Check if a category uses Twelve Data prices
+ * Check if a category uses market API prices (Yahoo Finance)
  */
-export function categoryUsesTwelveData(category: string): boolean {
+export function categoryUsesMarketApi(category: string): boolean {
   return ['Index Funds', 'Stocks', 'Commodities'].includes(category)
 }
 
-/** @deprecated Use categoryUsesTwelveData */
-export const categoryUsesYahoo = categoryUsesTwelveData
+/** @deprecated Use categoryUsesMarketApi */
+export const categoryUsesTwelveData = categoryUsesMarketApi
+/** @deprecated Use categoryUsesMarketApi */
+export const categoryUsesYahoo = categoryUsesMarketApi

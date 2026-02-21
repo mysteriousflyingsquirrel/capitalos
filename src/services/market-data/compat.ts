@@ -31,7 +31,7 @@ export async function fetchCryptoPrices(tickers: string[]): Promise<Record<strin
 }
 
 /**
- * @deprecated Use DailyPriceService directly — fetches from Twelve Data via API proxy
+ * @deprecated Use DailyPriceService directly — fetches from Yahoo Finance via API proxy
  */
 export async function fetchStockPrices(
   tickers: string[],

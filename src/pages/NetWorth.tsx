@@ -6,13 +6,12 @@ import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useIncognito } from '../contexts/IncognitoContext'
-import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney, formatNumber } from '../lib/currency'
 import { toDateSafe } from '../lib/firestoreSafeWrite'
 import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
-import { getDailyPricesMap, categoryUsesTwelveData, deriveAssetClass } from '../services/market-data/DailyPriceService'
+import { getDailyPricesMap, categoryUsesMarketApi, deriveAssetClass } from '../services/market-data/DailyPriceService'
 import { useData } from '../contexts/DataContext'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
@@ -850,7 +849,6 @@ function NetWorth() {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { uid } = useAuth()
   const { isIncognito } = useIncognito()
-  const { twelveDataApiKey } = useApiKeys()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch', { incognito: isIncognito })
   const { toasts, addToast, dismissToast } = useToast()
@@ -993,7 +991,7 @@ function NetWorth() {
     }
     
     try {
-      const stockItems = netWorthItems.filter(item => categoryUsesTwelveData(item.category))
+      const stockItems = netWorthItems.filter(item => categoryUsesMarketApi(item.category))
       
       if (stockItems.length === 0) {
         return
@@ -1527,7 +1525,6 @@ interface AddNetWorthItemModalProps {
 
 function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTransaction }: AddNetWorthItemModalProps) {
   const { convert } = useCurrency()
-  const { twelveDataApiKey } = useApiKeys()
   const isCrypto = category === 'Crypto'
   const isStockCategory = category === 'Index Funds' || category === 'Stocks' || category === 'Commodities'
   // Categories where price per item is always 1 (no need to show input)
@@ -1629,11 +1626,9 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
       setPricePerItem('')
       setPriceError(null)
       setIsLoadingPrice(false)
-    } else if (isStockCategory && name.trim() && !twelveDataApiKey) {
-      setPriceError('Twelve Data API key not configured. Please set it in Settings to fetch prices automatically.')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStockCategory, name, twelveDataApiKey])
+  }, [isStockCategory, name])
 
   // Calculate total balance for all categories
   const totalBalance = useMemo(() => {
@@ -2208,7 +2203,6 @@ type TransactionTab = 'buy' | 'sell'
 
 function AddTransactionModal({ item, transaction, transactions = [], onClose, onSave }: AddTransactionModalProps) {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
-  const { twelveDataApiKey } = useApiKeys()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch')
   const isEditing = !!transaction
@@ -2463,14 +2457,9 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
             setIsLoadingPrice(false)
           })
       }
-    } else if (isStockCategory && item.name && !twelveDataApiKey) {
-      // Show warning if API key is not configured
-      if (!isEditing || !pricePerItemChf) {
-        setPriceError('Twelve Data API key not configured. Please set it in Settings to fetch prices automatically.')
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStockCategory, item.name, isEditing, twelveDataApiKey])
+  }, [isStockCategory, item.name, isEditing])
 
   const totalChf = useMemo(() => {
     const parsedAmount = Number(amount)

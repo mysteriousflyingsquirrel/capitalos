@@ -10,7 +10,6 @@
  *   baseCurrency: string,
  *   themeId: string,
  *   apiKeys: {
- *     twelveDataApiKey?: string,
  *     hyperliquidWalletAddress?: string,
  *     mexcApiKey?: string,
  *     mexcSecretKey?: string
@@ -36,7 +35,6 @@ function getUserSettingsDocPath(uid: string) {
 }
 
 export interface ApiKeys {
-  twelveDataApiKey?: string | null
   hyperliquidWalletAddress?: string | null
   mexcApiKey?: string | null
   mexcSecretKey?: string | null

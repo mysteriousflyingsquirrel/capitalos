@@ -39,7 +39,6 @@ interface NetWorthSnapshot {
 }
 
 type ApiKeys = {
-  twelveDataApiKey?: string | null
   hyperliquidWalletAddress?: string | null
   mexcApiKey?: string | null
   mexcSecretKey?: string | null
@@ -267,7 +266,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : null
     const effectiveUsdToChf = (usdToChfRate && usdToChfRate > 0) ? usdToChfRate : fallbackUsdToChf
 
-    // Fetch stock prices via Twelve Data market API
+    // Fetch stock prices via Yahoo Finance market API
     const baseUrl = getBaseUrl(req)
     const authHeader = req.headers.authorization || ''
     const stockPrices = uniqueStockTickers.length > 0 && baseUrl

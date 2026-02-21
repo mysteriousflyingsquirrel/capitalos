@@ -62,7 +62,7 @@ export interface ItemValuation {
   /** Unrealized P&L (if available) */
   unrealizedPnl?: number
   /** Price source */
-  priceSource?: 'cryptocompare' | 'twelve-data' | 'transaction' | 'manual'
+  priceSource?: 'cryptocompare' | 'yahoo' | 'transaction' | 'manual'
 }
 
 // ============================================================================
@@ -98,7 +98,7 @@ export interface QuotesUsed {
   /** Sources used */
   sources: {
     crypto: 'cryptocompare' | 'cache'
-    market: 'twelve-data' | 'cache'
+    market: 'yahoo' | 'cache'
     fx: 'exchange-api-jsdelivr' | 'exchange-api-pages-dev' | 'cache' | 'fallback'
   }
 }
@@ -146,7 +146,7 @@ export interface ValuationOptions {
   fxRates?: FxSnapshot
   /** USD to CHF rate (optional, will use from fxRates or fetch) */
   usdToChfRate?: number | null
-  /** @deprecated Market prices are fetched via Twelve Data proxy, no key needed client-side */
+  /** @deprecated Market prices are fetched via Yahoo Finance proxy, no key needed client-side */
   rapidApiKey?: string | null
   /** Convert function (from CurrencyContext) */
   convert?: (amount: number, from: CurrencyCode) => number

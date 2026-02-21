@@ -1,7 +1,7 @@
 /**
  * Market Price Service (SSOT)
  *
- * Delegates to DailyPriceService which fetches from Twelve Data via API proxy.
+ * Delegates to DailyPriceService which fetches from Yahoo Finance via API proxy.
  * This service maintains backward compatibility with the old API.
  */
 
@@ -28,7 +28,7 @@ export async function getPrice(symbol: string, _apiKey?: string): Promise<Market
     symbol: normalized,
     priceUsd: priceData.price,
     timestamp: priceData.marketTime || Date.now(),
-    source: priceData.isStale ? 'cache' : 'twelve-data',
+    source: priceData.isStale ? 'cache' : 'yahoo',
   }
 }
 
@@ -52,7 +52,7 @@ export async function getPrices(
         symbol,
         priceUsd: priceData.price,
         timestamp: priceData.marketTime || Date.now(),
-        source: priceData.isStale ? 'cache' : 'twelve-data',
+        source: priceData.isStale ? 'cache' : 'yahoo',
       })
     } else {
       console.warn(`[MarketPriceService] No price for ${symbol}`)
@@ -85,6 +85,6 @@ export async function getMarketPrices(
   return {
     prices,
     timestamp: Date.now(),
-    source: 'twelve-data',
+    source: 'yahoo',
   }
 }
