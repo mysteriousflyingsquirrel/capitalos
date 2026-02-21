@@ -89,24 +89,19 @@ function Settings() {
   // Get other currencies (all except base)
   const otherCurrencies = supportedCurrencies.filter(c => c !== baseCurrency)
 
-  // Report generation handlers
-  const handleCryptoTaxReport = async () => {
+  const handleCryptoTaxReport = async (detailed: boolean = false) => {
     if (!uid || !convert || !selectedYear) return
-    
+
     setGeneratingTaxReport(true)
     try {
-      // Generate the report using the selected year
-      const report = await generateCryptoTaxReport(selectedYear, uid, convert)
-      
+      const report = await generateCryptoTaxReport(selectedYear, uid, convert, { detailed })
+
       if (!report) {
         alert('Report could not be generated. Please try again later.')
         return
       }
-      
-      // Generate and download PDF
-      const userName = user?.email || user?.displayName || undefined
-      generateCryptoTaxReportPDF(report, userName)
-      
+
+      generateCryptoTaxReportPDF(report)
     } catch (error) {
       console.error('Failed to generate tax report:', error)
       alert('Error generating tax report. Please try again later.')
@@ -901,14 +896,23 @@ function Settings() {
               )}
             </div>
 
-            {/* Generate Report Button */}
-            <button
-              onClick={handleCryptoTaxReport}
-              disabled={generatingTaxReport || !uid || !selectedYear || availableYears.length === 0}
-              className="w-full py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {generatingTaxReport ? 'Generating PDF...' : 'Generate Crypto Tax Report (CH)'}
-            </button>
+            {/* Generate Report Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleCryptoTaxReport(false)}
+                disabled={generatingTaxReport || !uid || !selectedYear || availableYears.length === 0}
+                className="flex-1 py-2 px-4 bg-gradient-to-r from-[#DAA520] to-[#B87333] hover:from-[#F0C850] hover:to-[#D4943F] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generatingTaxReport ? 'Generating...' : 'Tax Report (CH)'}
+              </button>
+              <button
+                onClick={() => handleCryptoTaxReport(true)}
+                disabled={generatingTaxReport || !uid || !selectedYear || availableYears.length === 0}
+                className="flex-1 py-2 px-4 bg-gradient-to-r from-[#B87333] to-[#DAA520] hover:from-[#D4943F] hover:to-[#F0C850] text-[#050A1A] text-[0.567rem] md:text-xs font-semibold rounded-full transition-all duration-200 shadow-card hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generatingTaxReport ? 'Generating...' : 'Detailed Report (CH)'}
+              </button>
+            </div>
           </div>
         </div>
 

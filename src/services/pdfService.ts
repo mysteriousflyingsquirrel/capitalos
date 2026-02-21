@@ -1,220 +1,218 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { CryptoTaxReport, CoinReport } from './cryptoTaxReportService'
-import { formatMoney } from '../lib/currency'
 
-/**
- * Format number with Swiss formatting (thousands separator: ')
- */
-function formatNumberSwiss(value: number, decimals: number = 2): string {
+function fmt(value: number, decimals: number = 2): string {
   return new Intl.NumberFormat('de-CH', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(value)
 }
 
-/**
- * Format date for display (DD.MM.YYYY)
- */
-function formatDateForPDF(dateString: string): string {
+function fmtDate(dateString: string): string {
   try {
     const date = new Date(dateString)
     if (isNaN(date.getTime())) {
-      // Try parsing as YYYY-MM-DD
       const parts = dateString.split('-')
-      if (parts.length === 3) {
-        return `${parts[2]}.${parts[1]}.${parts[0]}`
-      }
+      if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`
       return dateString
     }
-    const day = date.getDate().toString().padStart(2, '0')
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const year = date.getFullYear()
-    return `${day}.${month}.${year}`
+    const d = date.getDate().toString().padStart(2, '0')
+    const m = (date.getMonth() + 1).toString().padStart(2, '0')
+    return `${d}.${m}.${date.getFullYear()}`
   } catch {
     return dateString
   }
 }
 
-/**
- * Generate PDF for crypto tax report
- */
-export function generateCryptoTaxReportPDF(
-  report: CryptoTaxReport,
-  userName?: string
-): void {
-  const doc = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4'
-  })
-  
-  // Title section
-  doc.setFontSize(20)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Swiss Crypto Tax Report', 14, 20)
-  
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`Steuerjahr ${report.year}`, 14, 30)
-  
-  if (userName) {
-    doc.setFontSize(10)
-    doc.text(`Benutzer: ${userName}`, 14, 36)
+function parseDateForSort(formatted: string): number {
+  const parts = formatted.split('.')
+  if (parts.length === 3) {
+    return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime() || 0
   }
-  
-  // Prepare table data
-  const tableData: any[] = []
-  let totalBalanceStart = 0
-  let totalBuys = 0
-  let totalSells = 0
-  let totalBalanceEnd = 0
-  
-  report.coins.forEach(coin => {
-    // Add totals
-    totalBalanceStart += coin.balanceStartOfYear.valueChf
-    totalBuys += coin.buys.reduce((sum, buy) => sum + buy.totalChf, 0)
-    totalSells += coin.sells.reduce((sum, sell) => sum + sell.totalChf, 0)
-    totalBalanceEnd += coin.balanceEndOfYear.valueChf
-    
-    // Find the maximum number of transactions (buys or sells) to determine row span
-    const maxTransactions = Math.max(coin.buys.length, coin.sells.length, 1)
-    
-    // Create rows for this coin (one row per transaction, or one row if no transactions)
-    for (let i = 0; i < maxTransactions; i++) {
-      const row: any[] = []
-      
-      // Coin name (only in first row, will span vertically)
-      if (i === 0) {
-        row.push({ content: coin.coin, rowSpan: maxTransactions })
-      }
-      
-      // Bestand 1.1 (only in first row, will span vertically)
-      if (i === 0) {
-        row.push(
-          { content: formatNumberSwiss(coin.balanceStartOfYear.amount, 2), rowSpan: maxTransactions },
-          { content: formatNumberSwiss(coin.balanceStartOfYear.priceChf), rowSpan: maxTransactions },
-          { content: formatNumberSwiss(coin.balanceStartOfYear.valueChf), rowSpan: maxTransactions }
-        )
-      }
-      
-      // Kauf (4 subcolumns: Datum, Stk, Kurs CHF, Steuerwert CHF)
-      if (i < coin.buys.length) {
-        const buy = coin.buys[i]
-        row.push(
-          formatDateForPDF(buy.date),
-          formatNumberSwiss(buy.amount, 2),
-          formatNumberSwiss(buy.priceChf),
-          formatNumberSwiss(buy.totalChf)
-        )
-      } else {
-        row.push('', '', '', '') // Empty if no more buys
-      }
-      
-      // Verkauf (4 subcolumns: Datum, Stk, Kurs CHF, Steuerwert CHF)
-      if (i < coin.sells.length) {
-        const sell = coin.sells[i]
-        row.push(
-          formatDateForPDF(sell.date),
-          formatNumberSwiss(sell.amount, 2),
-          formatNumberSwiss(sell.priceChf),
-          formatNumberSwiss(sell.totalChf)
-        )
-      } else {
-        row.push('', '', '', '') // Empty if no more sells
-      }
-      
-      // Bestand 31.12 (only in first row, will span vertically)
-      if (i === 0) {
-        row.push(
-          { content: formatNumberSwiss(coin.balanceEndOfYear.amount, 2), rowSpan: maxTransactions },
-          { content: formatNumberSwiss(coin.balanceEndOfYear.priceChf), rowSpan: maxTransactions },
-          { content: formatNumberSwiss(coin.balanceEndOfYear.valueChf), rowSpan: maxTransactions }
-        )
-      }
-      
-      tableData.push(row)
-    }
-  })
-  
-  // Add total row
-  tableData.push([
-    { content: 'Total', styles: { fontStyle: 'bold' } },
-    '', // Empty for Stk
-    '', // Empty for Kurs CHF
-    { content: formatNumberSwiss(totalBalanceStart), styles: { fontStyle: 'bold' } },
-    '', // Empty for Datum
-    '', // Empty for Stk
-    '', // Empty for Kurs CHF
-    { content: formatNumberSwiss(totalBuys), styles: { fontStyle: 'bold' } },
-    '', // Empty for Datum
-    '', // Empty for Stk
-    '', // Empty for Kurs CHF
-    { content: formatNumberSwiss(totalSells), styles: { fontStyle: 'bold' } },
-    '', // Empty for Stk
-    '', // Empty for Kurs CHF
-    { content: formatNumberSwiss(totalBalanceEnd), styles: { fontStyle: 'bold' } },
-  ])
-  
-  // Create table with nested headers
-  autoTable(doc, {
-    head: [
-      [
-        { content: 'Coin', rowSpan: 2 },
-        { content: 'Bestand 1.1', colSpan: 3 },
-        { content: 'Kauf', colSpan: 4 },
-        { content: 'Verkauf', colSpan: 4 },
-        { content: 'Bestand 31.12', colSpan: 3 },
-      ],
-      [
-        'Stk',
-        'Kurs CHF',
-        'Steuerwert CHF',
-        'Datum',
-        'Stk',
-        'Kurs CHF',
-        'Steuerwert CHF',
-        'Datum',
-        'Stk',
-        'Kurs CHF',
-        'Steuerwert CHF',
-        'Stk',
-        'Kurs CHF',
-        'Steuerwert CHF',
-      ],
-    ],
-    body: tableData,
-    startY: 40,
-    styles: {
-      fontSize: 6,
-      cellPadding: 1.5,
-    },
-    headStyles: {
-      fillColor: [218, 165, 32], // Gold color
-      textColor: [5, 10, 26], // Dark blue
-      fontStyle: 'bold',
-    },
-    columnStyles: {
-      0: { cellWidth: 14.44 }, // Coin (18.05 * 0.8)
-      1: { cellWidth: 16.38 }, // Bestand 1.1 - Stk (14.89 * 1.1)
-      2: { cellWidth: 18.05 }, // Bestand 1.1 - Kurs CHF (19 * 0.95)
-      3: { cellWidth: 20.30 }, // Bestand 1.1 - Steuerwert CHF (22.56 * 0.9)
-      4: { cellWidth: 18.05 }, // Kauf - Datum (19 * 0.95)
-      5: { cellWidth: 16.38 }, // Kauf - Stk (14.89 * 1.1)
-      6: { cellWidth: 18.05 }, // Kauf - Kurs CHF (19 * 0.95)
-      7: { cellWidth: 20.30 }, // Kauf - Steuerwert CHF (22.56 * 0.9)
-      8: { cellWidth: 18.05 }, // Verkauf - Datum (19 * 0.95)
-      9: { cellWidth: 16.38 }, // Verkauf - Stk (14.89 * 1.1)
-      10: { cellWidth: 18.05 }, // Verkauf - Kurs CHF (19 * 0.95)
-      11: { cellWidth: 20.30 }, // Verkauf - Steuerwert CHF (22.56 * 0.9)
-      12: { cellWidth: 16.38 }, // Bestand 31.12 - Stk (14.89 * 1.1)
-      13: { cellWidth: 18.05 }, // Bestand 31.12 - Kurs CHF (19 * 0.95)
-      14: { cellWidth: 20.30 }, // Bestand 31.12 - Steuerwert CHF (22.56 * 0.9)
-    },
-  })
-  
-  // Save PDF
-  const filename = `crypto-tax-report-CH-${report.year}.pdf`
-  doc.save(filename)
+  return 0
 }
 
+const TYPE_ORDER: Record<string, number> = { Kauf: 0, Verkauf: 1, Anpassung: 2 }
+
+const GOLD: [number, number, number] = [218, 165, 32]
+const DARK: [number, number, number] = [5, 10, 26]
+const HEAD_STYLES = { fillColor: GOLD, textColor: DARK, fontStyle: 'bold' as const }
+const STYLES = { fontSize: 7, cellPadding: 2 }
+
+function getY(doc: jsPDF): number {
+  return (doc as any).lastAutoTable?.finalY ?? 40
+}
+
+function ensureSpace(doc: jsPDF, y: number, needed: number): number {
+  if (y + needed > doc.internal.pageSize.getHeight() - 15) {
+    doc.addPage()
+    return 15
+  }
+  return y
+}
+
+export function generateCryptoTaxReportPDF(report: CryptoTaxReport): void {
+  const detailed = report.coins.some(c => c.adjustments && c.adjustments.length > 0)
+  const endDate = report.endDate
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const pw = doc.internal.pageSize.getWidth()
+
+  // --- Title ---
+  doc.setFontSize(18)
+  doc.setFont('helvetica', 'bold')
+  doc.text(detailed ? 'Swiss Crypto Tax Report (Detailed)' : 'Swiss Crypto Tax Report', pw / 2, 20, { align: 'center' })
+
+  doc.setFontSize(12)
+  doc.setFont('helvetica', 'normal')
+  doc.text(report.isCurrentYear ? `Steuerjahr ${report.year} (YTD)` : `Steuerjahr ${report.year}`, pw / 2, 28, { align: 'center' })
+
+  let y = 36
+
+  // --- Bestand 1.1 ---
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Bestand 1.1', 14, y)
+  y += 3
+
+  let totalStartValue = 0
+  const startBody: any[][] = report.coins.map(c => {
+    totalStartValue += c.balanceStartOfYear.valueChf
+    return [c.coin, fmt(c.balanceStartOfYear.amount, 4), fmt(c.balanceStartOfYear.priceChf), fmt(c.balanceStartOfYear.valueChf)]
+  })
+  startBody.push([
+    { content: 'Total', styles: { fontStyle: 'bold' } },
+    '', '',
+    { content: fmt(totalStartValue), styles: { fontStyle: 'bold' } },
+  ])
+
+  autoTable(doc, {
+    head: [['Asset', 'Stk', `Kurs CHF per 1.1`, 'Steuerwert CHF']],
+    body: startBody,
+    startY: y,
+    tableWidth: 180,
+    styles: STYLES,
+    headStyles: HEAD_STYLES,
+    columnStyles: {
+      0: { cellWidth: 30 },
+      3: { halign: 'right' },
+    },
+  })
+  y = getY(doc) + 8
+
+  // --- Bestand end ---
+  y = ensureSpace(doc, y, 20 + report.coins.length * 8)
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`Bestand ${endDate}`, 14, y)
+  y += 3
+
+  let totalEndValue = 0
+  const endBody: any[][] = report.coins.map(c => {
+    totalEndValue += c.balanceEndOfYear.valueChf
+    return [c.coin, fmt(c.balanceEndOfYear.amount, 4), fmt(c.balanceEndOfYear.priceChf), fmt(c.balanceEndOfYear.valueChf)]
+  })
+  endBody.push([
+    { content: 'Total', styles: { fontStyle: 'bold' } },
+    '', '',
+    { content: fmt(totalEndValue), styles: { fontStyle: 'bold' } },
+  ])
+
+  autoTable(doc, {
+    head: [['Asset', 'Stk', `Kurs CHF per ${endDate}`, 'Steuerwert CHF']],
+    body: endBody,
+    startY: y,
+    tableWidth: 180,
+    styles: STYLES,
+    headStyles: HEAD_STYLES,
+    columnStyles: {
+      0: { cellWidth: 30 },
+      3: { halign: 'right' },
+    },
+  })
+  y = getY(doc) + 8
+
+  // --- Transaktionen ---
+  interface TxRow {
+    asset: string
+    type: string
+    date: string
+    stk: string
+    kurs: string
+    value: string
+    comment: string
+  }
+
+  const allRows: TxRow[] = []
+
+  for (const coin of report.coins) {
+    for (const tx of coin.buys) {
+      allRows.push({ asset: coin.coin, type: 'Kauf', date: fmtDate(tx.date), stk: fmt(tx.amount, 4), kurs: fmt(tx.priceChf), value: fmt(tx.totalChf), comment: '' })
+    }
+    for (const tx of coin.sells) {
+      allRows.push({ asset: coin.coin, type: 'Verkauf', date: fmtDate(tx.date), stk: fmt(tx.amount, 4), kurs: fmt(tx.priceChf), value: fmt(tx.totalChf), comment: '' })
+    }
+    if (detailed && coin.adjustments) {
+      for (const a of coin.adjustments) {
+        allRows.push({ asset: coin.coin, type: 'Anpassung', date: fmtDate(a.date), stk: fmt(a.amount, 4), kurs: '', value: '', comment: a.reason || '' })
+      }
+    }
+  }
+
+  allRows.sort((a, b) => {
+    const assetCmp = a.asset.localeCompare(b.asset)
+    if (assetCmp !== 0) return assetCmp
+    const typeCmp = (TYPE_ORDER[a.type] ?? 9) - (TYPE_ORDER[b.type] ?? 9)
+    if (typeCmp !== 0) return typeCmp
+    return parseDateForSort(a.date) - parseDateForSort(b.date)
+  })
+
+  // Build body with asset grouping (asset name only on first row of group)
+  const txBody: any[][] = []
+  let lastAsset = ''
+
+  for (const row of allRows) {
+    const showAsset = row.asset !== lastAsset
+    lastAsset = row.asset
+    txBody.push([showAsset ? row.asset : '', row.type, row.date, row.stk, row.kurs, row.value, row.comment])
+  }
+
+  if (txBody.length === 0) {
+    txBody.push([{ content: 'Keine Transaktionen', colSpan: 7, styles: { halign: 'center', fontStyle: 'italic', textColor: [120, 120, 120] } }])
+  }
+
+  y = ensureSpace(doc, y, 30)
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Transaktionen', 14, y)
+  y += 3
+
+  autoTable(doc, {
+    head: [['Asset', 'Typ', 'Datum', 'Stk', 'Kurs CHF', 'Steuerwert CHF', 'Kommentar']],
+    body: txBody,
+    startY: y,
+    tableWidth: 180,
+    styles: STYLES,
+    headStyles: HEAD_STYLES,
+    columnStyles: {
+      0: { cellWidth: 22 },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 22 },
+      3: { cellWidth: 24 },
+      4: { cellWidth: 24 },
+      5: { cellWidth: 28, halign: 'right' },
+      6: { cellWidth: 38 },
+    },
+    didParseCell: (data: any) => {
+      if (data.section !== 'body') return
+      if (data.column.index !== 0) return
+      if (data.cell.raw && typeof data.cell.raw === 'string' && data.cell.raw.length > 0) {
+        data.cell.styles.fontStyle = 'bold'
+      }
+    },
+  })
+
+  const suffix = detailed ? '-detailed' : ''
+  doc.save(`crypto-tax-report-CH-${report.year}${suffix}.pdf`)
+}

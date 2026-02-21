@@ -9,6 +9,12 @@ export interface CryptoTransaction {
   totalChf: number
 }
 
+export interface AdjustmentTransaction {
+  date: string
+  amount: number
+  reason?: string
+}
+
 export interface CoinReport {
   coin: string
   coinName?: string
@@ -19,6 +25,7 @@ export interface CoinReport {
   }
   buys: CryptoTransaction[]
   sells: CryptoTransaction[]
+  adjustments?: AdjustmentTransaction[]
   balanceEndOfYear: {
     amount: number
     priceChf: number
@@ -28,12 +35,15 @@ export interface CoinReport {
 
 export interface CryptoTaxReport {
   year: number
+  isCurrentYear: boolean
+  endDate: string
   coins: CoinReport[]
 }
 
 /**
- * Get all years with crypto activity
- * Activity = at least one buy/sell transaction (only transactions, not snapshots)
+ * Get all years with crypto activity.
+ * Includes any year with a BUY/SELL/ADJUSTMENT transaction,
+ * plus the current year if the user holds any crypto.
  */
 export async function getYearsWithCryptoActivity(uid?: string): Promise<number[]> {
   const [items, transactions] = await Promise.all([
@@ -42,32 +52,27 @@ export async function getYearsWithCryptoActivity(uid?: string): Promise<number[]
   ])
 
   const cryptoItems = items.filter(item => item.category === 'Crypto')
+  const cryptoItemIds = new Set(cryptoItems.map(i => i.id))
   const years = new Set<number>()
 
-  // Get years from trade-relevant transactions only (BUY/SELL, exclude ADJUSTMENT)
   transactions.forEach(tx => {
-    const item = cryptoItems.find(i => i.id === tx.itemId)
-    if (item) {
-      // Include trade-relevant transactions: BUY, SELL
-      // Exclude non-trade: ADJUSTMENT
-      const isTradeRelevant = 
-        (tx.cryptoType === 'BUY' || tx.cryptoType === 'SELL') ||
-        (!tx.cryptoType && (tx.side === 'buy' || tx.side === 'sell')) // Legacy transactions
-      
-      if (isTradeRelevant) {
-        const date = new Date(tx.date)
-        if (!isNaN(date.getTime())) {
-          years.add(date.getFullYear())
-        }
-      }
+    if (!cryptoItemIds.has(tx.itemId)) return
+    const date = new Date(tx.date)
+    if (!isNaN(date.getTime())) {
+      years.add(date.getFullYear())
     }
   })
 
-  return Array.from(years).sort((a, b) => b - a) // Newest first
+  if (cryptoItems.length > 0) {
+    years.add(new Date().getFullYear())
+  }
+
+  return Array.from(years).sort((a, b) => b - a)
 }
 
 /**
- * Calculate coin balance at a specific timestamp
+ * Calculate coin balance at a specific timestamp.
+ * Handles cryptoType (BUY/SELL/ADJUSTMENT) and legacy side field.
  */
 function calculateBalanceAtTimestamp(
   itemId: string,
@@ -80,7 +85,12 @@ function calculateBalanceAtTimestamp(
       const txDate = new Date(tx.date)
       return !isNaN(txDate.getTime()) && txDate.getTime() <= timestamp
     })
-    .reduce((sum, tx) => sum + (tx.side === 'buy' ? 1 : -1) * tx.amount, 0)
+    .reduce((sum, tx) => {
+      if (tx.cryptoType === 'ADJUSTMENT') return sum + tx.amount
+      if (tx.cryptoType === 'BUY' || (!tx.cryptoType && tx.side === 'buy')) return sum + tx.amount
+      if (tx.cryptoType === 'SELL' || (!tx.cryptoType && tx.side === 'sell')) return sum - tx.amount
+      return sum
+    }, 0)
 }
 
 /**
@@ -200,30 +210,44 @@ async function fetchHistoricalPrice(
   }
 }
 
+export interface TaxReportOptions {
+  detailed?: boolean
+}
+
 /**
- * Generate crypto tax report for a specific year
+ * Generate crypto tax report for a specific year.
+ * When detailed is true, ADJUSTMENT transactions are included.
+ * For the current year, the end date is capped to today.
  */
 export async function generateCryptoTaxReport(
   year: number,
   uid: string | undefined,
-  convert: (amount: number, from: CurrencyCode) => number
+  convert: (amount: number, from: CurrencyCode) => number,
+  options?: TaxReportOptions,
 ): Promise<CryptoTaxReport> {
+  const detailed = options?.detailed ?? false
   const [items, transactions] = await Promise.all([
     loadNetWorthItems<NetWorthItem>([], uid),
     loadNetWorthTransactions<NetWorthTransaction>([], uid),
   ])
 
   const cryptoItems = items.filter(item => item.category === 'Crypto')
-  
+
+  const now = new Date()
+  const isCurrentYear = year === now.getFullYear()
   const yearStart = new Date(year, 0, 1, 0, 0, 0, 0).getTime()
-  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999).getTime()
+  const yearEnd = isCurrentYear ? now.getTime() : new Date(year, 11, 31, 23, 59, 59, 999).getTime()
+
+  const endDate = isCurrentYear
+    ? `${now.getDate().toString().padStart(2, '0')}.${(now.getMonth() + 1).toString().padStart(2, '0')}`
+    : '31.12'
 
   const coinMap = new Map<string, { item: NetWorthItem; transactions: NetWorthTransaction[] }>()
 
   cryptoItems.forEach(item => {
     const itemTransactions = transactions.filter(tx => tx.itemId === item.id)
     const ticker = item.name.trim().toUpperCase()
-    
+
     if (!coinMap.has(ticker)) {
       coinMap.set(ticker, { item, transactions: [] })
     }
@@ -238,20 +262,21 @@ export async function generateCryptoTaxReport(
       return !isNaN(txDate.getTime()) && txDate.getTime() >= yearStart && txDate.getTime() <= yearEnd
     })
 
-    // Filter for trade-relevant transactions only (BUY/SELL, exclude ADJUSTMENT)
-    const tradeRelevantTransactions = yearTransactions.filter(tx => {
-      if (tx.cryptoType) {
-        return tx.cryptoType === 'BUY' || tx.cryptoType === 'SELL'
-      }
-      // Legacy transactions
+    const tradeTransactions = yearTransactions.filter(tx => {
+      if (tx.cryptoType) return tx.cryptoType === 'BUY' || tx.cryptoType === 'SELL'
       return tx.side === 'buy' || tx.side === 'sell'
     })
+
+    const adjustmentTransactions = detailed
+      ? yearTransactions.filter(tx => tx.cryptoType === 'ADJUSTMENT')
+      : []
 
     const balanceStart = calculateBalanceAtTimestamp(item.id, coinTransactions, yearStart)
     const balanceEnd = calculateBalanceAtTimestamp(item.id, coinTransactions, yearEnd)
 
-    const hasActivity = balanceStart !== 0 || balanceEnd !== 0 || tradeRelevantTransactions.length > 0
-    
+    const hasActivity = balanceStart !== 0 || balanceEnd !== 0
+      || tradeTransactions.length > 0 || adjustmentTransactions.length > 0
+
     if (!hasActivity) continue
 
     const [priceStart, priceEnd] = await Promise.all([
@@ -262,43 +287,42 @@ export async function generateCryptoTaxReport(
     const buys: CryptoTransaction[] = []
     const sells: CryptoTransaction[] = []
 
-    for (const tx of tradeRelevantTransactions) {
-      const txDate = new Date(tx.date)
-      const txTimestamp = txDate.getTime()
-      
-      // Handle BUY/SELL transactions (including legacy)
+    for (const tx of tradeTransactions) {
+      const txTimestamp = new Date(tx.date).getTime()
       const isBuy = tx.cryptoType === 'BUY' || (!tx.cryptoType && tx.side === 'buy')
-      const isSell = tx.cryptoType === 'SELL' || (!tx.cryptoType && tx.side === 'sell')
-      
-      if (isBuy || isSell) {
-        const txPriceChf = await fetchHistoricalPrice(ticker, txTimestamp, convert)
-        
-        let totalChf = 0
-        if (tx.pricePerItem !== undefined && tx.currency) {
-          totalChf = convert(tx.amount * tx.pricePerItem, tx.currency as CurrencyCode)
-        } else if (tx.pricePerItemChf !== undefined && tx.pricePerItemChf !== 1 && tx.pricePerItemChf !== 0) {
-          totalChf = tx.amount * tx.pricePerItemChf
-        } else {
-          totalChf = tx.amount * txPriceChf
-        }
 
-        const cryptoTx: CryptoTransaction = {
-          date: tx.date,
-          amount: tx.amount,
-          priceChf: txPriceChf,
-          totalChf,
-        }
+      const txPriceChf = await fetchHistoricalPrice(ticker, txTimestamp, convert)
 
-        if (isBuy) {
-          buys.push(cryptoTx)
-        } else {
-          sells.push(cryptoTx)
-        }
+      let totalChf = 0
+      if (tx.pricePerItem !== undefined && tx.currency) {
+        totalChf = convert(tx.amount * tx.pricePerItem, tx.currency as CurrencyCode)
+      } else if (tx.pricePerItemChf !== undefined && tx.pricePerItemChf !== 1 && tx.pricePerItemChf !== 0) {
+        totalChf = tx.amount * tx.pricePerItemChf
+      } else {
+        totalChf = tx.amount * txPriceChf
       }
+
+      const cryptoTx: CryptoTransaction = {
+        date: tx.date,
+        amount: tx.amount,
+        priceChf: txPriceChf,
+        totalChf,
+      }
+
+      if (isBuy) buys.push(cryptoTx)
+      else sells.push(cryptoTx)
     }
 
     buys.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     sells.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+    const adjustments: AdjustmentTransaction[] = adjustmentTransactions
+      .map(tx => ({
+        date: tx.date,
+        amount: tx.amount,
+        reason: tx.adjustmentReason || undefined,
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
     coinReports.push({
       coin: ticker,
@@ -310,6 +334,7 @@ export async function generateCryptoTaxReport(
       },
       buys,
       sells,
+      ...(detailed ? { adjustments } : {}),
       balanceEndOfYear: {
         amount: balanceEnd,
         priceChf: priceEnd,
@@ -322,6 +347,8 @@ export async function generateCryptoTaxReport(
 
   return {
     year,
+    isCurrentYear,
+    endDate,
     coins: coinReports,
   }
 }
