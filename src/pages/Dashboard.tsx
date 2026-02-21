@@ -18,7 +18,6 @@ import ToastContainer from '../components/ToastContainer'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useIncognito } from '../contexts/IncognitoContext'
-import { useApiKeys } from '../contexts/ApiKeysContext'
 import { useData } from '../contexts/DataContext'
 import { formatMoney } from '../lib/currency'
 import { formatDate } from '../lib/dateFormat'
@@ -29,7 +28,7 @@ import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from '../
 import type { InflowItem, OutflowItem } from './Cashflow'
 import { fetchCryptoData } from '../services/cryptoCompareService'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
-import { getDailyPricesMap, categoryUsesYahoo } from '../services/market-data/DailyPriceService'
+import { getDailyPricesMap, categoryUsesTwelveData } from '../services/market-data/DailyPriceService'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -205,7 +204,6 @@ function Dashboard() {
   const [timeFrame, setTimeFrame] = useState<'YTD' | '6M' | '1Y' | '5Y' | 'MAX'>('MAX')
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const { baseCurrency, convert, exchangeRates } = useCurrency()
-  const { rapidApiKey } = useApiKeys()
   const { toasts, addToast, dismissToast } = useToast()
 
   // Load data from DataContext (includes merged Perpetuals data)
@@ -289,7 +287,7 @@ function Dashboard() {
     }
     
     try {
-      const stockItems = netWorthItems.filter((item: NetWorthItem) => categoryUsesYahoo(item.category))
+      const stockItems = netWorthItems.filter((item: NetWorthItem) => categoryUsesTwelveData(item.category))
       
       if (stockItems.length === 0) {
         return

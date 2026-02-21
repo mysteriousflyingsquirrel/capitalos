@@ -33,8 +33,8 @@ function Settings() {
   const { uid, user } = useAuth()
   const { themeId, setThemeId, isLoading: themeLoading } = useTheme()
   const { 
-    rapidApiKey, 
-    setRapidApiKey, 
+    twelveDataApiKey, 
+    setTwelveDataApiKey, 
     hyperliquidWalletAddress, 
     setHyperliquidWalletAddress, 
     mexcApiKey,
@@ -63,7 +63,7 @@ function Settings() {
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const [loadingYears, setLoadingYears] = useState(false)
   // API Keys
-  const [rapidApiKeyInput, setRapidApiKeyInput] = useState('')
+  const [twelveDataApiKeyInput, setTwelveDataApiKeyInput] = useState('')
   const [hyperliquidWalletAddressInput, setHyperliquidWalletAddressInput] = useState('')
   const [mexcApiKeyInput, setMexcApiKeyInput] = useState('')
   const [mexcSecretKeyInput, setMexcSecretKeyInput] = useState('')
@@ -71,7 +71,7 @@ function Settings() {
   const [apiKeyError, setApiKeyError] = useState<string | null>(null)
   const [apiKeySuccess, setApiKeySuccess] = useState(false)
   // Visibility toggles for API key fields
-  const [showRapidApiKey, setShowRapidApiKey] = useState(false)
+  const [showTwelveDataApiKey, setShowTwelveDataApiKey] = useState(false)
   const [showHyperliquidWalletAddress, setShowHyperliquidWalletAddress] = useState(false)
   const [showMexcApiKey, setShowMexcApiKey] = useState(false)
   const [showMexcSecretKey, setShowMexcSecretKey] = useState(false)
@@ -246,12 +246,12 @@ function Settings() {
   // Load API keys into inputs when they're loaded
   useEffect(() => {
     if (!apiKeysLoading) {
-      setRapidApiKeyInput(rapidApiKey || '')
+      setTwelveDataApiKeyInput(twelveDataApiKey || '')
       setHyperliquidWalletAddressInput(hyperliquidWalletAddress || '')
       setMexcApiKeyInput(mexcApiKey || '')
       setMexcSecretKeyInput(mexcSecretKey || '')
     }
-  }, [rapidApiKey, hyperliquidWalletAddress, mexcApiKey, mexcSecretKey, apiKeysLoading])
+  }, [twelveDataApiKey, hyperliquidWalletAddress, mexcApiKey, mexcSecretKey, apiKeysLoading])
 
   // Check biometric availability
   useEffect(() => {
@@ -441,7 +441,7 @@ function Settings() {
     try {
       // Save all keys (including empty ones to clear them)
       // Save each key individually to ensure they all get saved even if some are empty
-      await setRapidApiKey(rapidApiKeyInput || '')
+      await setTwelveDataApiKey(twelveDataApiKeyInput || '')
       await setHyperliquidWalletAddress(hyperliquidWalletAddressInput || '')
       await setMexcApiKey(mexcApiKeyInput || '')
       await setMexcSecretKey(mexcSecretKeyInput || '')
@@ -647,18 +647,18 @@ function Settings() {
           <Heading level={2} className="mb-4">API Keys</Heading>
 
           <form onSubmit={handleSaveAllApiKeys} className="space-y-6">
-            {/* RapidAPI Group */}
+            {/* Twelve Data Group */}
             <div className="space-y-4">
-              <Heading level={3} className="text-text-secondary mb-2">RapidAPI</Heading>
+              <Heading level={3} className="text-text-secondary mb-2">Twelve Data</Heading>
               <p className="text-text-muted text-[0.567rem] md:text-xs mb-3">
-                Required for fetching stock, index fund, and commodity prices. Get your key from{' '}
+                Required for fetching stock, index fund, and commodity prices. Get your free API key from{' '}
                 <a 
-                  href="https://rapidapi.com/apidojo/api/yahoo-finance1" 
+                  href="https://twelvedata.com" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="text-accent-blue hover:underline"
                 >
-                  RapidAPI
+                  Twelve Data
                 </a>
                 .
               </p>
@@ -668,10 +668,10 @@ function Settings() {
                 </label>
                 <div className="relative">
                   <input
-                    type={showRapidApiKey ? "text" : "password"}
-                    value={rapidApiKeyInput}
-                    onChange={(e) => setRapidApiKeyInput(e.target.value)}
-                    placeholder="Enter your RapidAPI key"
+                    type={showTwelveDataApiKey ? "text" : "password"}
+                    value={twelveDataApiKeyInput}
+                    onChange={(e) => setTwelveDataApiKeyInput(e.target.value)}
+                    placeholder="Enter your Twelve Data API key"
                     className="w-full bg-bg-surface-2 border border-border-subtle rounded-input px-3 py-2 pr-10 text-text-primary text-xs md:text-sm focus:outline-none focus:border-accent-blue font-mono"
                     disabled={apiKeysLoading || apiKeySaving}
                     autoComplete="off"
@@ -679,11 +679,11 @@ function Settings() {
                   />
                   <button
                     type="button"
-                    onClick={() => setShowRapidApiKey(!showRapidApiKey)}
+                    onClick={() => setShowTwelveDataApiKey(!showTwelveDataApiKey)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors p-1"
                     disabled={apiKeysLoading || apiKeySaving}
                   >
-                    {showRapidApiKey ? (
+                    {showTwelveDataApiKey ? (
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                       </svg>
@@ -697,7 +697,7 @@ function Settings() {
                 </div>
                 {!apiKeysLoading && (
                   <p className="mt-1 text-text-muted text-[0.567rem] md:text-xs">
-                    {rapidApiKey ? '✓ API key is configured' : '⚠️ No API key configured'}
+                    {twelveDataApiKey ? '✓ API key is configured' : '⚠️ No API key configured'}
                   </p>
                 )}
               </div>

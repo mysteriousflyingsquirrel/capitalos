@@ -1,24 +1,18 @@
 /**
  * Market Price Service (SSOT)
- * 
- * Now uses daily Firestore cache via DailyPriceService.
- * Missing prices are fetched via a Vercel API route using the user's RapidAPI key.
- * 
+ *
+ * Delegates to DailyPriceService which fetches from Twelve Data via API proxy.
  * This service maintains backward compatibility with the old API.
  */
 
 import type { MarketPrice } from './types'
 import { getDailyPrices, getDailyPricesMap, normalizeSymbolKey } from './DailyPriceService'
 
-/**
- * Normalize ticker symbol
- */
 function normalizeTicker(ticker: string): string {
   return normalizeSymbolKey(ticker)
 }
 
 /**
- * Get market price for a single symbol
  * @deprecated Use DailyPriceService.getDailyPrices directly
  */
 export async function getPrice(symbol: string, _apiKey?: string): Promise<MarketPrice> {
@@ -27,30 +21,25 @@ export async function getPrice(symbol: string, _apiKey?: string): Promise<Market
   const priceData = prices[normalized]
 
   if (!priceData) {
-    throw new Error(`No price found for ${normalized} in daily cache`)
+    throw new Error(`No price found for ${normalized}`)
   }
 
-  const marketPrice: MarketPrice = {
+  return {
     symbol: normalized,
     priceUsd: priceData.price,
     timestamp: priceData.marketTime || Date.now(),
-    source: priceData.isStale ? 'cache' : 'yahoo-rapidapi',
+    source: priceData.isStale ? 'cache' : 'twelve-data',
   }
-
-  return marketPrice
 }
 
 /**
- * Get market prices for multiple symbols (batch request)
  * @deprecated Use DailyPriceService.getDailyPrices directly
  */
 export async function getPrices(
   symbols: string[],
   _apiKey?: string
 ): Promise<MarketPrice[]> {
-  if (symbols.length === 0) {
-    return []
-  }
+  if (symbols.length === 0) return []
 
   const normalized = [...new Set(symbols.map(normalizeTicker))]
   const prices = await getDailyPrices(normalized)
@@ -63,10 +52,10 @@ export async function getPrices(
         symbol,
         priceUsd: priceData.price,
         timestamp: priceData.marketTime || Date.now(),
-        source: priceData.isStale ? 'cache' : 'yahoo-rapidapi',
+        source: priceData.isStale ? 'cache' : 'twelve-data',
       })
     } else {
-      console.warn(`[MarketPriceService] No price in daily cache for ${symbol}`)
+      console.warn(`[MarketPriceService] No price for ${symbol}`)
     }
   }
 
@@ -74,7 +63,6 @@ export async function getPrices(
 }
 
 /**
- * Get prices as a simple map (symbol -> price in USD)
  * @deprecated Use DailyPriceService.getDailyPricesMap directly
  */
 export async function getPricesMap(
@@ -86,7 +74,7 @@ export async function getPricesMap(
 }
 
 /**
- * Alias for getPricesMap for backward compatibility with market-data index
+ * @deprecated Use DailyPriceService.getDailyPricesMap directly
  */
 export async function getMarketPrices(
   symbols: string[],
@@ -97,6 +85,6 @@ export async function getMarketPrices(
   return {
     prices,
     timestamp: Date.now(),
-    source: 'daily-cache',
+    source: 'twelve-data',
   }
 }

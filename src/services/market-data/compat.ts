@@ -1,7 +1,6 @@
 /**
  * Backward Compatibility Layer
  * Provides old API signatures using new SSOT services
- * This allows gradual migration of existing code
  */
 
 import { getPricesMap as getCryptoPricesMap } from './CryptoPriceService'
@@ -9,7 +8,6 @@ import { getDailyPricesMap } from './DailyPriceService'
 import { getRate } from './FxRateService'
 
 /**
- * Fetch crypto prices and USD to CHF rate (backward compatible)
  * @deprecated Use CryptoPriceService and FxRateService directly
  */
 export async function fetchCryptoData(
@@ -26,7 +24,6 @@ export async function fetchCryptoData(
 }
 
 /**
- * Fetch crypto prices only (backward compatible)
  * @deprecated Use CryptoPriceService directly
  */
 export async function fetchCryptoPrices(tickers: string[]): Promise<Record<string, number>> {
@@ -34,20 +31,17 @@ export async function fetchCryptoPrices(tickers: string[]): Promise<Record<strin
 }
 
 /**
- * Fetch stock/ETF/commodity prices (backward compatible)
- * @deprecated Use DailyPriceService directly - reads from daily Firestore cache
+ * @deprecated Use DailyPriceService directly — fetches from Twelve Data via API proxy
  */
 export async function fetchStockPrices(
   tickers: string[],
-  _apiKey?: string | null, // API key no longer needed - prices come from Firestore cache
+  _apiKey?: string | null,
   uid?: string
 ): Promise<Record<string, number>> {
-  // Use daily Firestore cache - triggers API fetch if needed
   return getDailyPricesMap(tickers, uid)
 }
 
 /**
- * Fetch USD to CHF rate (backward compatible)
  * @deprecated Use FxRateService directly
  */
 export async function fetchUsdToChfRate(): Promise<number | null> {

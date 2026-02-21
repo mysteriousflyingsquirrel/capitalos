@@ -12,7 +12,7 @@ import { toDateSafe } from '../lib/firestoreSafeWrite'
 import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
-import { getDailyPricesMap, registerSymbol, categoryUsesYahoo, deriveAssetClass } from '../services/market-data/DailyPriceService'
+import { getDailyPricesMap, categoryUsesTwelveData, deriveAssetClass } from '../services/market-data/DailyPriceService'
 import { useData } from '../contexts/DataContext'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
@@ -850,7 +850,7 @@ function NetWorth() {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { uid } = useAuth()
   const { isIncognito } = useIncognito()
-  const { rapidApiKey } = useApiKeys()
+  const { twelveDataApiKey } = useApiKeys()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch', { incognito: isIncognito })
   const { toasts, addToast, dismissToast } = useToast()
@@ -993,7 +993,7 @@ function NetWorth() {
     }
     
     try {
-      const stockItems = netWorthItems.filter(item => categoryUsesYahoo(item.category))
+      const stockItems = netWorthItems.filter(item => categoryUsesTwelveData(item.category))
       
       if (stockItems.length === 0) {
         return
@@ -1003,7 +1003,7 @@ function NetWorth() {
       const uniqueTickers = [...new Set(tickers)]
       
       // Use daily Firestore cache - triggers API fetch if needed
-      const prices = await getDailyPricesMap(uniqueTickers, uid || undefined)
+      const prices = await getDailyPricesMap(uniqueTickers)
       
       // Update stock prices
       setStockPrices(prev => ({ ...prev, ...prices }))
@@ -1124,18 +1124,6 @@ function NetWorth() {
         addToast('Failed to save changes. Please try again.')
       }
       
-      // Register symbol in market registry for Yahoo-backed categories
-      // This ensures the GitHub Action will fetch this symbol in the future
-      if (categoryUsesYahoo(category)) {
-        try {
-          await registerSymbol(data.name, uid, deriveAssetClass(category))
-          console.log(`[NetWorth] Registered symbol: ${data.name}`)
-        } catch (err) {
-          console.error('[NetWorth] Failed to register symbol:', err)
-          addToast('Failed to save changes. Please try again.')
-          // Non-fatal - continue even if registration fails
-        }
-      }
     }
     
     // Don't close the modal here - let the modal close itself after transaction is saved
@@ -1539,7 +1527,7 @@ interface AddNetWorthItemModalProps {
 
 function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTransaction }: AddNetWorthItemModalProps) {
   const { convert } = useCurrency()
-  const { rapidApiKey } = useApiKeys()
+  const { twelveDataApiKey } = useApiKeys()
   const isCrypto = category === 'Crypto'
   const isStockCategory = category === 'Index Funds' || category === 'Stocks' || category === 'Commodities'
   // Categories where price per item is always 1 (no need to show input)
@@ -1616,24 +1604,23 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
         setIsLoadingPrice(true)
         setPriceError(null)
 
-        getDailyPricesMap([ticker], uid || undefined)
+        getDailyPricesMap([ticker])
           .then((prices) => {
             const price = prices[ticker]
             if (price !== undefined && price !== null) {
-              // Set the USD price directly from cache (always in USD for stocks/index funds/commodities)
               setPricePerItem(price.toString())
               setPriceError(null)
             } else {
-              setPriceError(`Price for ${ticker} not in daily cache. Please enter price manually.`)
+              setPriceError(`Price for ${ticker} not found. Please enter price manually.`)
             }
           })
-          .catch((err) => {
+          .catch(() => {
             setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
           })
           .finally(() => {
             setIsLoadingPrice(false)
           })
-      }, 1000) // Wait 1 second after user stops typing
+      }, 1000)
 
       // Cleanup: clear timeout if user continues typing
       return () => clearTimeout(debounceTimer)
@@ -1642,12 +1629,11 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
       setPricePerItem('')
       setPriceError(null)
       setIsLoadingPrice(false)
-    } else if (isStockCategory && name.trim() && !rapidApiKey) {
-      // Show warning if API key is not configured
-      setPriceError('RapidAPI key not configured. Please set it in Settings to fetch prices automatically.')
+    } else if (isStockCategory && name.trim() && !twelveDataApiKey) {
+      setPriceError('Twelve Data API key not configured. Please set it in Settings to fetch prices automatically.')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStockCategory, name, rapidApiKey]) // Run when name changes for stock categories
+  }, [isStockCategory, name, twelveDataApiKey])
 
   // Calculate total balance for all categories
   const totalBalance = useMemo(() => {
@@ -2222,7 +2208,7 @@ type TransactionTab = 'buy' | 'sell'
 
 function AddTransactionModal({ item, transaction, transactions = [], onClose, onSave }: AddTransactionModalProps) {
   const { baseCurrency, convert, exchangeRates } = useCurrency()
-  const { rapidApiKey } = useApiKeys()
+  const { twelveDataApiKey } = useApiKeys()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch')
   const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch')
   const isEditing = !!transaction
@@ -2439,25 +2425,23 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
         setIsLoadingPrice(true)
         setPriceError(null)
 
-        getDailyPricesMap([ticker], uid || undefined)
+        getDailyPricesMap([ticker])
           .then((prices) => {
             const price = prices[ticker]
             if (price !== undefined && price !== null) {
-              // Set the USD price directly from cache (always in USD for stocks/index funds/commodities)
               setPricePerItemChf(price.toString())
               setPriceError(null)
             } else {
-              // If cache miss and we're editing, fall back to converting from stored CHF
               if (isEditing && transaction) {
                 const baseAmount = convert(transaction.pricePerItemChf, 'CHF')
                 if (exchangeRates && exchangeRates.rates['USD']) {
                   const usdAmount = baseAmount * exchangeRates.rates['USD']
                   setPricePerItemChf(usdAmount.toString())
                 } else {
-                  setPriceError(`Price for ${ticker} not in daily cache. Please enter price manually.`)
+                  setPriceError(`Price for ${ticker} not found. Please enter price manually.`)
                 }
               } else {
-                setPriceError(`Price for ${ticker} not in daily cache. Please enter price manually.`)
+                setPriceError(`Price for ${ticker} not found. Please enter price manually.`)
               }
             }
           })
@@ -2479,14 +2463,14 @@ function AddTransactionModal({ item, transaction, transactions = [], onClose, on
             setIsLoadingPrice(false)
           })
       }
-    } else if (isStockCategory && item.name && !rapidApiKey) {
+    } else if (isStockCategory && item.name && !twelveDataApiKey) {
       // Show warning if API key is not configured
       if (!isEditing || !pricePerItemChf) {
-        setPriceError('RapidAPI key not configured. Please set it in Settings to fetch prices automatically.')
+        setPriceError('Twelve Data API key not configured. Please set it in Settings to fetch prices automatically.')
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStockCategory, item.name, isEditing, rapidApiKey]) // Run when modal opens or when editing
+  }, [isStockCategory, item.name, isEditing, twelveDataApiKey])
 
   const totalChf = useMemo(() => {
     const parsedAmount = Number(amount)

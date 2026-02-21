@@ -11,7 +11,7 @@ import {
 } from '../services/storageService'
 import { loadSnapshots, type NetWorthSnapshot } from '../services/snapshotService'
 import { fetchCryptoData } from '../services/cryptoCompareService'
-import { getDailyPricesMap, categoryUsesYahoo } from '../services/market-data/DailyPriceService'
+import { getDailyPricesMap, categoryUsesTwelveData } from '../services/market-data/DailyPriceService'
 import { fetchHyperliquidPerpetualsData } from '../services/hyperliquidService'
 import { MexcFuturesPositionsWs, type MexcWsStatus } from '../services/mexcFuturesPositionsWs'
 import { fetchMexcEquityUsd, fetchMexcOpenOrders, fetchMexcOpenPositions, fetchMexcUnrealizedPnlWindows } from '../services/mexcFuturesService'
@@ -63,7 +63,7 @@ export function DataProvider({ children }: DataProviderProps) {
   const { uid } = useAuth()
   const { convert } = useCurrency()
   const { 
-    rapidApiKey, 
+    twelveDataApiKey, 
     hyperliquidWalletAddress,
     mexcApiKey,
     mexcSecretKey,
@@ -151,7 +151,7 @@ export function DataProvider({ children }: DataProviderProps) {
 
   // Fetch stock/index fund/commodity prices from daily Firestore cache
   const fetchStockPricesData = async (items: NetWorthItem[]): Promise<Record<string, number>> => {
-    const stockItems = items.filter((item) => categoryUsesYahoo(item.category))
+    const stockItems = items.filter((item) => categoryUsesTwelveData(item.category))
 
     if (stockItems.length === 0) {
       console.log('[DataContext] fetchStockPricesData: No stock items found')
@@ -167,7 +167,7 @@ export function DataProvider({ children }: DataProviderProps) {
         source: 'DailyPriceService (Firestore cache + API)',
       })
       // Use the daily Firestore cache - triggers API fetch if needed
-      const prices = await getDailyPricesMap(uniqueTickers, uid || undefined)
+      const prices = await getDailyPricesMap(uniqueTickers)
       console.log('[DataContext] fetchStockPricesData result:', prices)
       return prices
     } catch (error) {
@@ -357,7 +357,7 @@ export function DataProvider({ children }: DataProviderProps) {
       setError(null)
       
       // Step 0: Wait for API keys to load FIRST (max 5 seconds)
-      // This ensures rapidApiKey is available when fetching stock prices
+      // This ensures API keys are available when fetching stock prices
       // IMPORTANT: Use isApiKeysLoaded() which reads from ref, not apiKeysLoaded state (closure issue)
       const isInitialLoad = !hasLoadedDataRef.current
       
@@ -373,7 +373,7 @@ export function DataProvider({ children }: DataProviderProps) {
         console.log('[DataContext] Waited for API keys:', {
           apiKeysLoaded: isApiKeysLoaded(),
           waitedMs: Date.now() - startTime,
-          currentRapidApiKey: getCurrentKeys().rapidApiKey ? 'present' : 'missing',
+          currentTwelveDataApiKey: getCurrentKeys().twelveDataApiKey ? 'present' : 'missing',
         })
       }
       
@@ -381,7 +381,7 @@ export function DataProvider({ children }: DataProviderProps) {
       const firebaseData = await loadFirebaseData()
       
       // Step 2: Fetch exchange prices (USD→CHF rate) and crypto/stock prices
-      // Now rapidApiKey is guaranteed to be available (if configured)
+      // API keys are now guaranteed to be available (if configured)
       const [cryptoData, stockPricesData] = await Promise.all([
         fetchCryptoPrices(firebaseData.items),
         fetchStockPricesData(firebaseData.items),

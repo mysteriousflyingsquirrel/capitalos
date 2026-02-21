@@ -39,7 +39,7 @@ interface NetWorthSnapshot {
 }
 
 type ApiKeys = {
-  rapidApiKey?: string | null
+  twelveDataApiKey?: string | null
   hyperliquidWalletAddress?: string | null
   mexcApiKey?: string | null
   mexcSecretKey?: string | null
@@ -101,39 +101,40 @@ function makeConvertToChf(exchangeRates: ExchangeRates) {
   }
 }
 
-async function fetchYahooPricesUsd(args: { tickers: string[]; rapidApiKey: string }): Promise<Record<string, number>> {
+async function fetchStockPricesViaMarketApi(args: {
+  tickers: string[]
+  baseUrl: string
+  authHeader: string
+}): Promise<Record<string, number>> {
   const tickers = [...new Set(args.tickers.map(t => t.trim().toUpperCase()).filter(Boolean))]
-  if (tickers.length === 0) return {}
+  if (tickers.length === 0 || !args.baseUrl) return {}
 
-  const url = `https://apidojo-yahoo-finance-v1.p.rapidapi.com/market/v2/get-quotes?region=US&symbols=${encodeURIComponent(tickers.join(','))}`
-  const resp = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'x-rapidapi-key': args.rapidApiKey,
-      'x-rapidapi-host': 'apidojo-yahoo-finance-v1.p.rapidapi.com',
-      Accept: 'application/json',
-    },
-  })
+  try {
+    const resp = await fetch(`${args.baseUrl}/api/market/update-daily-prices`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': args.authHeader,
+      },
+      body: JSON.stringify({ symbols: tickers }),
+    })
 
-  if (!resp.ok) {
-    return {}
-  }
+    if (!resp.ok) return {}
 
-  const data = (await resp.json()) as any
-  const out: Record<string, number> = {}
+    const data = (await resp.json()) as any
+    if (!data?.success || !data?.prices) return {}
 
-  const results = data?.quoteResponse?.result
-  if (Array.isArray(results)) {
-    for (const q of results) {
-      const symbol = typeof q?.symbol === 'string' ? q.symbol.trim().toUpperCase() : ''
-      const price = q?.regularMarketPrice
-      if (symbol && typeof price === 'number' && Number.isFinite(price) && price > 0) {
-        out[symbol] = price
+    const out: Record<string, number> = {}
+    for (const [sym, priceData] of Object.entries(data.prices)) {
+      const p = (priceData as any)?.price
+      if (typeof p === 'number' && Number.isFinite(p) && p > 0) {
+        out[sym] = p
       }
     }
+    return out
+  } catch {
+    return {}
   }
-
-  return out
 }
 
 function getUtcDateParts(now: Date): { year: number; monthIndex: number; day: number } {
@@ -220,7 +221,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (process.env.NODE_ENV === 'development') console.log('[Snapshot] Computing snapshot server-side...')
     const db = admin.firestore()
 
-    // Load settings for API keys (RapidAPI + Perpetuals)
     const settingsSnap = await db.collection('users').doc(uid).collection('settings').doc('user').get()
     const apiKeys = (settingsSnap.data()?.apiKeys || {}) as ApiKeys
 
@@ -267,17 +267,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : null
     const effectiveUsdToChf = (usdToChfRate && usdToChfRate > 0) ? usdToChfRate : fallbackUsdToChf
 
-    // Fetch stock prices via RapidAPI (if configured)
-    const rapidApiKey = apiKeys?.rapidApiKey || ''
-    const stockPrices = rapidApiKey
-      ? await fetchYahooPricesUsd({ tickers: uniqueStockTickers, rapidApiKey }).catch(() => ({}))
+    // Fetch stock prices via Twelve Data market API
+    const baseUrl = getBaseUrl(req)
+    const authHeader = req.headers.authorization || ''
+    const stockPrices = uniqueStockTickers.length > 0 && baseUrl
+      ? await fetchStockPricesViaMarketApi({ tickers: uniqueStockTickers, baseUrl, authHeader }).catch(() => ({}))
       : {}
 
     // Add Perpetuals items per exchange (same as DataContext) if configured.
-    const baseUrl = getBaseUrl(req)
     const perpItems: NetWorthItem[] = []
-
-    const authHeader = req.headers.authorization || ''
 
     // Hyperliquid
     if (apiKeys?.hyperliquidWalletAddress) {

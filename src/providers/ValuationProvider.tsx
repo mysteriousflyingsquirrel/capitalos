@@ -10,7 +10,6 @@ import type { NetWorthItem, NetWorthTransaction } from '../pages/NetWorth'
 import type { CurrencyCode } from '../lib/currency'
 import { useData } from '../contexts/DataContext'
 import { useCurrency } from '../contexts/CurrencyContext'
-import { useApiKeys } from '../contexts/ApiKeysContext'
 import { useMarketData } from './MarketDataProvider'
 
 interface ValuationContextValue {
@@ -37,7 +36,6 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
 
   const { data } = useData()
   const { baseCurrency } = useCurrency()
-  const { rapidApiKey } = useApiKeys()
   const { lastRefresh } = useMarketData()
 
   const netWorthItems = data.netWorthItems
@@ -50,9 +48,8 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
 
     try {
       const result = await computeValuation(netWorthItems, transactions, {
-        baseCurrency: 'CHF', // Always use CHF as base currency internally
-        displayCurrency: baseCurrency, // User-selected currency for display
-        rapidApiKey,
+        baseCurrency: 'CHF',
+        displayCurrency: baseCurrency,
       })
 
       setValuation(result)
@@ -73,8 +70,7 @@ export function ValuationProvider({ children }: ValuationProviderProps) {
     netWorthItems,
     transactions,
     baseCurrency,
-    rapidApiKey,
-    lastRefresh, // Recompute when market data is refreshed
+    lastRefresh,
   ])
 
   const value: ValuationContextValue = {

@@ -32,7 +32,7 @@ export interface ValuationConfig {
   /** Display currency (what the user wants to see) */
   displayCurrency: CurrencyCode
 
-  /** @deprecated RapidAPI key no longer needed - market prices come from daily Firestore cache */
+  /** @deprecated Market prices fetched via Twelve Data proxy, no key needed here */
   rapidApiKey?: string | null
 }
 

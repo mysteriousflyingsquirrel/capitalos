@@ -9,15 +9,15 @@ import {
 
 // Refs to store keys persistently (survive remounts)
 interface ApiKeysRefs {
-  rapidApiKey: string | null
+  twelveDataApiKey: string | null
   hyperliquidWalletAddress: string | null
   mexcApiKey: string | null
   mexcSecretKey: string | null
 }
 
 interface ApiKeysContextType {
-  rapidApiKey: string | null
-  setRapidApiKey: (key: string) => Promise<void>
+  twelveDataApiKey: string | null
+  setTwelveDataApiKey: (key: string) => Promise<void>
   hyperliquidWalletAddress: string | null
   setHyperliquidWalletAddress: (address: string) => Promise<void>
   mexcApiKey: string | null
@@ -40,7 +40,7 @@ interface ApiKeysProviderProps {
 
 function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   const { uid } = useAuth()
-  const [rapidApiKey, setRapidApiKeyState] = useState<string | null>(null)
+  const [twelveDataApiKey, setTwelveDataApiKeyState] = useState<string | null>(null)
   const [hyperliquidWalletAddress, setHyperliquidWalletAddressState] = useState<string | null>(null)
   const [mexcApiKey, setMexcApiKeyState] = useState<string | null>(null)
   const [mexcSecretKey, setMexcSecretKeyState] = useState<string | null>(null)
@@ -49,7 +49,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   
   // Refs to store keys persistently (survive remounts) - ALWAYS available
   const keysRef = useRef<ApiKeysRefs>({
-    rapidApiKey: null,
+    twelveDataApiKey: null,
     hyperliquidWalletAddress: null,
     mexcApiKey: null,
     mexcSecretKey: null,
@@ -67,7 +67,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     // Update ref (persistent, always available)
     keysRef.current = { ...keysRef.current, ...updates }
     // Update state (for reactivity)
-    if (updates.rapidApiKey !== undefined) setRapidApiKeyState(updates.rapidApiKey)
+    if (updates.twelveDataApiKey !== undefined) setTwelveDataApiKeyState(updates.twelveDataApiKey)
     if (updates.hyperliquidWalletAddress !== undefined) setHyperliquidWalletAddressState(updates.hyperliquidWalletAddress)
     if (updates.mexcApiKey !== undefined) setMexcApiKeyState(updates.mexcApiKey)
     if (updates.mexcSecretKey !== undefined) setMexcSecretKeyState(updates.mexcSecretKey)
@@ -81,7 +81,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
       
       // Clear all in-memory state
       updateKeys({
-        rapidApiKey: null,
+        twelveDataApiKey: null,
         hyperliquidWalletAddress: null,
         mexcApiKey: null,
         mexcSecretKey: null,
@@ -138,23 +138,21 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
         }
         
         if (settings?.apiKeys) {
-          // Load RapidAPI key from settings, or fallback to env variable
-          const rapidKey = settings.apiKeys.rapidApiKey || import.meta.env.VITE_RAPIDAPI_KEY || null
+          const tdKey = settings.apiKeys.twelveDataApiKey || import.meta.env.VITE_TWELVE_DATA_API_KEY || null
           
           // Update both ref and state (ref persists, state is reactive)
           updateKeys({
-            rapidApiKey: rapidKey,
+            twelveDataApiKey: tdKey,
             hyperliquidWalletAddress: settings.apiKeys.hyperliquidWalletAddress || null,
             mexcApiKey: settings.apiKeys.mexcApiKey || null,
             mexcSecretKey: settings.apiKeys.mexcSecretKey || null,
           })
         } else {
-          // No settings found, try environment variable for RapidAPI
-          const envKey = import.meta.env.VITE_RAPIDAPI_KEY || null
+          const envKey = import.meta.env.VITE_TWELVE_DATA_API_KEY || null
           
           // Update both ref and state
           updateKeys({
-            rapidApiKey: envKey,
+            twelveDataApiKey: envKey,
             hyperliquidWalletAddress: null,
             mexcApiKey: null,
             mexcSecretKey: null,
@@ -186,8 +184,7 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]) // Only depend on uid - apiKeysLoaded is managed internally
 
-  // Save RapidAPI key using UserSettingsRepository
-  const setRapidApiKey = async (key: string) => {
+  const setTwelveDataApiKey = async (key: string) => {
     if (!uid) {
       console.error('Cannot save API key: user not authenticated')
       return
@@ -197,12 +194,12 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
       const trimmedKey = key.trim()
       
       if (trimmedKey) {
-        await saveApiKeys(uid, { rapidApiKey: trimmedKey })
+        await saveApiKeys(uid, { twelveDataApiKey: trimmedKey })
       } else {
-        await saveApiKeys(uid, { rapidApiKey: deleteField() })
+        await saveApiKeys(uid, { twelveDataApiKey: deleteField() })
       }
       
-      updateKeys({ rapidApiKey: trimmedKey || null })
+      updateKeys({ twelveDataApiKey: trimmedKey || null })
     } catch (error) {
       console.error('[ApiKeysContext] Error saving API key:', error)
       throw error
@@ -287,8 +284,8 @@ function ApiKeysProviderInner({ children }: ApiKeysProviderProps) {
   return (
     <ApiKeysContext.Provider
       value={{
-        rapidApiKey,
-        setRapidApiKey,
+        twelveDataApiKey,
+        setTwelveDataApiKey,
         hyperliquidWalletAddress,
         setHyperliquidWalletAddress,
         mexcApiKey,
