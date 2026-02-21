@@ -33,7 +33,7 @@ The manifest defines:
 - name: `Capitalos`
 - display: `standalone`
 - theme/background: `#050A1A`
-- icons: `capitalos_logo.png` (192 and 512)
+- icons: `branding/icon-192x192.png` (192), `branding/icon-512x512.png` (512), plus maskable variants
 
 Source: `vite.config.js`.
 
