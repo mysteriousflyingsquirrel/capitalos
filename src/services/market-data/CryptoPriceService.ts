@@ -4,14 +4,9 @@
  */
 
 import type { CryptoPrice } from './types'
-import { marketDataCache } from './MarketDataCache'
 
-const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 const REQUEST_TIMEOUT_MS = 10000 // 10 seconds
 
-/**
- * Normalize ticker symbol
- */
 function normalizeTicker(ticker: string): string {
   return ticker.trim().toUpperCase()
 }
@@ -69,37 +64,27 @@ async function fetchFromCryptoCompare(
 }
 
 /**
- * Get crypto price for a single symbol
+ * Get crypto price for a single symbol (always fetches fresh from API)
  */
 export async function getPrice(symbol: string): Promise<CryptoPrice> {
   const normalized = normalizeTicker(symbol)
-  const cacheKey = `crypto:${normalized}`
+  const prices = await fetchFromCryptoCompare([normalized])
+  const priceUsd = prices[normalized]
 
-  return marketDataCache.getOrFetch(
-    cacheKey,
-    async () => {
-      const prices = await fetchFromCryptoCompare([normalized])
-      const priceUsd = prices[normalized]
+  if (typeof priceUsd !== 'number' || priceUsd <= 0) {
+    throw new Error(`No valid price found for ${normalized}`)
+  }
 
-      if (typeof priceUsd !== 'number' || priceUsd <= 0) {
-        throw new Error(`No valid price found for ${normalized}`)
-      }
-
-      const cryptoPrice: CryptoPrice = {
-        symbol: normalized,
-        priceUsd,
-        timestamp: Date.now(),
-        source: 'cryptocompare',
-      }
-
-      return cryptoPrice
-    },
-    CACHE_TTL_MS
-  )
+  return {
+    symbol: normalized,
+    priceUsd,
+    timestamp: Date.now(),
+    source: 'cryptocompare',
+  }
 }
 
 /**
- * Get crypto prices for multiple symbols (batch request)
+ * Get crypto prices for multiple symbols (always fetches fresh from API)
  */
 export async function getPrices(symbols: string[]): Promise<CryptoPrice[]> {
   if (symbols.length === 0) {
@@ -107,50 +92,28 @@ export async function getPrices(symbols: string[]): Promise<CryptoPrice[]> {
   }
 
   const normalized = [...new Set(symbols.map(normalizeTicker))]
-
-  // Check cache first for each symbol
   const results: CryptoPrice[] = []
-  const uncachedSymbols: string[] = []
 
-  for (const symbol of normalized) {
-    const cacheKey = `crypto:${symbol}`
-    const cached = marketDataCache.get<CryptoPrice>(cacheKey)
-    if (cached) {
-      results.push(cached)
-    } else {
-      uncachedSymbols.push(symbol)
-    }
-  }
+  try {
+    const prices = await fetchFromCryptoCompare(normalized)
+    const timestamp = Date.now()
 
-  // Fetch uncached symbols in a single batch request
-  if (uncachedSymbols.length > 0) {
-    try {
-      const prices = await fetchFromCryptoCompare(uncachedSymbols)
-      const timestamp = Date.now()
+    for (const symbol of normalized) {
+      const priceUsd = prices[symbol]
 
-      for (const symbol of uncachedSymbols) {
-        const priceUsd = prices[symbol]
-
-        if (typeof priceUsd === 'number' && priceUsd > 0) {
-          const cryptoPrice: CryptoPrice = {
-            symbol,
-            priceUsd,
-            timestamp,
-            source: 'cryptocompare',
-          }
-
-          // Cache it
-          const cacheKey = `crypto:${symbol}`
-          marketDataCache.set(cacheKey, cryptoPrice, CACHE_TTL_MS)
-
-          results.push(cryptoPrice)
-        } else {
-          console.warn(`[CryptoPriceService] No valid price for ${symbol}`)
-        }
+      if (typeof priceUsd === 'number' && priceUsd > 0) {
+        results.push({
+          symbol,
+          priceUsd,
+          timestamp,
+          source: 'cryptocompare',
+        })
+      } else {
+        console.warn(`[CryptoPriceService] No valid price for ${symbol}`)
       }
-    } catch (error) {
-      console.error('[CryptoPriceService] Failed to fetch prices:', error)
     }
+  } catch (error) {
+    console.error('[CryptoPriceService] Failed to fetch prices:', error)
   }
 
   return results

@@ -679,17 +679,6 @@ export function DataProvider({ children }: DataProviderProps) {
     }
   }
 
-  // Set up periodic refresh (every 5 minutes)
-  useEffect(() => {
-    if (!uid || loading) return
-
-    const interval = setInterval(() => {
-      refreshAllData()
-    }, 5 * 60 * 1000) // 5 minutes
-
-    return () => clearInterval(interval)
-  }, [uid, loading])
-
   const mexcWsSubscribedRef = useRef(false)
 
   // Set up MEXC Futures WebSocket connection (positions only)

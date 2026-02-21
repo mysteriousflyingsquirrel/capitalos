@@ -10,8 +10,8 @@ import { formatMoney, formatNumber } from '../lib/currency'
 import { toDateSafe } from '../lib/firestoreSafeWrite'
 import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
-import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
-import { getDailyPricesMap, categoryUsesMarketApi, deriveAssetClass } from '../services/market-data/DailyPriceService'
+import { fetchCryptoPrices } from '../services/cryptoCompareService'
+import { getDailyPricesMap } from '../services/market-data/DailyPriceService'
 import { useData } from '../contexts/DataContext'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
@@ -872,12 +872,8 @@ function NetWorth() {
     }
   }, [data.netWorthItems, data.transactions])
 
-  // Store current crypto prices (ticker -> USD price)
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({})
-  const [cryptoPricesLastUpdate, setCryptoPricesLastUpdate] = useState<number>(0)
-  // Store current stock/index fund/commodity prices (ticker -> USD price)
   const [stockPrices, setStockPrices] = useState<Record<string, number>>({})
-  const [stockPricesLastUpdate, setStockPricesLastUpdate] = useState<number>(0)
   const [usdToChfRate, setUsdToChfRate] = useState<number | null>(null)
 
   // Sync prices from DataContext (ensures prices are updated from periodic refresh)
@@ -902,7 +898,6 @@ function NetWorth() {
       setUsdToChfRate(data.usdToChfRate)
     }
   }, [data.cryptoPrices, data.stockPrices, data.usdToChfRate])
-  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
 
   // Load platforms from Firestore (data items come from DataContext)
   useEffect(() => {
@@ -938,117 +933,6 @@ function NetWorth() {
     return cleaned
   }
 
-  // Fetch crypto prices and USD→CHF rate for all crypto items
-  const fetchAllCryptoPrices = async (showLoading = false) => {
-    if (showLoading) {
-      setIsRefreshingPrices(true)
-    }
-    
-    try {
-    const cryptoItems = netWorthItems.filter(item => item.category === 'Crypto')
-      if (cryptoItems.length === 0) {
-        // Still fetch USD→CHF rate even if no crypto items
-        try {
-          const { usdToChfRate: rate } = await fetchCryptoData([])
-          if (rate !== null) {
-            setUsdToChfRate(rate)
-          }
-        } catch (error) {
-          console.error('Error fetching USD→CHF rate:', error)
-          addToast('Failed to load data. Please try again.')
-        }
-        return
-      }
-
-    const tickers = cryptoItems.map(item => item.name.trim().toUpperCase())
-    const uniqueTickers = [...new Set(tickers)]
-    
-      const { prices, usdToChfRate: rate } = await fetchCryptoData(uniqueTickers)
-      
-      // Update crypto prices
-      setCryptoPrices(prev => ({ ...prev, ...prices }))
-      
-      // Update USD→CHF rate
-      if (rate !== null) {
-        setUsdToChfRate(rate)
-      }
-      
-      setCryptoPricesLastUpdate(Date.now())
-      } catch (error) {
-      console.error('Error fetching crypto data:', error)
-      addToast('Failed to load data. Please try again.')
-    } finally {
-      if (showLoading) {
-        setIsRefreshingPrices(false)
-      }
-    }
-  }
-
-  // Fetch stock/index fund/commodity prices for all relevant items (from daily Firestore cache)
-  const fetchAllStockPrices = async (showLoading = false) => {
-    if (showLoading) {
-      setIsRefreshingPrices(true)
-    }
-    
-    try {
-      const stockItems = netWorthItems.filter(item => categoryUsesMarketApi(item.category))
-      
-      if (stockItems.length === 0) {
-        return
-      }
-
-      const tickers = stockItems.map(item => item.name.trim().toUpperCase())
-      const uniqueTickers = [...new Set(tickers)]
-      
-      // Use daily Firestore cache - triggers API fetch if needed
-      const prices = await getDailyPricesMap(uniqueTickers)
-      
-      // Update stock prices
-      setStockPrices(prev => ({ ...prev, ...prices }))
-      
-      setStockPricesLastUpdate(Date.now())
-    } catch (error) {
-      console.error('Error fetching stock prices:', error)
-      addToast('Failed to load data. Please try again.')
-    } finally {
-      if (showLoading) {
-        setIsRefreshingPrices(false)
-      }
-    }
-  }
-
-  // Fetch all prices (crypto and stocks)
-  const fetchAllPrices = async (showLoading = false) => {
-    if (showLoading) {
-      setIsRefreshingPrices(true)
-    }
-    
-    try {
-      // Fetch both in parallel
-      await Promise.all([
-        fetchAllCryptoPrices(false),
-        fetchAllStockPrices(false),
-      ])
-    } finally {
-      if (showLoading) {
-        setIsRefreshingPrices(false)
-      }
-    }
-  }
-
-  // Fetch prices on mount and set up 5-minute interval
-  useEffect(() => {
-    // Fetch immediately
-    fetchAllPrices()
-
-    // Set up interval to fetch every 5 minutes (300000 ms)
-    const interval = setInterval(() => {
-      fetchAllPrices()
-    }, 300000) // 5 minutes
-
-    return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netWorthItems]) // Re-fetch when items change
   const [activeCategory, setActiveCategory] = useState<NetWorthCategory | null>(null)
   const [transactionItemId, setTransactionItemId] = useState<string | null>(null)
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null)
@@ -1550,86 +1434,6 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
   
-  // Fetch coin price when name is entered for Crypto items (debounced by 1 second)
-  useEffect(() => {
-    if (isCrypto && name.trim()) {
-      const ticker = name.trim().toUpperCase()
-      
-      // Debounce: wait 1 second after user stops typing
-      const debounceTimer = setTimeout(() => {
-        setIsLoadingPrice(true)
-        setPriceError(null)
-
-        fetchCryptoPrices([ticker])
-          .then((prices) => {
-            const price = prices[ticker]
-            if (price !== undefined && price !== null) {
-              // Set the USD price directly from API (always in USD for crypto)
-              setPricePerItem(price.toString())
-              setPriceError(null)
-            } else {
-              setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
-            }
-          })
-          .catch((err) => {
-            setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
-          })
-          .finally(() => {
-            setIsLoadingPrice(false)
-          })
-      }, 1000) // Wait 1 second after user stops typing
-
-      // Cleanup: clear timeout if user continues typing
-      return () => clearTimeout(debounceTimer)
-    } else if (isCrypto && !name.trim()) {
-      // Clear price when name is cleared
-      setPricePerItem('')
-      setPriceError(null)
-      setIsLoadingPrice(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCrypto, name]) // Run when name changes for crypto items
-
-  // Fetch stock/index fund/commodity price when name is entered (debounced by 1 second)
-  // Uses daily Firestore cache - no direct Yahoo calls
-  useEffect(() => {
-    if (isStockCategory && name.trim()) {
-      const ticker = name.trim().toUpperCase()
-      
-      // Debounce: wait 1 second after user stops typing
-      const debounceTimer = setTimeout(() => {
-        setIsLoadingPrice(true)
-        setPriceError(null)
-
-        getDailyPricesMap([ticker])
-          .then((prices) => {
-            const price = prices[ticker]
-            if (price !== undefined && price !== null) {
-              setPricePerItem(price.toString())
-              setPriceError(null)
-            } else {
-              setPriceError(`Price for ${ticker} not found. Please enter price manually.`)
-            }
-          })
-          .catch(() => {
-            setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
-          })
-          .finally(() => {
-            setIsLoadingPrice(false)
-          })
-      }, 1000)
-
-      // Cleanup: clear timeout if user continues typing
-      return () => clearTimeout(debounceTimer)
-    } else if (isStockCategory && !name.trim()) {
-      // Clear price when name is cleared
-      setPricePerItem('')
-      setPriceError(null)
-      setIsLoadingPrice(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStockCategory, name])
-
   // Calculate total balance for all categories
   const totalBalance = useMemo(() => {
     const parsedAmount = Number(amount) || 0

@@ -26,9 +26,7 @@ import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings } from '../services/balanceCalculationService'
 import type { InflowItem, OutflowItem } from './Cashflow'
-import { fetchCryptoData } from '../services/cryptoCompareService'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
-import { getDailyPricesMap, categoryUsesMarketApi } from '../services/market-data/DailyPriceService'
 
 // TypeScript interfaces
 interface NetWorthDataPoint {
@@ -220,7 +218,6 @@ function Dashboard() {
   // Store current stock/index fund/commodity prices (ticker -> USD price)
   const [stockPrices, setStockPrices] = useState<Record<string, number>>({})
   const [usdToChfRate, setUsdToChfRate] = useState<number | null>(null)
-  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
 
   // Sync prices from DataContext (ensures prices are updated from periodic refresh)
   useEffect(() => {
@@ -248,104 +245,7 @@ function Dashboard() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Data is loaded by DataContext, no need to load here
-
-  // Fetch crypto prices and USD→CHF rate for all crypto items
-  const fetchAllCryptoPrices = async (showLoading = false) => {
-    if (showLoading) {
-      setIsRefreshingPrices(true)
-    }
-    
-    try {
-      const cryptoItems = netWorthItems.filter((item: NetWorthItem) => item.category === 'Crypto')
-      const tickers = cryptoItems.map((item: NetWorthItem) => item.name.trim().toUpperCase())
-      const uniqueTickers = [...new Set(tickers)]
-      
-      const { prices, usdToChfRate: rate } = await fetchCryptoData(uniqueTickers)
-      
-      // Update crypto prices
-      setCryptoPrices(prev => ({ ...prev, ...prices }))
-      
-      // Update USD→CHF rate
-      if (rate !== null) {
-        setUsdToChfRate(rate)
-      }
-    } catch (error) {
-      console.error('Error fetching crypto data:', error)
-      addToast('Failed to load data. Please try again.')
-    } finally {
-      if (showLoading) {
-        setIsRefreshingPrices(false)
-      }
-    }
-  }
-
-  // Fetch stock/index fund/commodity prices for all relevant items (from daily Firestore cache)
-  const fetchAllStockPrices = async (showLoading = false) => {
-    if (showLoading) {
-      setIsRefreshingPrices(true)
-    }
-    
-    try {
-      const stockItems = netWorthItems.filter((item: NetWorthItem) => categoryUsesMarketApi(item.category))
-      
-      if (stockItems.length === 0) {
-        return
-      }
-
-      const tickers = stockItems.map((item: NetWorthItem) => item.name.trim().toUpperCase())
-      const uniqueTickers = [...new Set(tickers)]
-      
-      // Use daily Firestore cache - triggers API fetch if needed
-      const prices = await getDailyPricesMap(uniqueTickers, uid || undefined)
-      
-      // Update stock prices
-      setStockPrices(prev => ({ ...prev, ...prices }))
-    } catch (error) {
-      console.error('Error fetching stock prices:', error)
-      addToast('Failed to load data. Please try again.')
-    } finally {
-      if (showLoading) {
-        setIsRefreshingPrices(false)
-      }
-    }
-  }
-
-  // Fetch all prices (crypto and stocks)
-  const fetchAllPrices = async (showLoading = false) => {
-    if (showLoading) {
-      setIsRefreshingPrices(true)
-    }
-    
-    try {
-      // Fetch both in parallel
-      await Promise.all([
-        fetchAllCryptoPrices(false),
-        fetchAllStockPrices(false),
-      ])
-    } finally {
-      if (showLoading) {
-        setIsRefreshingPrices(false)
-      }
-    }
-  }
-
-  useEffect(() => {
-    if (netWorthItems.length > 0) {
-      // Fetch immediately on page load
-      fetchAllPrices()
-      
-      // Set up interval to fetch every 5 minutes (300000 ms)
-      const interval = setInterval(() => {
-        fetchAllPrices()
-      }, 300000) // 5 minutes
-
-      return () => clearInterval(interval)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netWorthItems]) // Re-fetch when items change
-
-  // Perpetuals data is refreshed by DataContext, no need to refresh here
+  // Prices are loaded by DataContext on app load and manual refresh
 
   // Pull-to-refresh functionality for mobile
   useEffect(() => {
