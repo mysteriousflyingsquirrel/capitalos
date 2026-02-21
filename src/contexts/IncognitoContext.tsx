@@ -1,9 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 
 interface IncognitoContextType {
   isIncognito: boolean
   setIncognito: (value: boolean) => void
   toggleIncognito: () => void
+  pendingExitIncognito: boolean
+  requestExitIncognito: () => void
+  confirmExitIncognito: () => void
+  cancelExitIncognito: () => void
 }
 
 const IncognitoContext = createContext<IncognitoContextType | undefined>(undefined)
@@ -16,7 +20,6 @@ interface IncognitoProviderProps {
 
 export function IncognitoProvider({ children }: IncognitoProviderProps) {
   const [isIncognito, setIsIncognitoState] = useState<boolean>(() => {
-    // Load from localStorage on initial mount
     try {
       const stored = localStorage.getItem(INCOGNITO_STORAGE_KEY)
       if (stored === 'true') {
@@ -28,10 +31,11 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
     } catch (error) {
       console.warn('Failed to read incognito state from localStorage:', error)
     }
-    return false // Default to false
+    return false
   })
 
-  // Save to localStorage whenever state changes
+  const [pendingExitIncognito, setPendingExitIncognito] = useState(false)
+
   useEffect(() => {
     try {
       localStorage.setItem(INCOGNITO_STORAGE_KEY, String(isIncognito))
@@ -48,12 +52,29 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
     setIsIncognitoState(prev => !prev)
   }
 
+  const requestExitIncognito = useCallback(() => {
+    setPendingExitIncognito(true)
+  }, [])
+
+  const confirmExitIncognito = useCallback(() => {
+    setPendingExitIncognito(false)
+    setIsIncognitoState(false)
+  }, [])
+
+  const cancelExitIncognito = useCallback(() => {
+    setPendingExitIncognito(false)
+  }, [])
+
   return (
     <IncognitoContext.Provider
       value={{
         isIncognito,
         setIncognito,
         toggleIncognito,
+        pendingExitIncognito,
+        requestExitIncognito,
+        confirmExitIncognito,
+        cancelExitIncognito,
       }}
     >
       {children}

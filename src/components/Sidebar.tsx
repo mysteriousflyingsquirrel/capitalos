@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useSyncStatus } from '../lib/dataSafety/syncStatus'
 import { AuthGateState } from '../lib/dataSafety/authGate'
 import { useIncognito } from '../contexts/IncognitoContext'
+import { isBiometricEnabled } from '../services/webAuthnService'
 import { IncognitoToggle } from './IncognitoToggle'
 const logoIcon = '/branding/capitalos_logo.png'
 import dashboardIcon from '../icons/dashboard_icon.svg'
@@ -38,7 +39,8 @@ function Sidebar() {
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const isOnExchangesRoute = location.pathname.startsWith('/exchanges')
   const [isExchangesOpen, setIsExchangesOpen] = useState(isOnExchangesRoute)
-  const { toggleIncognito } = useIncognito()
+  const { isIncognito, toggleIncognito, requestExitIncognito } = useIncognito()
+  const { uid, signOut, email, authGateState } = useAuth()
 
   // If the user is on a child route, default to expanded.
   useEffect(() => {
@@ -47,12 +49,20 @@ function Sidebar() {
     }
   }, [isOnExchangesRoute])
 
-  // Keyboard shortcut: CTRL + I to toggle incognito
+  const handleIncognitoShortcut = useCallback(() => {
+    const hasBiometric = uid ? isBiometricEnabled(uid) : false
+    if (isIncognito && hasBiometric) {
+      requestExitIncognito()
+    } else {
+      toggleIncognito()
+    }
+  }, [uid, isIncognito, toggleIncognito, requestExitIncognito])
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && (event.key === 'i' || event.key === 'I')) {
         event.preventDefault()
-        toggleIncognito()
+        handleIncognitoShortcut()
       }
     }
 
@@ -60,8 +70,7 @@ function Sidebar() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [toggleIncognito])
-  const { signOut, email, authGateState } = useAuth()
+  }, [handleIncognitoShortcut])
   const { online, activeListeners, safeMode, quotaExceeded, pendingWrites, lastSyncTime } = useSyncStatus()
 
   // Determine if syncing
