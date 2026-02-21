@@ -207,13 +207,12 @@ export function DataProvider({ children }: DataProviderProps) {
       return items
     }
 
-    // Gate Perpetuals fetch on apiKeysLoaded
-    if (!apiKeysLoaded) {
+    // Gate Perpetuals fetch on apiKeysLoaded — use ref to avoid stale closure
+    if (!isApiKeysLoaded()) {
       console.warn('[DataContext] fetchPerpetualsData: API keys not loaded yet, removing Perpetuals items', {
         itemsCount: items.length,
         perpetualsItemsCount: items.filter(item => item.category === 'Perpetuals').length,
       })
-      // Remove any existing Perpetuals items and return
       return items.filter(item => item.category !== 'Perpetuals')
     }
 

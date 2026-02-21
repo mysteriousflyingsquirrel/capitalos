@@ -1,7 +1,27 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import admin from 'firebase-admin'
-import { initializeAdmin, verifyAuth } from '../../lib/firebaseAdmin'
 import { mexcPrivateGet, mexcPrivatePost, toNumber } from './shared'
+
+let _adminInitialized = false
+function initializeAdmin(): void {
+  if (_adminInitialized || admin.apps.length > 0) { _adminInitialized = true; return }
+  try {
+    const sa = process.env.FIREBASE_SERVICE_ACCOUNT
+    if (sa) { admin.initializeApp({ credential: admin.credential.cert(JSON.parse(sa)) }) }
+    else { admin.initializeApp() }
+    _adminInitialized = true
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('already exists')) { _adminInitialized = true; return }
+    throw e
+  }
+}
+
+async function verifyAuth(req: VercelRequest, res: VercelResponse): Promise<string | null> {
+  const h = req.headers.authorization
+  if (!h?.startsWith('Bearer ')) { res.status(401).json({ error: 'Missing or invalid Authorization header.' }); return null }
+  try { return (await admin.auth().verifyIdToken(h.slice(7))).uid }
+  catch { res.status(401).json({ error: 'Invalid or expired authentication token.' }); return null }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
