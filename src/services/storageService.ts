@@ -74,9 +74,8 @@ export async function saveNetWorthItem<T extends { id: string }>(
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
-    // No uid, save to localStorage only
     saveToStorage(getStorageKey(uid, 'netWorthItems'), [item])
     return { success: true }
   }
@@ -84,16 +83,15 @@ export async function saveNetWorthItem<T extends { id: string }>(
   try {
     const result = await saveNetWorthItemFirestore(uid, item, options)
     
-    // Sync to localStorage as backup
     if (result.success) {
       const items = await loadNetWorthItemsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'netWorthItems'), items)
+      return { ...result, entries: items }
     }
     
     return result
   } catch (error) {
     console.error('Failed to save net worth item to Firestore:', error)
-    // Fallback to localStorage
     saveToStorage(getStorageKey(uid, 'netWorthItems'), [item])
     return { success: false, reason: 'firestore_error' }
   }
@@ -102,29 +100,28 @@ export async function saveNetWorthItem<T extends { id: string }>(
 /**
  * Deletes a single net worth item (with conflict detection)
  */
-export async function deleteNetWorthItem(
+export async function deleteNetWorthItem<T = { id: string }>(
   itemId: string,
   uid?: string,
   options: {
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
-    // No uid, delete from localStorage only
-    const items = loadFromStorage<{ id: string }[]>(getStorageKey(uid, 'netWorthItems'), [])
-    const filtered = items.filter(item => item.id !== itemId)
+    const items = loadFromStorage<T[]>(getStorageKey(uid, 'netWorthItems'), [])
+    const filtered = items.filter((item: any) => item.id !== itemId)
     saveToStorage(getStorageKey(uid, 'netWorthItems'), filtered)
-    return { success: true }
+    return { success: true, entries: filtered }
   }
 
   try {
     const result = await deleteNetWorthItemFirestore(uid, itemId, options)
     
-    // Sync to localStorage as backup
     if (result.success) {
-      const items = await loadNetWorthItemsFirestore<{ id: string }>(uid)
+      const items = await loadNetWorthItemsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'netWorthItems'), items)
+      return { ...result, entries: items }
     }
     
     return result
@@ -166,9 +163,8 @@ export async function saveNetWorthTransaction<T extends { id: string }>(
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
-    // No uid, save to localStorage only
     saveToStorage(getStorageKey(uid, 'netWorthTransactions'), [transaction])
     return { success: true }
   }
@@ -176,16 +172,15 @@ export async function saveNetWorthTransaction<T extends { id: string }>(
   try {
     const result = await saveNetWorthTransactionFirestore(uid, transaction, options)
     
-    // Sync to localStorage as backup
     if (result.success) {
       const transactions = await loadNetWorthTransactionsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'netWorthTransactions'), transactions)
+      return { ...result, entries: transactions }
     }
     
     return result
   } catch (error) {
     console.error('Failed to save transaction to Firestore:', error)
-    // Fallback to localStorage
     saveToStorage(getStorageKey(uid, 'netWorthTransactions'), [transaction])
     return { success: false, reason: 'firestore_error' }
   }
@@ -194,29 +189,28 @@ export async function saveNetWorthTransaction<T extends { id: string }>(
 /**
  * Deletes a single transaction (with conflict detection)
  */
-export async function deleteNetWorthTransaction(
+export async function deleteNetWorthTransaction<T = { id: string }>(
   transactionId: string,
   uid?: string,
   options: {
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
-    // No uid, delete from localStorage only
-    const transactions = loadFromStorage<{ id: string }[]>(getStorageKey(uid, 'netWorthTransactions'), [])
-    const filtered = transactions.filter(tx => tx.id !== transactionId)
+    const transactions = loadFromStorage<T[]>(getStorageKey(uid, 'netWorthTransactions'), [])
+    const filtered = transactions.filter((tx: any) => tx.id !== transactionId)
     saveToStorage(getStorageKey(uid, 'netWorthTransactions'), filtered)
-    return { success: true }
+    return { success: true, entries: filtered }
   }
 
   try {
     const result = await deleteNetWorthTransactionFirestore(uid, transactionId, options)
     
-    // Sync to localStorage as backup
     if (result.success) {
-      const transactions = await loadNetWorthTransactionsFirestore<{ id: string }>(uid)
+      const transactions = await loadNetWorthTransactionsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'netWorthTransactions'), transactions)
+      return { ...result, entries: transactions }
     }
     
     return result
@@ -316,7 +310,7 @@ export async function saveCashflowInflowItem<T extends { id: string }>(
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
     saveToStorage(getStorageKey(uid, 'cashflowInflowItems'), [item])
     return { success: true }
@@ -327,6 +321,7 @@ export async function saveCashflowInflowItem<T extends { id: string }>(
     if (result.success) {
       const items = await loadCashflowInflowItemsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'cashflowInflowItems'), items)
+      return { ...result, entries: items }
     }
     return result
   } catch (error) {
@@ -336,26 +331,27 @@ export async function saveCashflowInflowItem<T extends { id: string }>(
   }
 }
 
-export async function deleteCashflowInflowItem(
+export async function deleteCashflowInflowItem<T = { id: string }>(
   itemId: string,
   uid?: string,
   options: {
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
-    const items = loadFromStorage<{ id: string }[]>(getStorageKey(uid, 'cashflowInflowItems'), [])
-    const filtered = items.filter(item => item.id !== itemId)
+    const items = loadFromStorage<T[]>(getStorageKey(uid, 'cashflowInflowItems'), [])
+    const filtered = items.filter((item: any) => item.id !== itemId)
     saveToStorage(getStorageKey(uid, 'cashflowInflowItems'), filtered)
-    return { success: true }
+    return { success: true, entries: filtered }
   }
 
   try {
     const result = await deleteCashflowInflowItemFirestore(uid, itemId, options)
     if (result.success) {
-      const items = await loadCashflowInflowItemsFirestore<{ id: string }>(uid)
+      const items = await loadCashflowInflowItemsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'cashflowInflowItems'), items)
+      return { ...result, entries: items }
     }
     return result
   } catch (error) {
@@ -389,7 +385,7 @@ export async function saveCashflowOutflowItem<T extends { id: string }>(
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
     saveToStorage(getStorageKey(uid, 'cashflowOutflowItems'), [item])
     return { success: true }
@@ -400,6 +396,7 @@ export async function saveCashflowOutflowItem<T extends { id: string }>(
     if (result.success) {
       const items = await loadCashflowOutflowItemsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'cashflowOutflowItems'), items)
+      return { ...result, entries: items }
     }
     return result
   } catch (error) {
@@ -409,26 +406,27 @@ export async function saveCashflowOutflowItem<T extends { id: string }>(
   }
 }
 
-export async function deleteCashflowOutflowItem(
+export async function deleteCashflowOutflowItem<T = { id: string }>(
   itemId: string,
   uid?: string,
   options: {
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
-    const items = loadFromStorage<{ id: string }[]>(getStorageKey(uid, 'cashflowOutflowItems'), [])
-    const filtered = items.filter(item => item.id !== itemId)
+    const items = loadFromStorage<T[]>(getStorageKey(uid, 'cashflowOutflowItems'), [])
+    const filtered = items.filter((item: any) => item.id !== itemId)
     saveToStorage(getStorageKey(uid, 'cashflowOutflowItems'), filtered)
-    return { success: true }
+    return { success: true, entries: filtered }
   }
 
   try {
     const result = await deleteCashflowOutflowItemFirestore(uid, itemId, options)
     if (result.success) {
-      const items = await loadCashflowOutflowItemsFirestore<{ id: string }>(uid)
+      const items = await loadCashflowOutflowItemsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'cashflowOutflowItems'), items)
+      return { ...result, entries: items }
     }
     return result
   } catch (error) {
@@ -527,13 +525,12 @@ export async function saveCashflowAccountflowMapping<T extends { id: string }>(
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
-    // No uid, save to localStorage only (best-effort)
     const existing = loadFromStorage<T[]>(getStorageKey(uid, 'cashflowAccountflowMappings'), [])
     const next = [...existing.filter(m => m.id !== mapping.id), mapping]
     saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), next)
-    return { success: true }
+    return { success: true, entries: next }
   }
 
   try {
@@ -541,6 +538,7 @@ export async function saveCashflowAccountflowMapping<T extends { id: string }>(
     if (result.success) {
       const mappings = await loadCashflowAccountflowMappingsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), mappings)
+      return { ...result, entries: mappings }
     }
     return result
   } catch (error) {
@@ -549,26 +547,27 @@ export async function saveCashflowAccountflowMapping<T extends { id: string }>(
   }
 }
 
-export async function deleteCashflowAccountflowMapping(
+export async function deleteCashflowAccountflowMapping<T = { id: string }>(
   mappingId: string,
   uid?: string,
   options: {
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: T[] }> {
   if (!uid) {
-    const existing = loadFromStorage<{ id: string }[]>(getStorageKey(uid, 'cashflowAccountflowMappings'), [])
-    const next = existing.filter(m => m.id !== mappingId)
+    const existing = loadFromStorage<T[]>(getStorageKey(uid, 'cashflowAccountflowMappings'), [])
+    const next = existing.filter((m: any) => m.id !== mappingId)
     saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), next)
-    return { success: true }
+    return { success: true, entries: next }
   }
 
   try {
     const result = await deleteCashflowAccountflowMappingFirestore(uid, mappingId, options)
     if (result.success) {
-      const mappings = await loadCashflowAccountflowMappingsFirestore<{ id: string }>(uid)
+      const mappings = await loadCashflowAccountflowMappingsFirestore<T>(uid)
       saveToStorage(getStorageKey(uid, 'cashflowAccountflowMappings'), mappings)
+      return { ...result, entries: mappings }
     }
     return result
   } catch (error) {
@@ -635,7 +634,7 @@ export async function savePlatform<T extends { id: string }>(
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: Platform[] }> {
   if (!uid) {
     const existing = loadFromStorage<T[]>(getStorageKey(uid, 'platforms'), [])
     const next = [...existing.filter(p => p.id !== platform.id), platform]
@@ -648,6 +647,7 @@ export async function savePlatform<T extends { id: string }>(
     if (result.success) {
       const platforms = await loadPlatformsFirestore(uid)
       saveToStorage(getStorageKey(uid, 'platforms'), platforms)
+      return { ...result, entries: platforms }
     }
     return result
   } catch (error) {
@@ -663,12 +663,12 @@ export async function deletePlatform(
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: Platform[] }> {
   if (!uid) {
-    const existing = loadFromStorage<{ id: string }[]>(getStorageKey(uid, 'platforms'), [])
+    const existing = loadFromStorage<Platform[]>(getStorageKey(uid, 'platforms'), [])
     const next = existing.filter(p => p.id !== platformId)
     saveToStorage(getStorageKey(uid, 'platforms'), next)
-    return { success: true }
+    return { success: true, entries: next }
   }
 
   try {
@@ -676,6 +676,7 @@ export async function deletePlatform(
     if (result.success) {
       const platforms = await loadPlatformsFirestore(uid)
       saveToStorage(getStorageKey(uid, 'platforms'), platforms)
+      return { ...result, entries: platforms }
     }
     return result
   } catch (error) {
@@ -745,12 +746,12 @@ export async function saveForecastEntry(
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: ForecastEntry[] }> {
   if (!uid) {
     const existing = loadFromStorage<ForecastEntry[]>(getStorageKey(uid, 'forecastEntries'), [])
     const next = [...existing.filter(e => e.id !== entry.id), entry]
     saveToStorage(getStorageKey(uid, 'forecastEntries'), next)
-    return { success: true }
+    return { success: true, entries: next }
   }
 
   try {
@@ -758,6 +759,7 @@ export async function saveForecastEntry(
     if (result.success) {
       const entries = await loadForecastEntriesFirestore<ForecastEntry>(uid)
       saveToStorage(getStorageKey(uid, 'forecastEntries'), entries)
+      return { ...result, entries }
     }
     return result
   } catch (error) {
@@ -773,12 +775,12 @@ export async function deleteForecastEntry(
     clientUpdatedAt?: Date | null
     allowOverwrite?: boolean
   } = {}
-): Promise<{ success: boolean; reason?: string }> {
+): Promise<{ success: boolean; reason?: string; entries?: ForecastEntry[] }> {
   if (!uid) {
     const existing = loadFromStorage<ForecastEntry[]>(getStorageKey(uid, 'forecastEntries'), [])
     const next = existing.filter(e => e.id !== entryId)
     saveToStorage(getStorageKey(uid, 'forecastEntries'), next)
-    return { success: true }
+    return { success: true, entries: next }
   }
 
   try {
@@ -786,6 +788,7 @@ export async function deleteForecastEntry(
     if (result.success) {
       const entries = await loadForecastEntriesFirestore<ForecastEntry>(uid)
       saveToStorage(getStorageKey(uid, 'forecastEntries'), entries)
+      return { ...result, entries }
     }
     return result
   } catch (error) {

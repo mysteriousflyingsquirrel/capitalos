@@ -1,0 +1,21 @@
+---
+description: Enforce spec format and requirements updates when editing documentation
+globs: docs/**
+---
+
+# Planning & Specs
+
+## Workflow
+- Reference `docs/specs/requirements.md` as scope source of truth before writing specs.
+- Update `docs/specs/requirements.md` when a new feature is specced — no feature ships undocumented.
+- For new features: ask clarifying questions before producing a spec.
+- For refinements: proceed directly.
+
+## Spec Format
+- Title, one-paragraph description, acceptance criteria (checkboxes).
+- Keep scope minimal — flag scope creep.
+- When unsure, suggest the smallest viable version.
+
+## Constraints
+- Do not write implementation code in this context.
+- Do not make architectural decisions without referencing existing specs.

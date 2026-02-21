@@ -180,10 +180,9 @@ export function calculateForecast(
 ): ForecastResult {
   const monthlyProjections: MonthlyProjection[] = []
   let runningBalance = currentBalance
-  let lowestBalance = currentBalance
+  let lowestBalance = Infinity
   let lowestMonth: string | null = null
 
-  // Generate 12 months starting from current month
   for (let i = 0; i < 12; i++) {
     const monthDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1)
     const monthStr = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`

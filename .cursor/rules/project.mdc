@@ -1,0 +1,25 @@
+---
+description: Project-specific architecture and context for Capitalos
+alwaysApply: true
+---
+
+# Capitalos
+
+## Architecture
+Single Vite + React + TypeScript application:
+- src/pages/ — page components
+- src/components/ — shared UI components
+- src/services/ — backend services (Firestore, exchange integrations, calculations)
+- src/contexts/ — React contexts (Auth, Data, Currency, Theme, Incognito, ApiKeys)
+- src/hooks/ — custom hooks (valuation, market-data)
+- api/ — serverless API functions (perpetuals, snapshots, market data)
+- docs/specs/ — engineering specs
+
+## Source of Truth
+- `docs/specs/requirements.md` — scope and intent
+- `docs/specs/` — engineering specs
+- `docs/ui/ui-improvement-guide.md` — UI/UX best practices
+
+## UI
+- Dark theme (primary background #050A1A), bronze/gold accents, Inter font.
+- When improving UI, follow `docs/ui/ui-improvement-guide.md`.

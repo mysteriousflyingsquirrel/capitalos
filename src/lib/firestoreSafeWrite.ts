@@ -16,6 +16,37 @@ export interface ConflictMetadata {
 }
 
 /**
+ * Safely extract milliseconds from any timestamp format.
+ * Handles Firestore Timestamps, ISO strings, and epoch numbers.
+ * Returns null for unrecognized formats (caller should skip the check).
+ */
+function toMillis(value: unknown): number | null {
+  if (!value) return null
+  if (typeof (value as any).toMillis === 'function') {
+    return (value as any).toMillis()
+  }
+  const ms = new Date(value as any).getTime()
+  return Number.isFinite(ms) ? ms : null
+}
+
+/**
+ * Safely convert any timestamp format to a JavaScript Date.
+ * Use this on the client side to produce `clientUpdatedAt` values.
+ */
+export function toDateSafe(value: unknown): Date | null {
+  const ms = toMillis(value)
+  return ms !== null ? new Date(ms) : null
+}
+
+/**
+ * Safely format any timestamp as an ISO string for logging.
+ */
+function toISOStringSafe(value: unknown): string | null {
+  const d = toDateSafe(value)
+  return d ? d.toISOString() : null
+}
+
+/**
  * Safely upserts a document with conflict detection
  * 
  * Rules:
@@ -47,20 +78,17 @@ export async function safeUpsertDoc<T extends Record<string, any>>(
 
       // If document exists, check for conflicts
       if (existing && !allowOverwrite) {
-        const existingUpdatedAt = existing.updatedAt as Timestamp | null
+        const existingTime = toMillis(existing.updatedAt)
         const existingUpdatedBy = existing.updatedBy as string | null
 
-        // If we have a client timestamp, compare it
-        if (clientUpdatedAt && existingUpdatedAt) {
-          const existingTime = existingUpdatedAt.toMillis()
+        if (clientUpdatedAt && existingTime !== null) {
           const clientTime = clientUpdatedAt.getTime()
 
-          // If existing document is newer, abort (prevent stale overwrite)
           if (existingTime > clientTime) {
             if (import.meta.env.DEV) {
               console.warn('[SafeWrite] Aborted stale overwrite:', {
                 path: docRef.path,
-                existingUpdatedAt: existingUpdatedAt.toDate().toISOString(),
+                existingUpdatedAt: toISOStringSafe(existing.updatedAt),
                 clientUpdatedAt: clientUpdatedAt.toISOString(),
                 existingUpdatedBy,
                 deviceId,
@@ -70,19 +98,15 @@ export async function safeUpsertDoc<T extends Record<string, any>>(
           }
         }
 
-        // If document was updated by another device and we don't have client timestamp,
-        // and it's very recent (< 5 seconds), be cautious
         if (!clientUpdatedAt && existingUpdatedBy && existingUpdatedBy !== deviceId) {
-          const existingTime = existingUpdatedAt?.toMillis() || 0
           const now = Date.now()
-          const age = now - existingTime
+          const age = now - (existingTime || 0)
 
-          // If document was updated by another device within last 5 seconds, abort
           if (age < 5000) {
             if (import.meta.env.DEV) {
               console.warn('[SafeWrite] Aborted recent write by another device:', {
                 path: docRef.path,
-                existingUpdatedAt: existingUpdatedAt?.toDate().toISOString(),
+                existingUpdatedAt: toISOStringSafe(existing.updatedAt),
                 existingUpdatedBy,
                 deviceId,
                 ageMs: age,
@@ -160,18 +184,16 @@ export async function safeUpdateDoc<T extends Record<string, any>>(
       }
 
       const existing = docSnap.data()
-      const existingUpdatedAt = existing.updatedAt as Timestamp | null
+      const existingTime = toMillis(existing.updatedAt)
 
-      // Check for conflicts
-      if (!allowOverwrite && clientUpdatedAt && existingUpdatedAt) {
-        const existingTime = existingUpdatedAt.toMillis()
+      if (!allowOverwrite && clientUpdatedAt && existingTime !== null) {
         const clientTime = clientUpdatedAt.getTime()
 
         if (existingTime > clientTime) {
           if (import.meta.env.DEV) {
             console.warn('[SafeWrite] Aborted stale update:', {
               path: docRef.path,
-              existingUpdatedAt: existingUpdatedAt.toDate().toISOString(),
+              existingUpdatedAt: toISOStringSafe(existing.updatedAt),
               clientUpdatedAt: clientUpdatedAt.toISOString(),
               deviceId,
             })
@@ -234,18 +256,16 @@ export async function safeDeleteDoc(
       }
 
       const existing = docSnap.data()
-      const existingUpdatedAt = existing.updatedAt as Timestamp | null
+      const existingTime = toMillis(existing.updatedAt)
 
-      // Check for conflicts before delete
-      if (!allowOverwrite && clientUpdatedAt && existingUpdatedAt) {
-        const existingTime = existingUpdatedAt.toMillis()
+      if (!allowOverwrite && clientUpdatedAt && existingTime !== null) {
         const clientTime = clientUpdatedAt.getTime()
 
         if (existingTime > clientTime) {
           if (import.meta.env.DEV) {
             console.warn('[SafeWrite] Aborted stale delete:', {
               path: docRef.path,
-              existingUpdatedAt: existingUpdatedAt.toDate().toISOString(),
+              existingUpdatedAt: toISOStringSafe(existing.updatedAt),
               clientUpdatedAt: clientUpdatedAt.toISOString(),
               deviceId,
             })

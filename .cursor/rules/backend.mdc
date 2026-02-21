@@ -1,0 +1,17 @@
+---
+description: Enforce backend patterns when editing services, contexts, hooks, or API functions
+globs: src/services/**,src/contexts/**,src/hooks/**,src/lib/**,api/**
+---
+
+# Backend Standards
+
+## Requirements
+- Business logic belongs in service files, not inline in components.
+- Validate inputs — never trust client data.
+- Follow existing patterns in the codebase before introducing new ones.
+- Consider database read/write costs — avoid unnecessary reads, use batched writes where appropriate.
+
+## Constraints
+- Do not create UI components — that belongs in pages/components.
+- Do not skip input validation or auth checks.
+- Keep changes focused — one concern per change.

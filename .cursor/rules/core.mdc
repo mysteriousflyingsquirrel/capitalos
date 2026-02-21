@@ -1,0 +1,25 @@
+---
+description: Enforce coding standards and working patterns across all files
+alwaysApply: true
+---
+
+# Core Standards
+
+## Working Pattern
+1. Read relevant code before editing.
+2. For new features: update specs/requirements docs **before** writing implementation code.
+3. Provide short plan.
+4. Implement.
+5. Summarize what changed.
+
+## Code Standards
+- TypeScript-first.
+- No silent failures — handle and surface errors.
+- Keep functions and components small and focused.
+- Extract shared logic into services/hooks.
+- Follow existing naming conventions in the codebase.
+
+## Constraints
+- Do not invent features not requested by the user.
+- Prefer small, reviewable changes.
+- Do not modify unrelated code.

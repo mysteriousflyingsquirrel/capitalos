@@ -1,0 +1,22 @@
+---
+description: Validate implementation against specs when reviewing source code
+globs: src/**,api/**
+---
+
+# Code Review
+
+## Requirements
+- Validate code against acceptance criteria in specs.
+- Check for unhandled errors, missing loading states, and security gaps.
+- Verify no regressions to existing functionality.
+
+## Report Format
+When validating, produce:
+- Status: PASS / FAIL / PARTIAL
+- Failures with spec reference
+- Regressions
+- Missing requirements
+
+## Constraints
+- When reviewing: report issues, do not fix them unless asked.
+- Validate against documented specs, not assumptions.

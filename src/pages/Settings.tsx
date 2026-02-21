@@ -7,6 +7,7 @@ import { useData } from '../contexts/DataContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { THEMES, type ThemeId } from '../lib/themes'
 import type { CurrencyCode } from '../lib/currency'
+import { toDateSafe } from '../lib/firestoreSafeWrite'
 import { supportedCurrencies } from '../lib/currency'
 import {
   createBackup,
@@ -305,17 +306,7 @@ function Settings() {
     loadPlatformsData()
   }, [uid])
 
-  const getClientUpdatedAt = (obj: any): Date | null => {
-    const updatedAt = obj?.updatedAt
-    if (!updatedAt) return null
-    try {
-      const millis = (updatedAt as any).toMillis?.()
-      const date = new Date(millis || updatedAt)
-      return Number.isFinite(date.getTime()) ? date : null
-    } catch {
-      return null
-    }
-  }
+
 
   const handleAddPlatform = async (e: FormEvent) => {
     e.preventDefault()
@@ -339,7 +330,9 @@ function Settings() {
 
     setPlatforms(prev => [...prev, newPlatform])
     const result = await savePlatform(newPlatform, uid)
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setPlatforms(result.entries)
+    } else if (!result.success) {
       console.error('[Settings] Failed to save new platform:', result.reason)
     }
     setNewPlatformName('')
@@ -357,11 +350,13 @@ function Settings() {
     }
 
     const existing = platforms.find(p => p.id === platform.id)
-    const clientUpdatedAt = getClientUpdatedAt(existing)
+    const clientUpdatedAt = toDateSafe(existing?.updatedAt)
     const updatedPlatform: Platform = { ...platform, name: newName.trim() }
     setPlatforms(prev => prev.map(p => (p.id === platform.id ? updatedPlatform : p)))
     const result = await savePlatform(updatedPlatform, uid, { clientUpdatedAt })
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setPlatforms(result.entries)
+    } else if (!result.success) {
       console.error('[Settings] Failed to save edited platform:', result.reason)
     }
     setEditingPlatform(null)
@@ -381,10 +376,12 @@ function Settings() {
 
     // Remove platform
     const existing = platforms.find(p => p.id === platform.id)
-    const clientUpdatedAt = getClientUpdatedAt(existing)
+    const clientUpdatedAt = toDateSafe(existing?.updatedAt)
     setPlatforms(prev => prev.filter(p => p.id !== platform.id))
     const result = await deletePlatform(platform.id, uid, { clientUpdatedAt })
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setPlatforms(result.entries)
+    } else if (!result.success) {
       console.error('[Settings] Failed to delete platform:', result.reason)
     }
 
@@ -429,16 +426,22 @@ function Settings() {
       const original = platforms.find(op => op.id === p.id)
       return (original?.isDefault ?? false) !== (p.isDefault ?? false)
     })
+    let latestPlatforms: Platform[] | undefined
     await Promise.all(
       changed.map(async (p) => {
         const original = platforms.find(op => op.id === p.id)
-        const clientUpdatedAt = getClientUpdatedAt(original)
+        const clientUpdatedAt = toDateSafe(original?.updatedAt)
         const res = await savePlatform(p, uid, { clientUpdatedAt })
-        if (!res.success) {
+        if (res.success && res.entries) {
+          latestPlatforms = res.entries
+        } else if (!res.success) {
           console.error('[Settings] Failed to save default platform change:', res.reason)
         }
       })
     )
+    if (latestPlatforms) {
+      setPlatforms(latestPlatforms)
+    }
   }
 
   const handleSaveAllApiKeys = async (e: FormEvent) => {

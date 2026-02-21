@@ -9,6 +9,9 @@ interface AuthContextType {
   user: any | null
   loading: boolean
   signInWithGoogle: () => Promise<void>
+  signInWithEmail: (email: string, password: string) => Promise<void>
+  signUpWithEmail: (email: string, password: string) => Promise<void>
+  resetPassword: (email: string) => Promise<void>
   signOut: () => Promise<void>
   uid: string | null
   email: string | null
@@ -30,6 +33,9 @@ export function AuthContextCompatProvider({ children }: { children: ReactNode })
     user: authGate.user,
     loading,
     signInWithGoogle: authGate.signInWithGoogle,
+    signInWithEmail: authGate.signInWithEmail,
+    signUpWithEmail: authGate.signUpWithEmail,
+    resetPassword: authGate.resetPassword,
     signOut: authGate.signOut,
     uid: authGate.uid,
     email: authGate.email,

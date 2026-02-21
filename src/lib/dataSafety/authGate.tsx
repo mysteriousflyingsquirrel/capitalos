@@ -5,7 +5,10 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut as firebaseSignOut,
-  onAuthStateChanged 
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
 } from 'firebase/auth'
 import { auth, googleProvider } from '../../config/firebase'
 import { isIosSafari } from '../../utils/browserDetection'
@@ -30,6 +33,9 @@ interface AuthGateContextType {
   uid: string | null
   email: string | null
   signInWithGoogle: () => Promise<void>
+  signInWithEmail: (email: string, password: string) => Promise<void>
+  signUpWithEmail: (email: string, password: string) => Promise<void>
+  resetPassword: (email: string) => Promise<void>
   signOut: () => Promise<void>
   error: Error | null
   retry: () => Promise<void>
@@ -317,6 +323,42 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
     }
   }
 
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      setError(null)
+      await signInWithEmailAndPassword(auth, email, password)
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      console.error('[AuthGate] Email sign in error:', error)
+      setError(error)
+      throw error
+    }
+  }
+
+  const signUpWithEmail = async (email: string, password: string) => {
+    try {
+      setError(null)
+      await createUserWithEmailAndPassword(auth, email, password)
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      console.error('[AuthGate] Email sign up error:', error)
+      setError(error)
+      throw error
+    }
+  }
+
+  const resetPassword = async (email: string) => {
+    try {
+      setError(null)
+      await sendPasswordResetEmail(auth, email)
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      console.error('[AuthGate] Password reset error:', error)
+      setError(error)
+      throw error
+    }
+  }
+
   const signOut = async () => {
     try {
       const currentUid = prevUidRef.current
@@ -370,6 +412,9 @@ function AuthGateProviderInner({ children }: AuthGateProviderProps) {
     uid: user?.uid || null,
     email: user?.email || null,
     signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
+    resetPassword,
     signOut,
     error,
     retry,

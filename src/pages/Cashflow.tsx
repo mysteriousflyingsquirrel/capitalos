@@ -6,6 +6,7 @@ import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { formatMoney, formatNumber, type CurrencyCode } from '../lib/currency'
+import { toDateSafe } from '../lib/firestoreSafeWrite'
 import {
   saveCashflowInflowItem,
   deleteCashflowInflowItem,
@@ -2166,17 +2167,7 @@ function Cashflow() {
     loadData()
   }, [uid])
 
-  const getClientUpdatedAt = (obj: any): Date | null => {
-    const updatedAt = obj?.updatedAt
-    if (!updatedAt) return null
-    try {
-      const millis = (updatedAt as any).toMillis?.()
-      const date = new Date(millis || updatedAt)
-      return Number.isFinite(date.getTime()) ? date : null
-    } catch {
-      return null
-    }
-  }
+
 
   const handleAddInflowItem = async (group: InflowGroupName, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `inflow-${Date.now()}`
@@ -2191,7 +2182,9 @@ function Cashflow() {
     }
     setInflowItems(prev => [...prev, newItem])
     const result = await saveCashflowInflowItem(newItem, uid)
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setInflowItems(result.entries as InflowItem[])
+    } else if (!result.success) {
       console.error('[Cashflow] Failed to save new inflow item:', result.reason)
     }
   }
@@ -2209,7 +2202,9 @@ function Cashflow() {
     }
     setOutflowItems(prev => [...prev, newItem])
     const result = await saveCashflowOutflowItem(newItem, uid)
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setOutflowItems(result.entries as OutflowItem[])
+    } else if (!result.success) {
       console.error('[Cashflow] Failed to save new outflow item:', result.reason)
     }
   }
@@ -2230,7 +2225,7 @@ function Cashflow() {
 
   const handleEditInflowItem = async (id: string, data: { item: string; amountChf: number; amount: number; currency: string; provider: string }) => {
     const existingItem = inflowItems.find(item => item.id === id)
-    const clientUpdatedAt = getClientUpdatedAt(existingItem)
+    const clientUpdatedAt = toDateSafe(existingItem?.updatedAt)
 
     const updatedItem: InflowItem | null = existingItem
       ? { ...existingItem, item: data.item, amountChf: data.amountChf, amount: data.amount, currency: data.currency, provider: data.provider }
@@ -2244,7 +2239,9 @@ function Cashflow() {
 
     if (updatedItem) {
       const result = await saveCashflowInflowItem(updatedItem, uid, { clientUpdatedAt })
-      if (!result.success) {
+      if (result.success && result.entries) {
+        setInflowItems(result.entries as InflowItem[])
+      } else if (!result.success) {
         console.error('[Cashflow] Failed to save edited inflow item:', result.reason)
       }
     }
@@ -2252,7 +2249,7 @@ function Cashflow() {
 
   const handleEditOutflowItem = async (id: string, data: { item: string; amountChf: number; amount: number; currency: string; receiver: string }) => {
     const existingItem = outflowItems.find(item => item.id === id)
-    const clientUpdatedAt = getClientUpdatedAt(existingItem)
+    const clientUpdatedAt = toDateSafe(existingItem?.updatedAt)
 
     const updatedItem: OutflowItem | null = existingItem
       ? { ...existingItem, item: data.item, amountChf: data.amountChf, amount: data.amount, currency: data.currency, receiver: data.receiver }
@@ -2266,7 +2263,9 @@ function Cashflow() {
 
     if (updatedItem) {
       const result = await saveCashflowOutflowItem(updatedItem, uid, { clientUpdatedAt })
-      if (!result.success) {
+      if (result.success && result.entries) {
+        setOutflowItems(result.entries as OutflowItem[])
+      } else if (!result.success) {
         console.error('[Cashflow] Failed to save edited outflow item:', result.reason)
       }
     }
@@ -2279,10 +2278,12 @@ function Cashflow() {
   const handleRemoveInflowItem = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this item?')) {
       const existingItem = inflowItems.find(item => item.id === id)
-      const clientUpdatedAt = getClientUpdatedAt(existingItem)
+      const clientUpdatedAt = toDateSafe(existingItem?.updatedAt)
       setInflowItems(prev => prev.filter(item => item.id !== id))
-      const result = await deleteCashflowInflowItem(id, uid, { clientUpdatedAt })
-      if (!result.success) {
+      const result = await deleteCashflowInflowItem<InflowItem>(id, uid, { clientUpdatedAt })
+      if (result.success && result.entries) {
+        setInflowItems(result.entries)
+      } else if (!result.success) {
         console.error('[Cashflow] Failed to delete inflow item:', result.reason)
       }
     }
@@ -2291,10 +2292,12 @@ function Cashflow() {
   const handleRemoveOutflowItem = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this item?')) {
       const existingItem = outflowItems.find(item => item.id === id)
-      const clientUpdatedAt = getClientUpdatedAt(existingItem)
+      const clientUpdatedAt = toDateSafe(existingItem?.updatedAt)
       setOutflowItems(prev => prev.filter(item => item.id !== id))
-      const result = await deleteCashflowOutflowItem(id, uid, { clientUpdatedAt })
-      if (!result.success) {
+      const result = await deleteCashflowOutflowItem<OutflowItem>(id, uid, { clientUpdatedAt })
+      if (result.success && result.entries) {
+        setOutflowItems(result.entries)
+      } else if (!result.success) {
         console.error('[Cashflow] Failed to delete outflow item:', result.reason)
       }
     }
@@ -2309,17 +2312,21 @@ function Cashflow() {
   const handleAddMapping = async (mapping: AccountflowMapping) => {
     setAccountflowMappings(prev => [...prev, mapping])
     const result = await saveCashflowAccountflowMapping(mapping, uid)
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setAccountflowMappings(result.entries as AccountflowMapping[])
+    } else if (!result.success) {
       console.error('[Cashflow] Failed to save new mapping:', result.reason)
     }
   }
 
   const handleEditMapping = async (mapping: AccountflowMapping) => {
     const existing = accountflowMappings.find(m => m.id === mapping.id)
-    const clientUpdatedAt = getClientUpdatedAt(existing)
+    const clientUpdatedAt = toDateSafe(existing?.updatedAt)
     setAccountflowMappings(prev => prev.map(m => m.id === mapping.id ? mapping : m))
     const result = await saveCashflowAccountflowMapping(mapping, uid, { clientUpdatedAt })
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setAccountflowMappings(result.entries as AccountflowMapping[])
+    } else if (!result.success) {
       console.error('[Cashflow] Failed to save edited mapping:', result.reason)
     }
   }
@@ -2327,10 +2334,12 @@ function Cashflow() {
   const handleRemoveMapping = async (id: string) => {
     if (window.confirm('Are you sure you want to remove this mapping?')) {
       const existing = accountflowMappings.find(m => m.id === id)
-      const clientUpdatedAt = getClientUpdatedAt(existing)
+      const clientUpdatedAt = toDateSafe(existing?.updatedAt)
       setAccountflowMappings(prev => prev.filter(m => m.id !== id))
-      const result = await deleteCashflowAccountflowMapping(id, uid, { clientUpdatedAt })
-      if (!result.success) {
+      const result = await deleteCashflowAccountflowMapping<AccountflowMapping>(id, uid, { clientUpdatedAt })
+      if (result.success && result.entries) {
+        setAccountflowMappings(result.entries)
+      } else if (!result.success) {
         console.error('[Cashflow] Failed to delete mapping:', result.reason)
       }
     }

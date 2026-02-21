@@ -6,6 +6,7 @@ import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney, formatNumber } from '../lib/currency'
+import { toDateSafe } from '../lib/firestoreSafeWrite'
 import { formatDate, formatDateInput, parseDateInput, getCurrentDateFormatted } from '../lib/dateFormat'
 import type { CurrencyCode } from '../lib/currency'
 import { fetchCryptoData, fetchCryptoPrices } from '../services/cryptoCompareService'
@@ -1122,14 +1123,13 @@ function NetWorth() {
     // Update local state immediately (optimistic update)
     setNetWorthItems((prev) => [...prev, newItem])
     
-    // Save to Firestore (per-document upsert with conflict detection)
     if (uid) {
       const cleanedItem = removeUndefined(newItem) as NetWorthItem
       const result = await saveNetWorthItem(cleanedItem, uid)
-      if (!result.success) {
+      if (result.success && result.entries) {
+        setNetWorthItems(result.entries as NetWorthItem[])
+      } else if (!result.success) {
         console.error('[NetWorth] Failed to save new item:', result.reason)
-        // Optionally revert optimistic update on error
-        // For now, we keep it and let the user retry
       }
       
       // Register symbol in market registry for Yahoo-backed categories
@@ -1174,11 +1174,12 @@ function NetWorth() {
       // Update local state immediately (optimistic update)
       setTransactions((prev) => [...prev, newTransaction])
       
-      // Save to Firestore (per-document upsert with conflict detection)
       if (uid) {
         const cleanedTransaction = removeUndefined(newTransaction) as NetWorthTransaction
         const result = await saveNetWorthTransaction(cleanedTransaction, uid)
-        if (!result.success) {
+        if (result.success && result.entries) {
+          setTransactions(result.entries as NetWorthTransaction[])
+        } else if (!result.success) {
           console.error('[NetWorth] Failed to save new transaction:', result.reason)
         }
       }
@@ -1210,13 +1211,12 @@ function NetWorth() {
     // Update local state immediately (optimistic update)
     setTransactions((prev) => [...prev, newTransaction])
     
-    // Save to Firestore (per-document upsert with conflict detection)
     if (uid) {
       const result = await saveNetWorthTransaction(cleanedTransaction, uid)
-      if (!result.success) {
+      if (result.success && result.entries) {
+        setTransactions(result.entries as NetWorthTransaction[])
+      } else if (!result.success) {
         console.error('[NetWorth] Failed to save transaction:', result.reason)
-        // Optionally revert optimistic update on error
-        // For now, we keep it and let the user retry
       }
     }
     
@@ -1235,16 +1235,13 @@ function NetWorth() {
   const handleUpdateTransaction = async (transactionId: string, transaction: Omit<NetWorthTransaction, 'id'>) => {
     // Find the existing transaction to get its updatedAt timestamp for conflict detection
     const existingTransaction = transactions.find(tx => tx.id === transactionId)
-    const clientUpdatedAt = existingTransaction?.updatedAt 
-      ? new Date((existingTransaction.updatedAt as any).toMillis?.() || existingTransaction.updatedAt)
-      : null
+    const clientUpdatedAt = toDateSafe(existingTransaction?.updatedAt)
 
     // Update local state immediately (optimistic update)
     setTransactions((prev) => {
       return prev.map((tx) => (tx.id === transactionId ? { ...tx, ...transaction } : tx))
     })
     
-    // Save to Firestore (per-document upsert with conflict detection)
     if (uid) {
       const updatedTransaction: NetWorthTransaction = {
         id: transactionId,
@@ -1254,10 +1251,10 @@ function NetWorth() {
       const result = await saveNetWorthTransaction(cleanedTransaction, uid, {
         clientUpdatedAt,
       })
-      if (!result.success) {
+      if (result.success && result.entries) {
+        setTransactions(result.entries as NetWorthTransaction[])
+      } else if (!result.success) {
         console.error('[NetWorth] Failed to save updated transaction:', result.reason)
-        // Optionally revert optimistic update on error
-        // For now, we keep it and let the user retry
       }
     }
     
@@ -1267,22 +1264,19 @@ function NetWorth() {
   const handleDeleteTransaction = async (transactionId: string) => {
     // Find the existing transaction to get its updatedAt timestamp for conflict detection
     const existingTransaction = transactions.find(tx => tx.id === transactionId)
-    const clientUpdatedAt = existingTransaction?.updatedAt 
-      ? new Date((existingTransaction.updatedAt as any).toMillis?.() || existingTransaction.updatedAt)
-      : null
+    const clientUpdatedAt = toDateSafe(existingTransaction?.updatedAt)
 
     // Update local state immediately (optimistic update)
     setTransactions((prev) => prev.filter((tx) => tx.id !== transactionId))
     
-    // Delete from Firestore (with conflict detection)
     if (uid) {
-      const result = await deleteNetWorthTransaction(transactionId, uid, {
+      const result = await deleteNetWorthTransaction<NetWorthTransaction>(transactionId, uid, {
         clientUpdatedAt,
       })
-      if (!result.success) {
+      if (result.success && result.entries) {
+        setTransactions(result.entries)
+      } else if (!result.success) {
         console.error('[NetWorth] Failed to delete transaction:', result.reason)
-        // Optionally revert optimistic update on error
-        // For now, we keep it and let the user retry
       }
     }
   }
@@ -1291,9 +1285,7 @@ function NetWorth() {
     if (window.confirm('Are you sure you want to remove this item? All associated transactions will also be removed.')) {
       // Find the existing item to get its updatedAt timestamp for conflict detection
       const existingItem = netWorthItems.find(item => item.id === itemId)
-      const clientUpdatedAt = existingItem?.updatedAt 
-        ? new Date((existingItem.updatedAt as any).toMillis?.() || existingItem.updatedAt)
-        : null
+      const clientUpdatedAt = toDateSafe(existingItem?.updatedAt)
 
       // Find all transactions for this item
       const transactionsToDelete = transactions.filter(tx => tx.itemId === itemId)
@@ -1302,30 +1294,33 @@ function NetWorth() {
       setNetWorthItems((prev) => prev.filter(i => i.id !== itemId))
       setTransactions((prev) => prev.filter(tx => tx.itemId !== itemId))
       
-      // Delete from Firestore (per-document deletes with conflict detection)
       if (uid) {
-        // Delete the item
-        const itemResult = await deleteNetWorthItem(itemId, uid, {
+        const itemResult = await deleteNetWorthItem<NetWorthItem>(itemId, uid, {
           clientUpdatedAt,
         })
-        if (!itemResult.success) {
+        if (itemResult.success && itemResult.entries) {
+          setNetWorthItems(itemResult.entries)
+        } else if (!itemResult.success) {
           console.error('[NetWorth] Failed to delete item:', itemResult.reason)
         }
 
-        // Delete all associated transactions
+        let latestTransactions: NetWorthTransaction[] | undefined
         await Promise.all(
           transactionsToDelete.map(async (tx) => {
-            const txClientUpdatedAt = tx.updatedAt 
-              ? new Date((tx.updatedAt as any).toMillis?.() || tx.updatedAt)
-              : null
-            const result = await deleteNetWorthTransaction(tx.id, uid, {
+            const txClientUpdatedAt = toDateSafe(tx.updatedAt)
+            const result = await deleteNetWorthTransaction<NetWorthTransaction>(tx.id, uid, {
               clientUpdatedAt: txClientUpdatedAt,
             })
-            if (!result.success) {
+            if (result.success && result.entries) {
+              latestTransactions = result.entries
+            } else if (!result.success) {
               console.error(`[NetWorth] Failed to delete transaction ${tx.id}:`, result.reason)
             }
           })
         )
+        if (latestTransactions) {
+          setTransactions(latestTransactions)
+        }
       }
     }
   }
@@ -1341,9 +1336,7 @@ function NetWorth() {
   const handleSaveEditItem = async (itemId: string, newName: string, currency: string, platform: string, monthlyDepreciationChf?: number) => {
     // Find the existing item to get its updatedAt timestamp for conflict detection
     const existingItem = netWorthItems.find(item => item.id === itemId)
-    const clientUpdatedAt = existingItem?.updatedAt 
-      ? new Date((existingItem.updatedAt as any).toMillis?.() || existingItem.updatedAt)
-      : null
+    const clientUpdatedAt = toDateSafe(existingItem?.updatedAt)
 
     // Update local state immediately (optimistic update)
     setNetWorthItems((prev) =>
@@ -1360,7 +1353,6 @@ function NetWorth() {
       )
     )
     
-    // Save to Firestore (per-document upsert with conflict detection)
     if (uid && existingItem) {
       const updatedItem: NetWorthItem = {
         ...existingItem,
@@ -1373,10 +1365,10 @@ function NetWorth() {
       const result = await saveNetWorthItem(cleanedItem, uid, {
         clientUpdatedAt,
       })
-      if (!result.success) {
+      if (result.success && result.entries) {
+        setNetWorthItems(result.entries as NetWorthItem[])
+      } else if (!result.success) {
         console.error('[NetWorth] Failed to save edited item:', result.reason)
-        // Optionally revert optimistic update on error
-        // For now, we keep it and let the user retry
       }
     }
     

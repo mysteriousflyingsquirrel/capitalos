@@ -1,0 +1,15 @@
+---
+description: Enforce frontend patterns when editing pages and components
+globs: src/pages/**,src/components/**
+---
+
+# Frontend Standards
+
+## Requirements
+- Always handle loading and error states — never leave the user with a blank screen.
+- Consume services from the services/contexts layer — do not inline business logic.
+- Follow the project's UI guidelines and design system.
+
+## Constraints
+- Do not modify backend services or data contracts.
+- Do not introduce architectural decisions — reference existing patterns.

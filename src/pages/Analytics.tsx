@@ -6,6 +6,7 @@ import { useCurrency } from '../contexts/CurrencyContext'
 import { useIncognito } from '../contexts/IncognitoContext'
 import { useData } from '../contexts/DataContext'
 import { formatMoney } from '../lib/currency'
+import { toDateSafe } from '../lib/firestoreSafeWrite'
 import {
   loadPlatforms,
   savePlatform,
@@ -266,6 +267,8 @@ function Analytics() {
   const { data } = useData()
 
   const [platforms, setPlatforms] = useState<Platform[]>([])
+  const platformsRef = useRef<Platform[]>([])
+  platformsRef.current = platforms
   const [selectedPlatformId, setSelectedPlatformId] = useState('')
   const [safetyBuffer, setSafetyBuffer] = useState<number | null>(null)
   const [forecastEntries, setForecastEntries] = useState<ForecastEntry[]>([])
@@ -274,17 +277,6 @@ function Analytics() {
   const [showAddModal, setShowAddModal] = useState<'inflow' | 'outflow' | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
 
-  const getClientUpdatedAt = (obj: { updatedAt?: unknown } | undefined): Date | null => {
-    const updatedAt = obj?.updatedAt
-    if (!updatedAt) return null
-    try {
-      const millis = (updatedAt as { toMillis?: () => number })?.toMillis?.()
-      const date = new Date(millis || (updatedAt as number))
-      return Number.isFinite(date.getTime()) ? date : null
-    } catch {
-      return null
-    }
-  }
 
   useEffect(() => {
     if (!uid) return
@@ -332,8 +324,11 @@ function Analytics() {
     if (!uid || dataLoading || !selectedPlatformId) return
 
     const timeoutId = setTimeout(() => {
-      const existingPlatform = platforms.find(p => p.id === selectedPlatformId)
+      const existingPlatform = platformsRef.current.find(p => p.id === selectedPlatformId)
       if (!existingPlatform) return
+
+      const currentBuffer = existingPlatform.safetyBuffer ?? null
+      if (currentBuffer === safetyBuffer) return
 
       const updatedPlatform = {
         ...existingPlatform,
@@ -342,14 +337,18 @@ function Analytics() {
 
       setPlatforms(prev => prev.map(p => (p.id === selectedPlatformId ? updatedPlatform : p)))
 
-      const clientUpdatedAt = getClientUpdatedAt(existingPlatform as { updatedAt?: unknown })
-      savePlatform(updatedPlatform, uid, { clientUpdatedAt }).catch((error) => {
+      const clientUpdatedAt = toDateSafe(existingPlatform?.updatedAt)
+      savePlatform(updatedPlatform, uid, { clientUpdatedAt }).then((result) => {
+        if (result.success && result.entries) {
+          setPlatforms(result.entries)
+        }
+      }).catch((error) => {
         console.error('Failed to save safety buffer:', error)
       })
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [safetyBuffer, selectedPlatformId, uid, dataLoading, platforms])
+  }, [safetyBuffer, selectedPlatformId, uid, dataLoading])
 
   const platformData = useMemo(() => {
     if (!selectedPlatformId) {
@@ -440,7 +439,9 @@ function Analytics() {
     setShowAddModal(null)
 
     const result = await saveForecastEntry(newEntry, uid)
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setForecastEntries(result.entries)
+    } else if (!result.success) {
       console.error('[Analytics] Failed to save new forecast entry:', result.reason)
     }
   }
@@ -449,7 +450,7 @@ function Analytics() {
     if (!editingEntry) return
 
     const existingEntry = forecastEntries.find(e => e.id === editingEntry.id)
-    const clientUpdatedAt = getClientUpdatedAt(existingEntry as { updatedAt?: unknown } | undefined)
+    const clientUpdatedAt = toDateSafe(existingEntry?.updatedAt)
 
     const updatedEntry: ForecastEntry = {
       ...(existingEntry || editingEntry),
@@ -465,18 +466,22 @@ function Analytics() {
     setEditingEntry(null)
 
     const result = await saveForecastEntry(updatedEntry, uid, { clientUpdatedAt })
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setForecastEntries(result.entries)
+    } else if (!result.success) {
       console.error('[Analytics] Failed to save edited forecast entry:', result.reason)
     }
   }
 
   const handleDeleteEntry = async (entryId: string) => {
     const existingEntry = forecastEntries.find(e => e.id === entryId)
-    const clientUpdatedAt = getClientUpdatedAt(existingEntry as { updatedAt?: unknown } | undefined)
+    const clientUpdatedAt = toDateSafe(existingEntry?.updatedAt)
     setForecastEntries(prev => prev.filter(entry => entry.id !== entryId))
 
     const result = await deleteForecastEntry(entryId, uid, { clientUpdatedAt })
-    if (!result.success) {
+    if (result.success && result.entries) {
+      setForecastEntries(result.entries)
+    } else if (!result.success) {
       console.error('[Analytics] Failed to delete forecast entry:', result.reason)
     }
   }

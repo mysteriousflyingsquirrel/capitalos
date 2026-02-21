@@ -25,7 +25,7 @@ Capitalos is a unified wealth management web application. It tracks total net wo
 - **Analytics**: Forecast entries (inflow/outflow), platform safety buffer, forecast charts. Holdings by platform and asset; profit/loss summary where data exists.
 - **Perpetuals**: Hyperliquid page (Performance PnL boxes, Positions table, Open Orders). MEXC page (equity, positions, open orders, performance). Data from APIs and optional WebSocket for live positions.
 - **Settings**: Account management, API keys (RapidAPI, Hyperliquid wallet, MEXC API/Secret), platforms list, data import/export (backup), theme, incognito toggle. Link to obtain RapidAPI key for Yahoo Finance.
-- **Auth**: Login (Firebase). Logout. No unauthenticated access to user data.
+- **Auth**: Login via email/password or Google (Firebase Auth). Account creation with email/password. Password reset via email. Logout. No unauthenticated access to user data.
 - **Snapshots**: Create and store net worth snapshots (by date); used for PnL and Net Worth Evolution. Snapshot API: POST `/api/snapshot/create` with `uid` (body or query); creates snapshot in CHF with category breakdown; requires Firebase service account in env; optional RapidAPI key for stock prices.
 - **Tax**: Crypto tax report generation (modal and service); PDF export where implemented.
 - **PWA**: Progressive Web App support (Vite PWA plugin); offline capability as provided by current implementation.
@@ -78,7 +78,7 @@ Capitalos is a unified wealth management web application. It tracks total net wo
 
 ## 11. Security & Privacy
 
-- **Auth**: Firebase Authentication shall be used. Only authenticated users shall read or write their own data.
+- **Auth**: Firebase Authentication shall be used (email/password and Google sign-in). Only authenticated users shall read or write their own data.
 - **Firestore**: Security rules shall restrict access to `users/{userId}/` so that each user can read/write only their own subcollections. Unauthenticated users shall not access any user data.
 - **API keys**: User-provided API keys (RapidAPI, MEXC) shall be stored in user-scoped storage (e.g. Firestore or secure settings). They shall not be exposed to other users or in client-side code beyond what is necessary for API calls.
 - **Snapshot API**: The snapshot creation endpoint shall require a valid user identifier (uid). Production deployments shall secure this endpoint (e.g. API key, rate limiting, IP restriction) as configured; the application code shall not hardcode secrets.
