@@ -6,13 +6,6 @@ export interface TotalTextProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant: TotalVariant
 }
 
-const colorMap: Record<TotalVariant, string> = {
-  inflow: 'text-success',
-  outflow: 'text-danger',
-  neutral: 'text-text-primary',
-  spare: 'text-[#DAA520]',
-}
-
 const TotalText: React.FC<TotalTextProps> = ({ variant, className = '', children, ...rest }) => {
   // Use inline styles to ensure colors are applied (overrides any CSS)
   const colorStyle = variant === 'inflow' 

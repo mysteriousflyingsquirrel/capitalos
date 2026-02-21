@@ -1,37 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import admin from 'firebase-admin'
+import { initializeAdmin, verifyAuth } from '../lib/firebaseAdmin'
 
 // Export config for Vercel
 export const config = {
   maxDuration: 60,
-}
-
-// ============================================================================
-// Firebase Admin Initialization
-// ============================================================================
-
-function initializeAdmin() {
-  if (admin.apps.length > 0) {
-    return
-  }
-
-  try {
-    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT
-    if (serviceAccountJson) {
-      const serviceAccount = JSON.parse(serviceAccountJson)
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      })
-    } else {
-      admin.initializeApp()
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('already exists')) {
-      return
-    }
-    console.error('Failed to initialize Firebase Admin:', error)
-    throw new Error(`Firebase Admin initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  }
 }
 
 // ============================================================================

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import admin from 'firebase-admin'
+import { initializeAdmin, verifyAuth } from '../lib/firebaseAdmin'
 import type { NetWorthSummary, NetWorthItem, NetWorthCategory, NetWorthTransaction } from '../../lib/types.js'
 import { NetWorthCalculationService } from '../../lib/netWorthCalculation.js'
 import { fetchCryptoData } from '../../lib/cryptoCompare.js'
@@ -7,35 +8,6 @@ import { fetchCryptoData } from '../../lib/cryptoCompare.js'
 // Export config for Vercel (increase timeout if needed)
 export const config = {
   maxDuration: 60,
-}
-
-// Initialize Firebase Admin SDK
-function initializeAdmin() {
-  // Check if Firebase Admin is already initialized (important for serverless)
-  if (admin.apps.length > 0) {
-    return
-  }
-
-  try {
-    // Try to initialize with service account from environment variable
-    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT
-    if (serviceAccountJson) {
-      const serviceAccount = JSON.parse(serviceAccountJson)
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      })
-    } else {
-      // Fallback: try to use default credentials (for local development)
-      admin.initializeApp()
-    }
-  } catch (error) {
-    // Handle "already exists" error in serverless environments
-    if (error instanceof Error && error.message.includes('already exists')) {
-      return
-    }
-    console.error('Failed to initialize Firebase Admin:', error)
-    throw new Error(`Firebase Admin initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  }
 }
 
 // Snapshot format for Firestore storage
@@ -207,14 +179,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Initialize Firebase Admin
     initializeAdmin()
 
-    // Get user ID from request body or query
-    const uid = req.body?.uid || req.query?.uid
-
-    if (!uid || typeof uid !== 'string') {
-      return res.status(400).json({ error: 'User ID (uid) is required. Provide it in the request body as { "uid": "your-user-id" } or as a query parameter ?uid=your-user-id' })
+    // Accept either Bearer token auth or CRON_SECRET + uid in body (for GitHub Actions)
+    let uid: string | null = null
+    const cronSecret = req.headers['x-cron-secret'] as string | undefined
+    if (cronSecret && cronSecret === process.env.CRON_SECRET) {
+      uid = (req.body?.uid || req.query?.uid) as string | null
+      if (!uid) {
+        return res.status(400).json({ error: 'uid is required for cron requests' })
+      }
+    } else {
+      uid = await verifyAuth(req, res)
+      if (!uid) return
     }
 
     // Read pre-computed summary from Firestore (computed by client on every data change)
@@ -280,14 +257,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const baseUrl = getBaseUrl(req)
     const perpItems: NetWorthItem[] = []
 
+    const authHeader = req.headers.authorization || ''
+
     // Hyperliquid
     if (apiKeys?.hyperliquidWalletAddress) {
       const walletAddress = apiKeys.hyperliquidWalletAddress || ''
       if (walletAddress && baseUrl) {
         const hlResp = await fetch(`${baseUrl}/api/perpetuals/hyperliquid`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uid, walletAddress }),
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ walletAddress }),
         }).catch(() => null)
 
         const hlJson = hlResp && hlResp.ok ? await hlResp.json().catch(() => null) : null
@@ -307,8 +286,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (apiKeys?.mexcApiKey && apiKeys?.mexcSecretKey && baseUrl) {
       const mexcEquityResp = await fetch(`${baseUrl}/api/perpetuals/mexc/equity`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid }),
+        headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+        body: JSON.stringify({}),
       }).catch(() => null)
       const mexcEquityJson = mexcEquityResp && mexcEquityResp.ok ? await mexcEquityResp.json().catch(() => null) : null
       const mexcEquityUsd = typeof mexcEquityJson?.data?.equityUsd === 'number' ? mexcEquityJson.data.equityUsd : null

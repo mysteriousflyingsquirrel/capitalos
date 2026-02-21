@@ -251,13 +251,11 @@ export async function restoreBackup(
     // Import collections (merge or replace)
     const collectionPromises: Promise<void>[] = []
 
-    // Helper to batch write items with merge
-    // Note: writeBatch.set() doesn't support merge option, so we use setDoc in parallel
-    // For Import/Reset flows, we use allowOverwrite to bypass conflict checks
-    const batchWriteCollection = async <T extends { id: string }>(
+    const batchWriteCollection = async <T extends Record<string, unknown>>(
       items: T[],
       collectionName: string,
-      allowOverwrite: boolean
+      allowOverwrite: boolean,
+      docIdField: keyof T = 'id' as keyof T
     ): Promise<void> => {
       if (items.length === 0) return
 
@@ -267,16 +265,14 @@ export async function restoreBackup(
       for (let i = 0; i < items.length; i += BATCH_SIZE) {
         const chunk = items.slice(i, i + BATCH_SIZE)
         
-        // Use Promise.all with setDoc for merge support
         await Promise.all(
           chunk.map(async (item) => {
-            if (!item.id) {
-              console.warn(`[BackupService] Skipping item without ID in ${collectionName}:`, item)
+            const docId = String(item[docIdField] ?? '')
+            if (!docId) {
+              console.warn(`[BackupService] Skipping item without ${String(docIdField)} in ${collectionName}:`, item)
               return
             }
-            const docRef = doc(db, collectionPath, item.id)
-            // Use setDoc with merge to upsert (create or update)
-            // For Import/Reset, allowOverwrite bypasses conflict checks
+            const docRef = doc(db, collectionPath, docId)
             await setDoc(docRef, item, { merge: true })
           })
         )
@@ -315,9 +311,10 @@ export async function restoreBackup(
         allowOverwrite
       ),
       batchWriteCollection(
-        (normalizedBackup.data.snapshots || []) as { id: string }[],
+        (normalizedBackup.data.snapshots || []) as Record<string, unknown>[],
         'snapshots',
-        allowOverwrite
+        allowOverwrite,
+        'date'
       ),
     )
 

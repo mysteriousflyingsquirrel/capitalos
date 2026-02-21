@@ -143,8 +143,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     initializeAdmin()
-    const { uid } = req.body as { uid?: string }
-    if (!uid) return res.status(400).json({ success: false, error: 'uid is required' })
+    const uid = await verifyAuth(req, res)
+    if (!uid) return
 
     const db = admin.firestore()
     const settingsSnap = await db.collection('users').doc(uid).collection('settings').doc('user').get()
@@ -195,10 +195,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return {
         id: `mexc-order-${o.orderId ?? o.id ?? idx}`,
         token: symbol || 'UNKNOWN',
-        activity: mapMexcOrderType(o.orderType ?? o.type ?? o.category),
+        type: mapMexcOrderType(o.orderType ?? o.type ?? o.category),
         side: side || 'Buy',
         price,
-        priceDisplay: String(price),
         // Prefer computed notional (price * (contracts * contractSize)) to avoid 10,000x scaling issues.
         // Fall back to notional field if computation isn't possible.
         size: Number.isFinite(computedNotional) && computedNotional > 0 ? computedNotional : (notional ?? 0),

@@ -1,5 +1,7 @@
 import React, { useState, useMemo, FormEvent, useRef, useEffect } from 'react'
 import Heading from '../components/Heading'
+import { useToast } from '../hooks/useToast'
+import ToastContainer from '../components/ToastContainer'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
@@ -14,6 +16,7 @@ import { getDailyPricesMap, registerSymbol, categoryUsesYahoo, deriveAssetClass 
 import { useData } from '../contexts/DataContext'
 import { NetWorthCalculationService } from '../services/netWorthCalculationService'
 import { calculateBalanceChf, calculateCoinAmount, calculateHoldings, calculateAveragePricePerItem } from '../services/balanceCalculationService'
+import { DEFAULT_PLATFORMS } from '../constants/platforms'
 import {
   saveNetWorthItem,
   deleteNetWorthItem,
@@ -850,6 +853,7 @@ function NetWorth() {
   const { rapidApiKey } = useApiKeys()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   const formatUsd = (value: number) => formatMoney(value, 'USD', 'ch', { incognito: isIncognito })
+  const { toasts, addToast, dismissToast } = useToast()
   
   // Load data from DataContext (includes merged Perpetuals data)
   const { data, loading: dataLoading } = useData()
@@ -908,27 +912,11 @@ function NetWorth() {
 
     const loadPlatformsData = async () => {
       try {
-        const defaultPlatforms: Platform[] = [
-          { id: 'physical', name: 'Physical', order: 0 },
-          { id: 'raiffeisen', name: 'Raiffeisen', order: 0 },
-          { id: 'revolut', name: 'Revolut', order: 0 },
-          { id: 'yuh', name: 'yuh!', order: 0 },
-          { id: 'saxo', name: 'SAXO', order: 0 },
-          { id: 'mexc', name: 'MEXC', order: 0 },
-          { id: 'bingx', name: 'BingX', order: 0 },
-          { id: 'exodus', name: 'Exodus', order: 0 },
-          { id: 'trezor', name: 'Trezor', order: 0 },
-          { id: 'ledger', name: 'Ledger', order: 0 },
-          { id: 'ibkr', name: 'IBKR', order: 0 },
-          { id: 'ubs', name: 'UBS', order: 0 },
-          { id: 'property', name: 'Property', order: 0 },
-          { id: 'wallet', name: 'Wallet', order: 0 },
-          { id: 'other', name: 'Other', order: 0 },
-        ]
-        const loadedPlatforms = await loadPlatforms(defaultPlatforms, uid)
+        const loadedPlatforms = await loadPlatforms(DEFAULT_PLATFORMS, uid)
         setPlatforms(loadedPlatforms)
       } catch (error) {
         console.error('Failed to load platforms:', error)
+        addToast('Failed to load data. Please try again.')
       }
     }
 
@@ -969,6 +957,7 @@ function NetWorth() {
           }
         } catch (error) {
           console.error('Error fetching USD→CHF rate:', error)
+          addToast('Failed to load data. Please try again.')
         }
         return
       }
@@ -989,6 +978,7 @@ function NetWorth() {
       setCryptoPricesLastUpdate(Date.now())
       } catch (error) {
       console.error('Error fetching crypto data:', error)
+      addToast('Failed to load data. Please try again.')
     } finally {
       if (showLoading) {
         setIsRefreshingPrices(false)
@@ -1021,6 +1011,7 @@ function NetWorth() {
       setStockPricesLastUpdate(Date.now())
     } catch (error) {
       console.error('Error fetching stock prices:', error)
+      addToast('Failed to load data. Please try again.')
     } finally {
       if (showLoading) {
         setIsRefreshingPrices(false)
@@ -1130,6 +1121,7 @@ function NetWorth() {
         setNetWorthItems(result.entries as NetWorthItem[])
       } else if (!result.success) {
         console.error('[NetWorth] Failed to save new item:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
       
       // Register symbol in market registry for Yahoo-backed categories
@@ -1140,6 +1132,7 @@ function NetWorth() {
           console.log(`[NetWorth] Registered symbol: ${data.name}`)
         } catch (err) {
           console.error('[NetWorth] Failed to register symbol:', err)
+          addToast('Failed to save changes. Please try again.')
           // Non-fatal - continue even if registration fails
         }
       }
@@ -1181,6 +1174,7 @@ function NetWorth() {
           setTransactions(result.entries as NetWorthTransaction[])
         } else if (!result.success) {
           console.error('[NetWorth] Failed to save new transaction:', result.reason)
+          addToast('Failed to save changes. Please try again.')
         }
       }
     }
@@ -1217,6 +1211,7 @@ function NetWorth() {
         setTransactions(result.entries as NetWorthTransaction[])
       } else if (!result.success) {
         console.error('[NetWorth] Failed to save transaction:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
     }
     
@@ -1255,6 +1250,7 @@ function NetWorth() {
         setTransactions(result.entries as NetWorthTransaction[])
       } else if (!result.success) {
         console.error('[NetWorth] Failed to save updated transaction:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
     }
     
@@ -1277,6 +1273,7 @@ function NetWorth() {
         setTransactions(result.entries)
       } else if (!result.success) {
         console.error('[NetWorth] Failed to delete transaction:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
     }
   }
@@ -1302,6 +1299,7 @@ function NetWorth() {
           setNetWorthItems(itemResult.entries)
         } else if (!itemResult.success) {
           console.error('[NetWorth] Failed to delete item:', itemResult.reason)
+          addToast('Failed to save changes. Please try again.')
         }
 
         let latestTransactions: NetWorthTransaction[] | undefined
@@ -1315,6 +1313,7 @@ function NetWorth() {
               latestTransactions = result.entries
             } else if (!result.success) {
               console.error(`[NetWorth] Failed to delete transaction ${tx.id}:`, result.reason)
+              addToast('Failed to save changes. Please try again.')
             }
           })
         )
@@ -1369,6 +1368,7 @@ function NetWorth() {
         setNetWorthItems(result.entries as NetWorthItem[])
       } else if (!result.success) {
         console.error('[NetWorth] Failed to save edited item:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
     }
     
@@ -1520,6 +1520,7 @@ function NetWorth() {
         })()}
 
       </div>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

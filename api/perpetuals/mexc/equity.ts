@@ -1,76 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import admin from 'firebase-admin'
-import crypto from 'crypto'
-
-let adminInitialized = false
-function initializeAdmin() {
-  if (adminInitialized) return
-  try {
-    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT
-    if (serviceAccountJson) {
-      const serviceAccount = JSON.parse(serviceAccountJson)
-      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
-    } else {
-      admin.initializeApp()
-    }
-    adminInitialized = true
-  } catch {
-    adminInitialized = true
-  }
-}
-
-function hmacSha256Hex(secret: string, message: string): string {
-  return crypto.createHmac('sha256', secret).update(message).digest('hex')
-}
-
-function buildSortedQuery(params: Record<string, any>): string {
-  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null)
-  entries.sort(([a], [b]) => a.localeCompare(b))
-  return entries.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
-}
-
-async function mexcPrivateGet<T>(args: {
-  path: string
-  query?: Record<string, any>
-  apiKey: string
-  secretKey: string
-}): Promise<T> {
-  const baseUrl = 'https://contract.mexc.com'
-  const requestTime = Date.now().toString()
-  const queryString = args.query ? buildSortedQuery(args.query) : ''
-  const signaturePayload = `${args.apiKey}${requestTime}${queryString}`
-  const signature = hmacSha256Hex(args.secretKey, signaturePayload)
-
-  const url = new URL(args.path, baseUrl)
-  if (queryString) url.search = queryString
-
-  const resp = await fetch(url.toString(), {
-    method: 'GET',
-    headers: {
-      ApiKey: args.apiKey,
-      'Request-Time': requestTime,
-      Signature: signature,
-      'Recv-Window': '60000',
-    },
-  })
-
-  if (!resp.ok) {
-    const text = await resp.text()
-    throw new Error(`MEXC REST error (${resp.status}): ${text}`)
-  }
-
-  return (await resp.json()) as T
-}
-
-function toNumber(v: any): number | null {
-  if (v === null || v === undefined) return null
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null
-  if (typeof v === 'string') {
-    const n = parseFloat(v)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
-}
+import { initializeAdmin, verifyAuth } from '../../lib/firebaseAdmin'
+import { mexcPrivateGet, toNumber } from './shared'
 
 /**
  * Returns account equity in USD (USDT) for MEXC futures.
@@ -83,8 +14,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     initializeAdmin()
-    const { uid } = req.body as { uid?: string }
-    if (!uid) return res.status(400).json({ success: false, error: 'uid is required' })
+    const uid = await verifyAuth(req, res)
+    if (!uid) return
 
     const db = admin.firestore()
     const settingsSnap = await db.collection('users').doc(uid).collection('settings').doc('user').get()

@@ -7,13 +7,14 @@ import {
   Cell,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
 } from 'recharts'
 import Heading from '../components/Heading'
 import TotalText from '../components/TotalText'
+import { useToast } from '../hooks/useToast'
+import ToastContainer from '../components/ToastContainer'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useIncognito } from '../contexts/IncognitoContext'
@@ -21,7 +22,6 @@ import { useApiKeys } from '../contexts/ApiKeysContext'
 import { useData } from '../contexts/DataContext'
 import { formatMoney } from '../lib/currency'
 import { formatDate } from '../lib/dateFormat'
-import type { CurrencyCode } from '../lib/currency'
 import type { NetWorthSnapshot } from '../services/snapshotService'
 import type { NetWorthItem, NetWorthTransaction } from './NetWorth'
 import type { NetWorthCategory } from './NetWorth'
@@ -193,11 +193,6 @@ function KpiCard({ title, value, subtitle }: KpiCardProps) {
   )
 }
 
-// Helper function: Format currency (will be used with currency context)
-function formatCurrency(value: number, currency: CurrencyCode): string {
-  return formatMoney(value, currency, 'ch')
-}
-
 // Helper function: Format CHF for chart ticks
 function formatCHFTick(value: number): string {
   if (value >= 1000) {
@@ -211,6 +206,7 @@ function Dashboard() {
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const { baseCurrency, convert, exchangeRates } = useCurrency()
   const { rapidApiKey } = useApiKeys()
+  const { toasts, addToast, dismissToast } = useToast()
 
   // Load data from DataContext (includes merged Perpetuals data)
   const { uid } = useAuth()
@@ -278,6 +274,7 @@ function Dashboard() {
       }
     } catch (error) {
       console.error('Error fetching crypto data:', error)
+      addToast('Failed to load data. Please try again.')
     } finally {
       if (showLoading) {
         setIsRefreshingPrices(false)
@@ -308,6 +305,7 @@ function Dashboard() {
       setStockPrices(prev => ({ ...prev, ...prices }))
     } catch (error) {
       console.error('Error fetching stock prices:', error)
+      addToast('Failed to load data. Please try again.')
     } finally {
       if (showLoading) {
         setIsRefreshingPrices(false)
@@ -1489,6 +1487,7 @@ function Dashboard() {
 
 
       </div>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

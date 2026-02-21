@@ -557,10 +557,7 @@ export async function saveUserSettings(
   settings: UserSettings
 ): Promise<void> {
   const docRef = doc(db, `users/${uid}/settings/user`)
-  // Check if document exists
-  const docSnap = await getDoc(docRef)
   
-    // Always use updateDoc with merge to prevent overwrites
     const updateData: any = { ...settings }
     
     // Handle nested apiKeys object - if any key should be deleted, use deleteField()
@@ -641,6 +638,7 @@ export async function clearAllUserData(uid: string): Promise<void> {
     'cashflowInflowItems',
     'cashflowOutflowItems',
     'cashflowAccountflowMappings',
+    'forecastEntries',
     'snapshots',
     'platforms',
   ]

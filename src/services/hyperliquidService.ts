@@ -1,24 +1,17 @@
 import type { PerpetualsData } from '../pages/NetWorth'
+import { apiPost } from '../lib/apiClient'
 
 export async function fetchHyperliquidPerpetualsData(args: {
   uid: string
   walletAddress: string
 }): Promise<PerpetualsData | null> {
-  // Return null if wallet address is missing
   if (!args.walletAddress) {
     return null
   }
 
   try {
-    const response = await fetch(`/api/perpetuals/hyperliquid`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        uid: args.uid,
-        walletAddress: args.walletAddress,
-      }),
+    const response = await apiPost('/api/perpetuals/hyperliquid', {
+      walletAddress: args.walletAddress,
     })
     
     if (!response.ok) {

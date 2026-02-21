@@ -75,10 +75,9 @@ interface PositionRow {
 // Open Order row data interface
 interface OpenOrderRow {
   token: string
-  activity: string
+  type: string
   side: 'Buy' | 'Sell'
   price: number
-  priceDisplay: string
   size: number
   amount: string
 }
@@ -150,10 +149,9 @@ export default function Mexc() {
 
       return {
         token: order.token,
-        activity: order.activity,
+        type: order.type,
         side: order.side,
         price: order.price,
-        priceDisplay: order.priceDisplay,
         size: order.size,
         amount: amountStr,
       }
@@ -328,7 +326,7 @@ export default function Mexc() {
                     <Heading level={4}>Side</Heading>
                   </th>
                   <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Activity</Heading>
+                    <Heading level={4}>Type</Heading>
                   </th>
                   <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Price</Heading>
@@ -365,7 +363,7 @@ export default function Mexc() {
                           </span>
                         </td>
                         <td className="py-3 pr-4 whitespace-nowrap">
-                          <div className="text2 text-text-primary">{order.activity}</div>
+                          <div className="text2 text-text-primary">{order.type}</div>
                         </td>
                         <td className="py-3 pr-4 text-left whitespace-nowrap">
                           <div className="text2 text-text-primary">

@@ -20,6 +20,12 @@ interface NavigationItem {
   icon: string
 }
 
+interface ExchangeNavItem {
+  name: string
+  path: string
+  iconSrc: string
+}
+
 const navigation: NavigationItem[] = [
   { name: 'Dashboard', path: '/', icon: dashboardIcon },
   { name: 'Net Worth', path: '/net-worth', icon: netWorthIcon },
@@ -224,11 +230,13 @@ function Sidebar() {
 
             {isExchangesOpen && (
               <div className="mt-1 space-y-1">
-                {[
-                  // Use Google's favicon service for reliability (many sites don't expose /favicon.ico)
-                  { name: 'Hyperliquid', path: '/exchanges/hyperliquid', iconSrc: 'https://www.google.com/s2/favicons?domain=hyperfoundation.org&sz=32' },
-                  { name: 'MEXC', path: '/exchanges/mexc', iconSrc: 'https://www.google.com/s2/favicons?domain=mexc.com&sz=32' },
-                ].map((child) => {
+                {(
+                  [
+                    // Use Google's favicon service for reliability (many sites don't expose /favicon.ico)
+                    { name: 'Hyperliquid', path: '/exchanges/hyperliquid', iconSrc: 'https://www.google.com/s2/favicons?domain=hyperfoundation.org&sz=32' },
+                    { name: 'MEXC', path: '/exchanges/mexc', iconSrc: 'https://www.google.com/s2/favicons?domain=mexc.com&sz=32' },
+                  ] as ExchangeNavItem[]
+                ).map((child) => {
                   const isChildActive = location.pathname.startsWith(child.path)
                   return (
                     <Link
@@ -248,7 +256,7 @@ function Sidebar() {
                     >
                       <span className="w-4 h-4 flex-shrink-0" aria-hidden="true">
                         <img
-                          src={(child as any).iconSrc}
+                          src={child.iconSrc}
                           alt=""
                           className="w-4 h-4 rounded-sm"
                           referrerPolicy="no-referrer"

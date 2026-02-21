@@ -1,30 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import admin from 'firebase-admin'
-
-// Initialize Firebase Admin SDK
-let adminInitialized = false
-
-function initializeAdmin() {
-  if (adminInitialized) {
-    return
-  }
-
-  try {
-    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT
-    if (serviceAccountJson) {
-      const serviceAccount = JSON.parse(serviceAccountJson)
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      })
-    } else {
-      admin.initializeApp()
-    }
-    adminInitialized = true
-  } catch (error) {
-    console.error('Failed to initialize Firebase Admin:', error)
-    throw new Error('Firebase Admin initialization failed')
-  }
-}
+import { initializeAdmin, verifyAuth } from '../lib/firebaseAdmin'
 
 interface PerpetualsOpenPosition {
   id: string
@@ -119,16 +94,6 @@ interface PerpetualsData {
 }
 
 const HYPERLIQUID_BASE_URL = 'https://api.hyperliquid.xyz'
-
-function toFiniteNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
-  if (typeof value === 'string') {
-    const n = parseFloat(value)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
-}
 
 async function fetchAllPerpDexs(): Promise<string[]> {
   try {
@@ -993,18 +958,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     initializeAdmin()
+    const uid = await verifyAuth(req, res)
+    if (!uid) return
 
-    // Get wallet address from request body (passed from client)
-    const { uid, walletAddress } = req.body as {
-      uid?: string
-      walletAddress?: string
-    }
-
-    if (!uid || typeof uid !== 'string') {
-      return res.status(400).json({ 
-        error: 'User ID (uid) is required in request body' 
-      })
-    }
+    const { walletAddress } = req.body as { walletAddress?: string }
 
     if (!walletAddress || typeof walletAddress !== 'string') {
       return res.status(400).json({ 

@@ -4,7 +4,7 @@
  */
 
 import type { CurrencyCode } from '../../lib/currency'
-import type { FxRateSnapshot } from '../market-data/types'
+import type { FxSnapshot } from './types'
 
 // ============================================================================
 // Net Worth Category Types (from existing codebase)
@@ -115,7 +115,7 @@ export interface ValuationResult {
   /** Display currency (user's preferred currency) */
   displayCurrency: CurrencyCode
   /** FX snapshot used for this valuation */
-  fxSnapshotUsed: FxRateSnapshot
+  fxSnapshotUsed: FxSnapshot
   /** Quotes used for this valuation */
   quotesUsed: QuotesUsed
   /** Individual item valuations */
@@ -143,7 +143,7 @@ export interface ValuationOptions {
   /** Pre-fetched market prices (optional, will fetch if not provided) */
   marketPrices?: Record<string, number>
   /** Pre-fetched FX rates (optional, will fetch if not provided) */
-  fxRates?: FxRateSnapshot
+  fxRates?: FxSnapshot
   /** USD to CHF rate (optional, will use from fxRates or fetch) */
   usdToChfRate?: number | null
   /** RapidAPI key for market prices */

@@ -6,7 +6,6 @@ import { useApiKeys } from '../contexts/ApiKeysContext'
 import { useData } from '../contexts/DataContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { THEMES, type ThemeId } from '../lib/themes'
-import type { CurrencyCode } from '../lib/currency'
 import { toDateSafe } from '../lib/firestoreSafeWrite'
 import { supportedCurrencies } from '../lib/currency'
 import {
@@ -15,6 +14,7 @@ import {
   readBackupFile,
   restoreBackup,
 } from '../services/backupService'
+import { DEFAULT_PLATFORMS } from '../constants/platforms'
 import {
   loadPlatforms,
   savePlatform,
@@ -278,24 +278,7 @@ function Settings() {
     const loadPlatformsData = async () => {
       setPlatformLoading(true)
       try {
-        const defaultPlatforms: Platform[] = [
-          { id: 'physical', name: 'Physical', order: 0 },
-          { id: 'raiffeisen', name: 'Raiffeisen', order: 0 },
-          { id: 'revolut', name: 'Revolut', order: 0 },
-          { id: 'yuh', name: 'yuh!', order: 0 },
-          { id: 'saxo', name: 'SAXO', order: 0 },
-          { id: 'mexc', name: 'MEXC', order: 0 },
-          { id: 'bingx', name: 'BingX', order: 0 },
-          { id: 'exodus', name: 'Exodus', order: 0 },
-          { id: 'trezor', name: 'Trezor', order: 0 },
-          { id: 'ledger', name: 'Ledger', order: 0 },
-          { id: 'ibkr', name: 'IBKR', order: 0 },
-          { id: 'ubs', name: 'UBS', order: 0 },
-          { id: 'property', name: 'Property', order: 0 },
-          { id: 'wallet', name: 'Wallet', order: 0 },
-          { id: 'other', name: 'Other', order: 0 },
-        ]
-        const loaded = await loadPlatforms(defaultPlatforms, uid)
+        const loaded = await loadPlatforms(DEFAULT_PLATFORMS, uid)
         setPlatforms(loaded)
       } catch (err) {
         console.error('Failed to load platforms:', err)

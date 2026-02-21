@@ -6,15 +6,7 @@ type HyperliquidInfoRequestBody =
   | { type: 'candleSnapshot'; req: { coin: string; interval: string; startTime: number; endTime?: number } }
   | { type: 'perpsAtOpenInterestCap'; dex?: string }
 
-function toFiniteNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
-  if (typeof value === 'string') {
-    const n = parseFloat(value)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
-}
+import { toNumber as toFiniteNumber } from '../lib/numbers'
 
 export function extractSymbol(universeEntry: unknown): string | null {
   if (typeof universeEntry === 'string') return universeEntry

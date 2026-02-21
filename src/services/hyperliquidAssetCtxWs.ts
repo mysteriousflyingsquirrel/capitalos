@@ -1,4 +1,5 @@
 import { type HyperliquidWsStatus } from './hyperliquidPositionsWs'
+import { toNumber } from '../lib/numbers'
 
 export type MarkPriceMap = Record<string, number | null>
 
@@ -9,16 +10,6 @@ type ActiveAssetCtxMessage = {
     ctx?: { markPx?: string | number; [key: string]: unknown }
     [key: string]: unknown
   }
-}
-
-function toNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
-  if (typeof value === 'string') {
-    const n = parseFloat(value)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
 }
 
 /**

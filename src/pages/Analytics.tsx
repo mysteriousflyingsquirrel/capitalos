@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef, type MouseEvent, type FormEvent, type ChangeEvent } from 'react'
 import Heading from '../components/Heading'
+import { useToast } from '../hooks/useToast'
+import ToastContainer from '../components/ToastContainer'
 import TotalText from '../components/TotalText'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useCurrency } from '../contexts/CurrencyContext'
@@ -265,6 +267,7 @@ function Analytics() {
   const { baseCurrency, convert } = useCurrency()
   const { isIncognito } = useIncognito()
   const { data } = useData()
+  const { toasts, addToast, dismissToast } = useToast()
 
   const [platforms, setPlatforms] = useState<Platform[]>([])
   const platformsRef = useRef<Platform[]>([])
@@ -302,6 +305,7 @@ function Analytics() {
         }
       } catch (error) {
         console.error('Failed to load analytics data:', error)
+        addToast('Failed to load analytics data. Please try again.')
       } finally {
         setDataLoading(false)
       }
@@ -344,6 +348,7 @@ function Analytics() {
         }
       }).catch((error) => {
         console.error('Failed to save safety buffer:', error)
+        addToast('Failed to save changes. Please try again.')
       })
     }, 500)
 
@@ -443,6 +448,7 @@ function Analytics() {
       setForecastEntries(result.entries)
     } else if (!result.success) {
       console.error('[Analytics] Failed to save new forecast entry:', result.reason)
+      addToast('Failed to save changes. Please try again.')
     }
   }
 
@@ -470,6 +476,7 @@ function Analytics() {
       setForecastEntries(result.entries)
     } else if (!result.success) {
       console.error('[Analytics] Failed to save edited forecast entry:', result.reason)
+      addToast('Failed to save changes. Please try again.')
     }
   }
 
@@ -872,6 +879,7 @@ function Analytics() {
           />
         )}
       </div>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

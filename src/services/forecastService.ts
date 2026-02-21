@@ -1,9 +1,6 @@
 import {
-  saveDocuments,
   loadDocuments,
-  type Platform,
 } from './firestoreService'
-import { loadPlatforms } from './storageService'
 
 export interface ForecastEntry {
   id: string
@@ -14,18 +11,6 @@ export interface ForecastEntry {
   amount: number // Absolute value (positive)
   createdAt?: string
   updatedAt?: string
-}
-
-/**
- * Save forecast entries to Firestore
- */
-export async function saveForecastEntries(
-  uid: string,
-  entries: ForecastEntry[]
-): Promise<void> {
-  if (!uid) throw new Error('saveForecastEntries: uid is required')
-  if (!Array.isArray(entries)) throw new Error('saveForecastEntries: entries must be an array')
-  await saveDocuments(uid, 'forecastEntries', entries)
 }
 
 export async function loadForecastEntries(

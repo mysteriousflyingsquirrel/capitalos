@@ -31,6 +31,7 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import { db } from '../../config/firebase'
+import { apiPost } from '../../lib/apiClient'
 
 // ============================================================================
 // Types
@@ -294,13 +295,7 @@ async function fetchMissingPricesFromApi(
   if (symbols.length === 0 || !uid) return null
 
   try {
-    const response = await fetch('/api/market/update-daily-prices', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ uid, symbols }),
-    })
+    const response = await apiPost('/api/market/update-daily-prices', { symbols })
 
     if (!response.ok) {
       console.error(`[DailyPriceService] API returned ${response.status}`)

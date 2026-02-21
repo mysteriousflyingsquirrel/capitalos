@@ -1,12 +1,15 @@
 // TypeScript types
 import React, { useState, useRef, useEffect, FormEvent } from 'react'
 import Heading from '../components/Heading'
+import { useToast } from '../hooks/useToast'
+import ToastContainer from '../components/ToastContainer'
 import TotalText from '../components/TotalText'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useAuth } from '../lib/dataSafety/authGateCompat'
 import { useIncognito } from '../contexts/IncognitoContext'
-import { formatMoney, formatNumber, type CurrencyCode } from '../lib/currency'
+import { formatMoney, type CurrencyCode } from '../lib/currency'
 import { toDateSafe } from '../lib/firestoreSafeWrite'
+import { DEFAULT_PLATFORMS } from '../constants/platforms'
 import {
   saveCashflowInflowItem,
   deleteCashflowInflowItem,
@@ -316,7 +319,6 @@ function InflowSection({ items, onAddItem, onEditItem, onRemoveItem }: InflowSec
                               <div className="flex-shrink-0 flex items-center justify-end">
                                 <CashflowItemMenu
                                   itemId={item.id}
-                                  itemType="inflow"
                                   onEdit={() => setEditingItem(item)}
                                   onRemove={() => onRemoveItem(item.id)}
                                 />
@@ -472,7 +474,6 @@ function OutflowSection({ items, onAddItem, onEditItem, onRemoveItem }: OutflowS
                               <div className="flex-shrink-0 flex items-center justify-end">
                                 <CashflowItemMenu
                                   itemId={item.id}
-                                  itemType="outflow"
                                   onEdit={() => setEditingItem(item)}
                                   onRemove={() => onRemoveItem(item.id)}
                                 />
@@ -717,7 +718,6 @@ function AccountflowSection({ mappings, platforms, onAddMapping, onEditMapping, 
                           <div className="flex-shrink-0 flex items-center justify-end">
                             <CashflowItemMenu
                               itemId={mapping.id}
-                              itemType="accountflow"
                               onEdit={() => setEditingMapping(mapping)}
                               onRemove={() => onRemoveMapping(mapping.id)}
                             />
@@ -850,7 +850,6 @@ function AccountflowSection({ mappings, platforms, onAddMapping, onEditMapping, 
 // Cashflow Item Menu Component (3-dots)
 interface CashflowItemMenuProps {
   itemId: string
-  itemType: 'inflow' | 'outflow' | 'accountflow'
   onEdit: () => void
   onRemove: () => void
 }
@@ -2044,6 +2043,7 @@ function Cashflow() {
   const { isIncognito } = useIncognito()
   const formatCurrency = (value: number) => formatMoney(value, baseCurrency, 'ch', { incognito: isIncognito })
   const { uid } = useAuth()
+  const { toasts, addToast, dismissToast } = useToast()
   const [inflowItems, setInflowItems] = useState<InflowItem[]>([])
   const [outflowItems, setOutflowItems] = useState<OutflowItem[]>([])
   const [accountflowItems, setAccountflowItems] = useState<AccountflowItem[]>([])
@@ -2065,28 +2065,11 @@ function Cashflow() {
     const loadData = async () => {
       setDataLoading(true)
       try {
-        const defaultPlatforms: Platform[] = [
-          { id: 'physical', name: 'Physical', order: 0 },
-          { id: 'raiffeisen', name: 'Raiffeisen', order: 0 },
-          { id: 'revolut', name: 'Revolut', order: 0 },
-          { id: 'yuh', name: 'yuh!', order: 0 },
-          { id: 'saxo', name: 'SAXO', order: 0 },
-          { id: 'mexc', name: 'MEXC', order: 0 },
-          { id: 'bingx', name: 'BingX', order: 0 },
-          { id: 'exodus', name: 'Exodus', order: 0 },
-          { id: 'trezor', name: 'Trezor', order: 0 },
-          { id: 'ledger', name: 'Ledger', order: 0 },
-          { id: 'ibkr', name: 'IBKR', order: 0 },
-          { id: 'ubs', name: 'UBS', order: 0 },
-          { id: 'property', name: 'Property', order: 0 },
-          { id: 'wallet', name: 'Wallet', order: 0 },
-          { id: 'other', name: 'Other', order: 0 },
-        ]
         const [inflow, outflow, mappings, loadedPlatforms] = await Promise.all([
           loadCashflowInflowItems(mockInflowItems, uid),
           loadCashflowOutflowItems(mockOutflowItems, uid),
           loadCashflowAccountflowMappings([], uid),
-          loadPlatforms(defaultPlatforms, uid),
+          loadPlatforms(DEFAULT_PLATFORMS, uid),
         ])
         setInflowItems(inflow)
         setOutflowItems(outflow)
@@ -2113,6 +2096,7 @@ function Cashflow() {
               const res = await deleteCashflowAccountflowMapping(m.id, uid)
               if (!res.success) {
                 console.error('[Cashflow] Failed to delete mapping for removed platform:', res.reason)
+                addToast('Failed to save changes. Please try again.')
               }
             })
           )
@@ -2153,12 +2137,14 @@ function Cashflow() {
               const res = await savePlatform(p, uid)
               if (!res.success) {
                 console.error('[Cashflow] Failed to save platform order:', res.reason)
+                addToast('Failed to save changes. Please try again.')
               }
             })
           )
         }
       } catch (error) {
         console.error('Failed to load data:', error)
+        addToast('Failed to load data. Please try again.')
       } finally {
         setDataLoading(false)
       }
@@ -2186,6 +2172,7 @@ function Cashflow() {
       setInflowItems(result.entries as InflowItem[])
     } else if (!result.success) {
       console.error('[Cashflow] Failed to save new inflow item:', result.reason)
+      addToast('Failed to save changes. Please try again.')
     }
   }
 
@@ -2243,6 +2230,7 @@ function Cashflow() {
         setInflowItems(result.entries as InflowItem[])
       } else if (!result.success) {
         console.error('[Cashflow] Failed to save edited inflow item:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
     }
   }
@@ -2267,6 +2255,7 @@ function Cashflow() {
         setOutflowItems(result.entries as OutflowItem[])
       } else if (!result.success) {
         console.error('[Cashflow] Failed to save edited outflow item:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
     }
   }
@@ -2285,6 +2274,7 @@ function Cashflow() {
         setInflowItems(result.entries)
       } else if (!result.success) {
         console.error('[Cashflow] Failed to delete inflow item:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
     }
   }
@@ -2299,6 +2289,7 @@ function Cashflow() {
         setOutflowItems(result.entries)
       } else if (!result.success) {
         console.error('[Cashflow] Failed to delete outflow item:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
     }
   }
@@ -2316,6 +2307,7 @@ function Cashflow() {
       setAccountflowMappings(result.entries as AccountflowMapping[])
     } else if (!result.success) {
       console.error('[Cashflow] Failed to save new mapping:', result.reason)
+      addToast('Failed to save changes. Please try again.')
     }
   }
 
@@ -2328,6 +2320,7 @@ function Cashflow() {
       setAccountflowMappings(result.entries as AccountflowMapping[])
     } else if (!result.success) {
       console.error('[Cashflow] Failed to save edited mapping:', result.reason)
+      addToast('Failed to save changes. Please try again.')
     }
   }
 
@@ -2341,6 +2334,7 @@ function Cashflow() {
         setAccountflowMappings(result.entries)
       } else if (!result.success) {
         console.error('[Cashflow] Failed to delete mapping:', result.reason)
+        addToast('Failed to save changes. Please try again.')
       }
     }
   }
@@ -2391,6 +2385,7 @@ function Cashflow() {
           />
         </div>
       </div>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }
