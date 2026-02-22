@@ -1433,7 +1433,77 @@ function AddNetWorthItemModal({ category, platforms, onClose, onSubmit, onSaveTr
   const [error, setError] = useState<string | null>(null)
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
   const [priceError, setPriceError] = useState<string | null>(null)
-  
+
+  useEffect(() => {
+    if (isCrypto && name.trim()) {
+      const ticker = name.trim().toUpperCase()
+
+      const debounceTimer = setTimeout(() => {
+        setIsLoadingPrice(true)
+        setPriceError(null)
+
+        fetchCryptoPrices([ticker])
+          .then((prices) => {
+            const price = prices[ticker]
+            if (price !== undefined && price !== null) {
+              setPricePerItem(price.toString())
+              setPriceError(null)
+            } else {
+              setPriceError(`Could not fetch price for ${ticker}. Please enter price manually.`)
+            }
+          })
+          .catch(() => {
+            setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
+          })
+          .finally(() => {
+            setIsLoadingPrice(false)
+          })
+      }, 1000)
+
+      return () => clearTimeout(debounceTimer)
+    } else if (isCrypto && !name.trim()) {
+      setPricePerItem('')
+      setPriceError(null)
+      setIsLoadingPrice(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCrypto, name])
+
+  useEffect(() => {
+    if (isStockCategory && name.trim()) {
+      const ticker = name.trim().toUpperCase()
+
+      const debounceTimer = setTimeout(() => {
+        setIsLoadingPrice(true)
+        setPriceError(null)
+
+        getDailyPricesMap([ticker])
+          .then((prices) => {
+            const price = prices[ticker]
+            if (price !== undefined && price !== null) {
+              setPricePerItem(price.toString())
+              setPriceError(null)
+            } else {
+              setPriceError(`Price for ${ticker} not found. Please enter price manually.`)
+            }
+          })
+          .catch(() => {
+            setPriceError(`Failed to fetch price for ${ticker}. Please enter price manually.`)
+          })
+          .finally(() => {
+            setIsLoadingPrice(false)
+          })
+      }, 1000)
+
+      return () => clearTimeout(debounceTimer)
+    } else if (isStockCategory && !name.trim()) {
+      setPricePerItem('')
+      setPriceError(null)
+      setIsLoadingPrice(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStockCategory, name])
+
   // Calculate total balance for all categories
   const totalBalance = useMemo(() => {
     const parsedAmount = Number(amount) || 0
