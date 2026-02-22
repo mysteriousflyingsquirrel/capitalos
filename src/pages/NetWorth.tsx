@@ -1007,6 +1007,26 @@ function NetWorth() {
       }
       
     }
+
+    // Fetch live price for the new ticker so the indicator turns green immediately
+    const ticker = data.name.trim().toUpperCase()
+    if (category === 'Crypto' && ticker) {
+      fetchCryptoPrices([ticker])
+        .then((prices) => {
+          if (prices[ticker]) {
+            setCryptoPrices((prev) => ({ ...prev, [ticker]: prices[ticker] }))
+          }
+        })
+        .catch(() => {})
+    } else if ((category === 'Index Funds' || category === 'Stocks' || category === 'Commodities') && ticker) {
+      getDailyPricesMap([ticker])
+        .then((prices) => {
+          if (prices[ticker]) {
+            setStockPrices((prev) => ({ ...prev, [ticker]: prices[ticker] }))
+          }
+        })
+        .catch(() => {})
+    }
     
     // Don't close the modal here - let the modal close itself after transaction is saved
     
