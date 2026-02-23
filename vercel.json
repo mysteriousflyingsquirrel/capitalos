@@ -6,6 +6,12 @@
       "source": "/((?!api).*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/snapshot/create",
+      "schedule": "17 23 * * *"
+    }
   ]
 }
 

@@ -4,11 +4,11 @@
 This specification defines the **current** net worth snapshot system:
 
 - Manual snapshot creation (Settings page)
-- Automatic snapshot creation (GitHub Actions cron)
+- Automatic snapshot creation (Vercel Cron)
 - Snapshot storage schema in Firestore and localStorage
 - Retention / cleanup (if any)
 - Failure handling and idempotency behavior
-- API contract for `POST /api/snapshot/create`
+- API contract for `/api/snapshot/create`
 
 ## Definitions (data model / terms)
 
@@ -61,29 +61,37 @@ Flow:
 4. The snapshot is appended to the snapshots list and persisted using `saveSnapshots(...)`.
 5. `hasSnapshotForDate(...)` is used to prevent duplicates.
 
-### B) Automatic daily snapshot (GitHub Actions cron)
-Source: `.github/workflows/daily-snapshot.yml`.
+### B) Automatic daily snapshot (Vercel Cron)
+Source: `vercel.json` (cron config) + `api/snapshot/create.ts` (handler).
 
-Current schedule:
-
-- The workflow cron is `17 23 * * *`.
-- The file comment says “23:59 UTC” but the cron expression actually triggers at **23:17 UTC**.
+Schedule: `17 23 * * *` (23:17 UTC daily).
 
 Flow:
 
-1. GitHub Actions runs the workflow at the cron time or manually via `workflow_dispatch`.
-2. It calls:
-   - `POST {VERCEL_URL}/api/snapshot/create`
-   - Body: `{ "uid": "<USER_UID>" }`
-3. It expects HTTP 200 for success; non-200 fails the job.
+1. Vercel Cron sends a `GET` request to `/api/snapshot/create` with `Authorization: Bearer <CRON_SECRET>`.
+2. The handler verifies the `CRON_SECRET` from the `Authorization` header.
+3. The handler discovers all users via `admin.auth().listUsers()`.
+4. For each user, it creates a snapshot (skipping if one already exists for that date).
+5. Returns `{ success: true, results: [{ uid, date, status }] }` — no financial data in the response.
+
+## Authentication
+
+### GET (Vercel Cron)
+- Vercel automatically sends `Authorization: Bearer <CRON_SECRET>` where `CRON_SECRET` is a Vercel environment variable.
+- The handler verifies this token matches `process.env.CRON_SECRET`.
+- Users are discovered automatically from Firebase Auth — no uid needs to be passed in the request.
+
+### POST (Authenticated user)
+- Requires a Firebase ID token via `Authorization: Bearer <firebase-id-token>`.
+- The uid is extracted from the verified token (callers cannot spoof another user's uid).
 
 ## Behavioral Rules (MUST / MUST NOT)
 
 ### Uniqueness / idempotency
-- There MUST be at most one snapshot per `date` (UTC day key).
+- There MUST be at most one snapshot per user per `date` (UTC day key).
 - The server endpoint MUST be idempotent per date:
   - If a snapshot document already exists for that date, it returns HTTP 200 success and does **not** overwrite.
-  - Source: `api/snapshot/create.ts` checks document existence and “skips creation”.
+  - Source: `api/snapshot/create.ts` checks document existence and "skips creation".
 
 ### Date and timestamp semantics (server endpoint)
 Source: `api/snapshot/create.ts`.
@@ -91,12 +99,16 @@ Source: `api/snapshot/create.ts`.
 - The snapshot `date` MUST be computed in UTC in `YYYY-MM-DD`.
 - The snapshot `timestamp` MUST be set to **end-of-day UTC**: 23:59:59.000Z for that date.
 - Special case:
-  - If the endpoint runs between `00:00` and `00:04` UTC inclusive (`utcHour === 0 && utcMinutes < 5`), it MUST create a snapshot for “yesterday” (end of the previous UTC day).
+  - If the endpoint runs between `00:00` and `00:04` UTC inclusive (`utcHour === 0 && utcMinutes < 5`), it MUST create a snapshot for "yesterday" (end of the previous UTC day).
 
 ### Storage semantics
 - Firestore snapshot documents MUST be stored under:
   - `users/{uid}/snapshots/{date}`
-- Client “bulk save” uses `writeBatch.set` without merge and overwrites the doc with the same date (acceptable because date is the key).
+- Client "bulk save" uses `writeBatch.set` without merge and overwrites the doc with the same date (acceptable because date is the key).
+
+### Response data
+- **GET (cron):** MUST NOT include financial data (categories, totals) in the response. Returns only `{ uid, date, status }` per user.
+- **POST (authenticated user):** Returns `{ success, message, snapshot: { date } }`.
 
 ### Retention / cleanup
 **Current behavior unclear**
@@ -118,18 +130,21 @@ Involved code:
 - Snapshot `timestamp` MUST be a finite number in ms.
 
 ## Loading States
-- Server endpoint is synchronous; GitHub Actions waits for response.
-- Client manual snapshot creation shows local “creating snapshot” state in Settings (see Settings page state variables).
+- Server endpoint is synchronous; Vercel Cron waits for response (up to `maxDuration: 60` seconds).
+- Client manual snapshot creation shows local "creating snapshot" state in Settings (see Settings page state variables).
 
 ## Error Handling & Fallbacks
 
 ### Server endpoint errors
 `api/snapshot/create.ts`:
 
-- Non-POST requests return:
-  - HTTP 405 JSON `{ error: 'Method not allowed. Use POST.' }`
-- Missing/invalid uid returns:
-  - HTTP 400 JSON `{ error: 'User ID (uid) is required...' }`
+- Non-GET/POST requests return:
+  - HTTP 405 JSON `{ error: 'Method not allowed. Use GET (cron) or POST (authenticated).' }`
+- Invalid cron secret (GET without valid CRON_SECRET) returns:
+  - HTTP 401 JSON `{ error: 'Invalid cron secret.' }`
+- Invalid/missing Firebase token (POST) returns:
+  - HTTP 401 JSON `{ error: 'Missing or invalid Authorization header.' }`
+- Per-user errors during cron are caught individually and included in the results array with `status: 'error'`.
 - Unexpected errors return:
   - HTTP 500 JSON `{ success: false, error: <message> }`
 
@@ -141,10 +156,13 @@ Source: `src/services/snapshotService.ts`.
 ## Edge Cases
 
 ### Cron time vs snapshot end-of-day timestamp
-- The cron job may run at 23:17 UTC, but the snapshot timestamp is set to 23:59:59 UTC for the same day (end-of-day semantics).
+- The cron job runs at 23:17 UTC, but the snapshot timestamp is set to 23:59:59 UTC for the same day (end-of-day semantics).
 
 ### Early-UTC safety window
-- Calls shortly after midnight UTC (00:00–00:04) create “yesterday” snapshot to avoid missing end-of-day snapshots.
+- Calls shortly after midnight UTC (00:00–00:04) create "yesterday" snapshot to avoid missing end-of-day snapshots.
+
+### Multi-user cron execution
+- The cron handler iterates over all Firebase Auth users sequentially. Each user's snapshot creation is independent — a failure for one user does not block others.
 
 ## Persistence (Firestore paths, local cache)
 
@@ -158,17 +176,34 @@ Client fallback key:
 
 Source: `src/services/snapshotService.ts` (`SNAPSHOTS_STORAGE_KEY`).
 
+## Environment Variables (Vercel)
+
+- `CRON_SECRET` — Required. Vercel uses this automatically for cron job authentication. Must be set in Vercel project settings.
+- `FIREBASE_SERVICE_ACCOUNT` — Required. Firebase Admin SDK service account JSON for Firestore and Auth access.
+
 ## Acceptance Criteria (testable)
 
 1. **API method guard**:
-   - `GET /api/snapshot/create` MUST return HTTP 405.
-2. **UID required**:
-   - `POST /api/snapshot/create` without uid MUST return HTTP 400.
-3. **Idempotency**:
-   - Calling `POST /api/snapshot/create` twice for the same day MUST return success both times and MUST NOT change the stored snapshot on the second call.
-4. **End-of-day timestamp**:
-   - A created snapshot’s `timestamp` MUST equal 23:59:59 UTC for `snapshot.date` (with the special midnight window exception).
+   - `PUT /api/snapshot/create` (or any method other than GET/POST) MUST return HTTP 405.
+2. **Cron auth**:
+   - `GET /api/snapshot/create` without valid `CRON_SECRET` MUST return HTTP 401.
+   - `GET /api/snapshot/create` with valid `CRON_SECRET` MUST create snapshots for all registered users.
+3. **User auth**:
+   - `POST /api/snapshot/create` without valid Firebase token MUST return HTTP 401.
+   - `POST /api/snapshot/create` with valid Firebase token MUST create a snapshot for the authenticated user only.
+4. **Idempotency**:
+   - Creating a snapshot twice for the same day MUST return success both times and MUST NOT change the stored snapshot on the second call.
+5. **End-of-day timestamp**:
+   - A created snapshot's `timestamp` MUST equal 23:59:59 UTC for `snapshot.date` (with the special midnight window exception).
+6. **No financial data in cron response**:
+   - `GET` response MUST NOT contain `categories` or `total` fields.
+
+## Known Limitations
+
+### Internal API calls during cron
+The snapshot endpoint calls internal APIs (`/api/market/update-daily-prices`, `/api/perpetuals/hyperliquid`, `/api/perpetuals/mexc/equity`) for stock prices and perpetuals data. These internal endpoints require Firebase Bearer auth which is not available during cron execution. The calls fail silently (caught with `.catch()`), meaning cron snapshots may report 0 for Stocks, Index Funds, Commodities, and Perpetuals categories.
+
+**PROPOSAL**: Make internal endpoints also accept `CRON_SECRET` for server-to-server calls, so cron snapshots include accurate stock and perpetuals data.
 
 ## Future Notes (optional, clearly marked as PROPOSAL)
-**PROPOSAL**: Add deterministic cleanup/retention and expose snapshot creation results in the Settings UI (including “already exists” outcome).
-
+**PROPOSAL**: Add deterministic cleanup/retention and expose snapshot creation results in the Settings UI (including "already exists" outcome).
