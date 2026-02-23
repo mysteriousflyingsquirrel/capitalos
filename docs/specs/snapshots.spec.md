@@ -198,12 +198,14 @@ Source: `src/services/snapshotService.ts` (`SNAPSHOTS_STORAGE_KEY`).
 6. **No financial data in cron response**:
    - `GET` response MUST NOT contain `categories` or `total` fields.
 
-## Known Limitations
+## Shared Libraries
 
-### Internal API calls during cron
-The snapshot endpoint calls internal APIs (`/api/market/update-daily-prices`, `/api/perpetuals/hyperliquid`, `/api/perpetuals/mexc/equity`) for stock prices and perpetuals data. These internal endpoints require Firebase Bearer auth which is not available during cron execution. The calls fail silently (caught with `.catch()`), meaning cron snapshots may report 0 for Stocks, Index Funds, Commodities, and Perpetuals categories.
+The snapshot handler calls external APIs directly (no internal HTTP roundtrips), ensuring cron snapshots include full data regardless of auth context:
 
-**PROPOSAL**: Make internal endpoints also accept `CRON_SECRET` for server-to-server calls, so cron snapshots include accurate stock and perpetuals data.
+- `lib/hyperliquidApi.ts` → `fetchHyperliquidAccountEquity(walletAddress)` — calls Hyperliquid API directly for account equity across all DEXs.
+- `lib/mexcApi.ts` → `fetchMexcAccountEquityUsd(apiKey, secretKey)` — calls MEXC contract API directly for futures account equity.
+- `lib/yahooFinance.ts` → `fetchStockPrices(symbols)` — calls Yahoo Finance directly for stock/index/commodity prices.
+- `lib/cryptoCompare.ts` → `fetchCryptoData(tickers)` — calls CryptoCompare for crypto prices (pre-existing shared lib).
 
 ## Future Notes (optional, clearly marked as PROPOSAL)
 **PROPOSAL**: Add deterministic cleanup/retention and expose snapshot creation results in the Settings UI (including "already exists" outcome).

@@ -3,6 +3,9 @@ import admin from 'firebase-admin'
 import type { NetWorthSummary, NetWorthItem, NetWorthCategory, NetWorthTransaction } from '../../lib/types.js'
 import { NetWorthCalculationService } from '../../lib/netWorthCalculation.js'
 import { fetchCryptoData } from '../../lib/cryptoCompare.js'
+import { fetchHyperliquidAccountEquity } from '../../lib/hyperliquidApi.js'
+import { fetchMexcAccountEquityUsd } from '../../lib/mexcApi.js'
+import { fetchStockPrices } from '../../lib/yahooFinance.js'
 
 export const config = {
   maxDuration: 60,
@@ -66,13 +69,6 @@ const SNAPSHOT_CATEGORIES: NetWorthCategory[] = [
   'Depreciating Assets',
 ]
 
-function getBaseUrl(req: VercelRequest): string {
-  const host = req.headers['x-forwarded-host'] || req.headers.host
-  const proto = (req.headers['x-forwarded-proto'] as string | undefined) || 'https'
-  if (!host) return ''
-  return `${proto}://${host}`
-}
-
 async function fetchExchangeRatesChf(): Promise<ExchangeRates> {
   const resp = await fetch('https://api.exchangerate-api.com/v4/latest/CHF')
   if (!resp.ok) {
@@ -96,42 +92,6 @@ function makeConvertToChf(exchangeRates: ExchangeRates) {
     const rate = exchangeRates.rates[from]
     if (!rate || !Number.isFinite(rate) || rate === 0) return amount
     return amount / rate
-  }
-}
-
-async function fetchStockPricesViaMarketApi(args: {
-  tickers: string[]
-  baseUrl: string
-  authHeader: string
-}): Promise<Record<string, number>> {
-  const tickers = [...new Set(args.tickers.map(t => t.trim().toUpperCase()).filter(Boolean))]
-  if (tickers.length === 0 || !args.baseUrl) return {}
-
-  try {
-    const resp = await fetch(`${args.baseUrl}/api/market/update-daily-prices`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': args.authHeader,
-      },
-      body: JSON.stringify({ symbols: tickers }),
-    })
-
-    if (!resp.ok) return {}
-
-    const data = (await resp.json()) as any
-    if (!data?.success || !data?.prices) return {}
-
-    const out: Record<string, number> = {}
-    for (const [sym, priceData] of Object.entries(data.prices)) {
-      const p = (priceData as any)?.price
-      if (typeof p === 'number' && Number.isFinite(p) && p > 0) {
-        out[sym] = p
-      }
-    }
-    return out
-  } catch {
-    return {}
   }
 }
 
@@ -201,8 +161,6 @@ interface SnapshotResult {
 async function createSnapshotForUser(
   uid: string,
   db: admin.firestore.Firestore,
-  baseUrl: string,
-  authHeader: string,
 ): Promise<SnapshotResult> {
   const { date, timestamp } = getSnapshotDateAndTimestamp()
 
@@ -252,44 +210,34 @@ async function createSnapshotForUser(
     : null
   const effectiveUsdToChf = (usdToChfRate && usdToChfRate > 0) ? usdToChfRate : fallbackUsdToChf
 
-  const stockPrices = uniqueStockTickers.length > 0 && baseUrl
-    ? await fetchStockPricesViaMarketApi({ tickers: uniqueStockTickers, baseUrl, authHeader }).catch(() => ({}))
+  const stockPrices = uniqueStockTickers.length > 0
+    ? await fetchStockPrices(uniqueStockTickers).catch(() => ({}))
     : {}
 
   const perpItems: NetWorthItem[] = []
 
   if (apiKeys?.hyperliquidWalletAddress) {
     const walletAddress = apiKeys.hyperliquidWalletAddress || ''
-    if (walletAddress && baseUrl) {
-      const hlResp = await fetch(`${baseUrl}/api/perpetuals/hyperliquid`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
-        body: JSON.stringify({ walletAddress }),
-      }).catch(() => null)
-
-      const hlJson = hlResp && hlResp.ok ? await hlResp.json().catch(() => null) : null
-      const hlData = (hlJson?.success && hlJson?.data) ? hlJson.data : { exchangeBalance: [], openPositions: [], openOrders: [] }
+    if (walletAddress) {
+      const exchangeBalance = await fetchHyperliquidAccountEquity(walletAddress).catch(() => [])
       perpItems.push({
         id: 'perpetuals-hyperliquid',
         category: 'Perpetuals',
         name: 'Hyperliquid',
         platform: 'Hyperliquid',
         currency: 'USD',
-        perpetualsData: hlData,
+        perpetualsData: { exchangeBalance, openPositions: [], openOrders: [] },
       } as any)
     }
   }
 
-  if (apiKeys?.mexcApiKey && apiKeys?.mexcSecretKey && baseUrl) {
-    const mexcEquityResp = await fetch(`${baseUrl}/api/perpetuals/mexc/equity`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
-      body: JSON.stringify({}),
-    }).catch(() => null)
-    const mexcEquityJson = mexcEquityResp && mexcEquityResp.ok ? await mexcEquityResp.json().catch(() => null) : null
-    const mexcEquityUsd = typeof mexcEquityJson?.data?.equityUsd === 'number' ? mexcEquityJson.data.equityUsd : null
+  if (apiKeys?.mexcApiKey && apiKeys?.mexcSecretKey) {
+    const mexcEquityUsd = await fetchMexcAccountEquityUsd(
+      apiKeys.mexcApiKey,
+      apiKeys.mexcSecretKey,
+    ).catch(() => null)
 
-    const mexcExchangeBalance = mexcEquityUsd !== null
+    const mexcExchangeBalance = mexcEquityUsd !== null && mexcEquityUsd > 0
       ? [{ id: 'mexc-account-equity', item: 'MEXC', holdings: mexcEquityUsd, platform: 'MEXC' }]
       : []
 
@@ -360,8 +308,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     initializeAdmin()
     const db = admin.firestore()
-    const baseUrl = getBaseUrl(req)
-    const authHeader = req.headers.authorization || ''
 
     // GET = Vercel cron: create snapshots for all users
     if (req.method === 'GET') {
@@ -377,7 +323,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const results: SnapshotResult[] = []
       for (const uid of uids) {
         try {
-          results.push(await createSnapshotForUser(uid, db, baseUrl, authHeader))
+          results.push(await createSnapshotForUser(uid, db))
         } catch (err) {
           results.push({
             uid,
@@ -396,7 +342,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!uid) return
 
     try {
-      const result = await createSnapshotForUser(uid, db, baseUrl, authHeader)
+      const result = await createSnapshotForUser(uid, db)
       return res.status(200).json({
         success: true,
         message: result.status === 'created'
