@@ -201,7 +201,7 @@ function Hyperliquid() {
   const formatAmount = (val: number) => (isIncognito ? '****' : val.toFixed(8).replace(/\.?0+$/, ''))
 
   // Column widths - easily adjustable per column
-  const spotColumnWidths = ['140px', '140px', '140px', '140px', '160px', '180px', '140px']
+  const spotColumnWidths = ['140px', '140px', '140px', '140px', '160px', '180px']
   const positionsColumnWidths = ['100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '120px', '140px']
   const openOrdersColumnWidths = ['100px', '100px', '120px', '100px', '100px', '100px']
 
@@ -533,20 +533,17 @@ function Hyperliquid() {
                     <Heading level={4}>Current Price</Heading>
                   </th>
                   <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Value (USD)</Heading>
-                  </th>
-                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Unrealized PnL (USD)</Heading>
+                    <Heading level={4}>Value</Heading>
                   </th>
                   <th scope="col" className="text-left pb-3 whitespace-nowrap">
-                    <Heading level={4}>Unrealized PnL (%)</Heading>
+                    <Heading level={4}>PnL</Heading>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {spotRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center">
+                    <td colSpan={6} className="py-8 text-center">
                       <div className="text2 text-text-muted">No spot balances</div>
                     </td>
                   </tr>
@@ -574,14 +571,14 @@ function Hyperliquid() {
                         <td className="py-3 pr-4 whitespace-nowrap">
                           <div className="text2 text-text-primary">{formatCurrency(row.valueUsd)}</div>
                         </td>
-                        <td className="py-3 pr-4 whitespace-nowrap">
-                          <div className="text2" style={{ color: row.unrealizedPnlUsd === null ? undefined : (pnlPositive ? '#2ECC71' : '#E74C3C') }}>
-                            {row.unrealizedPnlUsd !== null ? formatCurrency(row.unrealizedPnlUsd) : '-'}
-                          </div>
-                        </td>
                         <td className="py-3 whitespace-nowrap">
-                          <div className="text2" style={{ color: row.unrealizedPnlPct === null ? undefined : (pnlPositive ? '#2ECC71' : '#E74C3C') }}>
-                            {row.unrealizedPnlPct !== null ? `${row.unrealizedPnlPct >= 0 ? '+' : ''}${row.unrealizedPnlPct.toFixed(2)}%` : '-'}
+                          <div className="flex flex-col items-start">
+                            <div className="text2" style={{ color: row.unrealizedPnlUsd === null ? undefined : (pnlPositive ? '#2ECC71' : '#E74C3C') }}>
+                              {row.unrealizedPnlUsd !== null ? formatCurrency(row.unrealizedPnlUsd) : '-'}
+                            </div>
+                            <div className="text2 mt-0.5" style={{ color: row.unrealizedPnlPct === null ? undefined : (pnlPositive ? '#2ECC71' : '#E74C3C') }}>
+                              {row.unrealizedPnlPct !== null ? `${row.unrealizedPnlPct >= 0 ? '+' : ''}${row.unrealizedPnlPct.toFixed(2)}%` : '-'}
+                            </div>
                           </div>
                         </td>
                       </tr>
