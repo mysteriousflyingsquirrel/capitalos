@@ -64,7 +64,7 @@ Flow:
 ### B) Automatic daily snapshot (Vercel Cron)
 Source: `vercel.json` (cron config) + `api/snapshot/create.ts` (handler).
 
-Schedule: `17 23 * * *` (23:17 UTC daily).
+Schedule: `0 22 * * *` (22:00 UTC daily).
 
 Flow:
 
@@ -97,9 +97,7 @@ Flow:
 Source: `api/snapshot/create.ts`.
 
 - The snapshot `date` MUST be computed in UTC in `YYYY-MM-DD`.
-- The snapshot `timestamp` MUST be set to **end-of-day UTC**: 23:59:59.000Z for that date.
-- Special case:
-  - If the endpoint runs between `00:00` and `00:04` UTC inclusive (`utcHour === 0 && utcMinutes < 5`), it MUST create a snapshot for "yesterday" (end of the previous UTC day).
+- The snapshot `timestamp` MUST be the actual server execution timestamp in milliseconds (`Date.now()` / `new Date().getTime()` at request handling time).
 
 ### Storage semantics
 - Firestore snapshot documents MUST be stored under:
@@ -155,11 +153,8 @@ Source: `src/services/snapshotService.ts`.
 
 ## Edge Cases
 
-### Cron time vs snapshot end-of-day timestamp
-- The cron job runs at 23:17 UTC, but the snapshot timestamp is set to 23:59:59 UTC for the same day (end-of-day semantics).
-
-### Early-UTC safety window
-- Calls shortly after midnight UTC (00:00–00:04) create "yesterday" snapshot to avoid missing end-of-day snapshots.
+### Cron time vs snapshot execution timestamp
+- The cron job runs at 22:00 UTC, and the snapshot timestamp is the server execution time recorded at creation.
 
 ### Multi-user cron execution
 - The cron handler iterates over all Firebase Auth users sequentially. Each user's snapshot creation is independent — a failure for one user does not block others.
@@ -193,8 +188,8 @@ Source: `src/services/snapshotService.ts` (`SNAPSHOTS_STORAGE_KEY`).
    - `POST /api/snapshot/create` with valid Firebase token MUST create a snapshot for the authenticated user only.
 4. **Idempotency**:
    - Creating a snapshot twice for the same day MUST return success both times and MUST NOT change the stored snapshot on the second call.
-5. **End-of-day timestamp**:
-   - A created snapshot's `timestamp` MUST equal 23:59:59 UTC for `snapshot.date` (with the special midnight window exception).
+5. **Execution-time timestamp**:
+   - A created snapshot's `timestamp` MUST match server execution time at snapshot creation and MUST NOT be a synthetic end-of-day timestamp.
 6. **No financial data in cron response**:
    - `GET` response MUST NOT contain `categories` or `total` fields.
 

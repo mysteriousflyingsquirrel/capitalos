@@ -109,10 +109,6 @@ function formatUtcDateYmd(parts: { year: number; monthIndex: number; day: number
   return `${parts.year}-${month}-${day}`
 }
 
-function endOfUtcDayTimestamp(parts: { year: number; monthIndex: number; day: number }): number {
-  return new Date(Date.UTC(parts.year, parts.monthIndex, parts.day, 23, 59, 59)).getTime()
-}
-
 function summaryToSnapshot(summary: NetWorthSummary): NetWorthSnapshot {
   const byKey = new Map<string, number>()
   for (const cat of summary.categories || []) {
@@ -138,17 +134,8 @@ function summaryToSnapshot(summary: NetWorthSummary): NetWorthSnapshot {
 
 function getSnapshotDateAndTimestamp(): { date: string; timestamp: number } {
   const now = new Date()
-  const utcHour = now.getUTCHours()
-  const utcMinutes = now.getUTCMinutes()
   const target = getUtcDateParts(now)
-
-  if (utcHour === 0 && utcMinutes < 5) {
-    const yesterday = new Date(Date.UTC(target.year, target.monthIndex, target.day - 1, 0, 0, 0))
-    const y = getUtcDateParts(yesterday)
-    return { date: formatUtcDateYmd(y), timestamp: endOfUtcDayTimestamp(y) }
-  }
-
-  return { date: formatUtcDateYmd(target), timestamp: endOfUtcDayTimestamp(target) }
+  return { date: formatUtcDateYmd(target), timestamp: now.getTime() }
 }
 
 interface SnapshotResult {

@@ -10,7 +10,7 @@
   "crons": [
     {
       "path": "/api/snapshot/create",
-      "schedule": "17 23 * * *"
+      "schedule": "0 22 * * *"
     }
   ]
 }
