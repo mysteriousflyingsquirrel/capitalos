@@ -5,7 +5,8 @@ import { useIncognito } from '../contexts/IncognitoContext'
 import { useData } from '../contexts/DataContext'
 import { useApiKeys } from '../contexts/ApiKeysContext'
 import { formatMoney, formatNumber } from '../lib/currency'
-import type { PerpetualsOpenPosition, PerpetualsOpenOrder } from './NetWorth'
+import { calculateCoinAmount } from '../services/balanceCalculationService'
+import type { NetWorthItem, NetWorthTransaction, PerpetualsOpenPosition, PerpetualsOpenOrder } from './NetWorth'
 import { useHyperliquidAssetCtx } from '../hooks/valuation/useHyperliquidAssetCtx'
 import { useHyperliquidWsPositions } from '../hooks/valuation/useHyperliquidWsPositions'
 import { useHyperliquidCrashRisk, type RiskState } from '../hooks/valuation/useHyperliquidCrashRisk'
@@ -93,6 +94,101 @@ interface OpenOrderRow {
   amount: string
 }
 
+interface SpotRow {
+  id: string
+  asset: string
+  amount: number
+  avgEntryUsd: number | null
+  currentPriceUsd: number | null
+  valueUsd: number
+  unrealizedPnlUsd: number | null
+  unrealizedPnlPct: number | null
+}
+
+function getSignedTransactionAmount(tx: NetWorthTransaction): number {
+  const rawAmount = Number(tx.amount)
+  if (!Number.isFinite(rawAmount) || rawAmount === 0) return 0
+
+  if (tx.cryptoType === 'BUY') return Math.abs(rawAmount)
+  if (tx.cryptoType === 'SELL') return -Math.abs(rawAmount)
+  if (tx.cryptoType === 'ADJUSTMENT') return rawAmount
+
+  return tx.side === 'buy' ? Math.abs(rawAmount) : -Math.abs(rawAmount)
+}
+
+function getTransactionUnitPrice(tx: NetWorthTransaction): number | null {
+  const directPrice = Number(tx.pricePerItem)
+  if (Number.isFinite(directPrice) && directPrice > 0) return directPrice
+
+  const fallbackPrice = Number(tx.pricePerItemChf)
+  if (Number.isFinite(fallbackPrice) && fallbackPrice > 0) return fallbackPrice
+
+  return null
+}
+
+function buildSpotRow(item: NetWorthItem, transactions: NetWorthTransaction[], currentPrices: Record<string, number>): SpotRow {
+  const asset = item.name.trim().toUpperCase()
+  const itemTransactions = transactions
+    .filter((tx) => tx.itemId === item.id)
+    .slice()
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  const amount = Math.max(0, calculateCoinAmount(item.id, transactions))
+  const currentPriceUsd = Number(currentPrices[asset])
+  const safeCurrentPriceUsd = Number.isFinite(currentPriceUsd) && currentPriceUsd > 0 ? currentPriceUsd : null
+
+  let remainingAmount = 0
+  let remainingCostUsd = 0
+
+  for (const tx of itemTransactions) {
+    const signedAmount = getSignedTransactionAmount(tx)
+    if (signedAmount === 0) continue
+
+    if (signedAmount > 0) {
+      const unitPrice = getTransactionUnitPrice(tx)
+      const currentAvg = remainingAmount > 0 ? remainingCostUsd / remainingAmount : 0
+      remainingCostUsd += signedAmount * (unitPrice ?? currentAvg)
+      remainingAmount += signedAmount
+      continue
+    }
+
+    if (remainingAmount <= 0) {
+      remainingAmount = 0
+      remainingCostUsd = 0
+      continue
+    }
+
+    const amountToClose = Math.min(Math.abs(signedAmount), remainingAmount)
+    const avgCost = remainingCostUsd / remainingAmount
+    remainingCostUsd -= amountToClose * avgCost
+    remainingAmount -= amountToClose
+
+    if (remainingAmount <= 0) {
+      remainingAmount = 0
+      remainingCostUsd = 0
+    }
+  }
+
+  const avgEntryUsd = remainingAmount > 0 ? remainingCostUsd / remainingAmount : null
+  const valueUsd = safeCurrentPriceUsd !== null ? amount * safeCurrentPriceUsd : 0
+  const costBasisUsd = avgEntryUsd !== null ? amount * avgEntryUsd : null
+  const unrealizedPnlUsd = costBasisUsd !== null ? valueUsd - costBasisUsd : null
+  const unrealizedPnlPct = costBasisUsd && costBasisUsd > 0 && unrealizedPnlUsd !== null
+    ? (unrealizedPnlUsd / costBasisUsd) * 100
+    : null
+
+  return {
+    id: item.id,
+    asset,
+    amount,
+    avgEntryUsd,
+    currentPriceUsd: safeCurrentPriceUsd,
+    valueUsd,
+    unrealizedPnlUsd,
+    unrealizedPnlPct,
+  }
+}
+
 function Hyperliquid() {
   const { isIncognito } = useIncognito()
   const { data, loading: dataLoading } = useData()
@@ -102,8 +198,10 @@ function Hyperliquid() {
     dex: null, // default dex (future-proof: allow multiple dex clients later)
   })
   const formatCurrency = (val: number) => formatMoney(val, 'USD', 'us', { incognito: isIncognito })
+  const formatAmount = (val: number) => (isIncognito ? '****' : val.toFixed(8).replace(/\.?0+$/, ''))
 
   // Column widths - easily adjustable per column
+  const spotColumnWidths = ['140px', '140px', '140px', '140px', '160px', '180px']
   const positionsColumnWidths = ['100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '100px', '120px', '140px']
   const openOrdersColumnWidths = ['100px', '100px', '120px', '100px', '100px', '100px']
 
@@ -183,6 +281,17 @@ function Hyperliquid() {
     }
     return result
   }, [data.netWorthItems])
+
+  const spotRows: SpotRow[] = useMemo(() => {
+    const spotItems = data.netWorthItems.filter(
+      (item) => item.category === 'Crypto' && item.platform === 'Hyperliquid'
+    )
+
+    return spotItems
+      .map((item) => buildSpotRow(item, data.netWorthTransactions, data.cryptoPrices))
+      .filter((row) => row.amount > 0)
+      .sort((a, b) => b.valueUsd - a.valueUsd)
+  }, [data.netWorthItems, data.netWorthTransactions, data.cryptoPrices])
 
   // Extract open positions from all perpetuals items
   const positions: PositionRow[] = useMemo(() => {
@@ -358,18 +467,12 @@ function Hyperliquid() {
         {/* Page Title */}
         <Heading level={1}>Hyperliquid</Heading>
 
-        {/* Performance Frame */}
-        <SectionCard title="Performance">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <PnLBox title="24-Hour PnL" value={portfolioPnL.pnl24hUsd} />
-            <PnLBox title="7-Day PnL" value={portfolioPnL.pnl7dUsd} />
-            <PnLBox title="30-Day PnL" value={portfolioPnL.pnl30dUsd} />
-            <PnLBox title="90-Day PnL" value={portfolioPnL.pnl90dUsd} />
-          </div>
-        </SectionCard>
-
         {/* Dashboard Frame */}
         <SectionCard title="Dashboard">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <PnLBox title="24-Hour PnL" value={portfolioPnL.pnl24hUsd} />
+            <PnLBox title="30-Day PnL" value={portfolioPnL.pnl30dUsd} />
+          </div>
           {dashboardEntries.length === 0 ? (
             <div className="py-6 text-center">
               <div className="text2 text-text-muted">No positions</div>
@@ -406,9 +509,90 @@ function Hyperliquid() {
           )}
         </SectionCard>
 
+        {/* Spot Frame */}
+        <SectionCard title="Spot">
+          <div className="overflow-x-auto -mx-3 px-3 lg:-mx-6 lg:px-6">
+            <table className="w-full" style={{ minWidth: `${spotColumnWidths.length * 120}px`, tableLayout: 'fixed' }}>
+              <colgroup>
+                {spotColumnWidths.map((width, idx) => (
+                  <col key={idx} style={idx === spotColumnWidths.length - 1 ? {} : { width }} />
+                ))}
+              </colgroup>
+              <thead>
+                <tr className="border-b border-border-strong">
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Asset</Heading>
+                  </th>
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Amount</Heading>
+                  </th>
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Avg Entry</Heading>
+                  </th>
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Current Price</Heading>
+                  </th>
+                  <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
+                    <Heading level={4}>Value</Heading>
+                  </th>
+                  <th scope="col" className="text-left pb-3 whitespace-nowrap">
+                    <Heading level={4}>PnL</Heading>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {spotRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center">
+                      <div className="text2 text-text-muted">No spot balances</div>
+                    </td>
+                  </tr>
+                ) : (
+                  spotRows.map((row) => {
+                    const pnlPositive = (row.unrealizedPnlUsd ?? 0) >= 0
+                    return (
+                      <tr key={row.id} className="border-b border-border-subtle last:border-b-0">
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <div className="text2 text-text-primary font-medium">{row.asset}</div>
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <div className="text2 text-text-primary">{formatAmount(row.amount)}</div>
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <div className="text2 text-text-primary">
+                            {row.avgEntryUsd !== null ? `$${formatNumber(row.avgEntryUsd, 'us', { incognito: isIncognito })}` : '-'}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <div className="text2 text-text-primary">
+                            {row.currentPriceUsd !== null ? `$${formatNumber(row.currentPriceUsd, 'us', { incognito: isIncognito })}` : '-'}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <div className="text2 text-text-primary">{formatCurrency(row.valueUsd)}</div>
+                        </td>
+                        <td className="py-3 whitespace-nowrap">
+                          <div className="flex flex-col items-start">
+                            <div className="text2" style={{ color: row.unrealizedPnlUsd === null ? undefined : (pnlPositive ? '#2ECC71' : '#E74C3C') }}>
+                              {row.unrealizedPnlUsd !== null ? formatCurrency(row.unrealizedPnlUsd) : '-'}
+                            </div>
+                            <div className="text2 mt-0.5" style={{ color: row.unrealizedPnlPct === null ? undefined : (pnlPositive ? '#2ECC71' : '#E74C3C') }}>
+                              {row.unrealizedPnlPct !== null ? `${row.unrealizedPnlPct >= 0 ? '+' : ''}${row.unrealizedPnlPct.toFixed(2)}%` : '-'}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </SectionCard>
+
         {/* Positions Frame */}
         <SectionCard
-          title="Positions"
+          title="Perps Positions"
           titleRight={
             hlWsStatus === 'error'
               ? `WS: error${hlWsError ? ` (${hlWsError})` : ''}`
@@ -425,7 +609,7 @@ function Hyperliquid() {
               <thead>
                 <tr className="border-b border-border-strong">
                   <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Token</Heading>
+                    <Heading level={4}>Asset</Heading>
                   </th>
                   <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Side</Heading>
@@ -568,7 +752,7 @@ function Hyperliquid() {
               <thead>
                 <tr className="border-b border-border-strong">
                   <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
-                    <Heading level={4}>Token</Heading>
+                    <Heading level={4}>Asset</Heading>
                   </th>
                   <th scope="col" className="text-left pb-3 pr-4 whitespace-nowrap">
                     <Heading level={4}>Side</Heading>
